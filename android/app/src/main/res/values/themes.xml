@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Light theme. The colour values themselves come from res/values/colors.xml and are swapped
+    wholesale by res/values-night/colors.xml — nothing here is duplicated for dark.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- windowLightNavigationBar is API 27+; older platforms simply ignore the attribute -->
+    <style name="Theme.Teilen" parent="@android:style/Theme.Material.Light.NoActionBar"
+        tools:targetApi="o_mr1">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorControlActivated">@color/accent</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:textColorHint">@color/text_secondary</item>
+        <!-- the header band is the accent colour, so the status bar sits on it -->
+        <item name="android:statusBarColor">@color/brand_bar</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <!-- the share sheet target: no window chrome, just a card that flashes and disappears -->
+    <style name="Theme.Teilen.Share" parent="Theme.Teilen">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
+
+    <!-- the transparent activity behind the clipboard notification tap -->
+    <style name="Theme.Teilen.Invisible" parent="Theme.Teilen.Share">
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>

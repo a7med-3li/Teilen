@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The MVP talks to a plain-HTTP backend on the LAN or the emulator host.
+     Phase 4 (auth/pairing) is where this stops being acceptable. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

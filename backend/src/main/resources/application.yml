@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: backend
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:teilen}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  servlet:
+    multipart:
+      # a little headroom over the blob cap for the multipart envelope itself
+      max-file-size: 31MB
+      max-request-size: 33MB
+      # spool to disk straight away: an upload is a file, not an in-memory string
+      file-size-threshold: 0
+
+server:
+  # 8080 is often taken on a dev machine; override with PORT=...
+  port: ${PORT:8081}
+  error:
+    include-message: always
+
+logging:
+  level:
+    com.backend: DEBUG
+
+teilen:
+  # how often expired rows are swept away
+  reap-interval-ms: 5000
+  default-ttl-seconds: 1800
+  min-ttl-seconds: 10
+  max-ttl-seconds: 86400
+  max-content-length: 20000
+  # origins allowed to call the API / open the websocket
+  allowed-origin-patterns: "*"
+
+  # shared files live here; wiped item by item when the TTL runs out
+  storage-dir: ./data/blobs
+  # 30 MB, counted while writing rather than trusted from a header
+  max-blob-bytes: 31457280

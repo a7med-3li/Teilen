@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    One palette, two moods. Every colour the UI uses is named here and re-declared in
+    values-night/colors.xml, so the layouts and drawables never mention a raw hex value.
+    The scheme is deliberately tiny: paper, ink, and one deep teal.
+-->
+<resources>
+    <!-- surfaces -->
+    <color name="bg">#F1F3F5</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_alt">#E9EDF1</color>
+
+    <!-- ink -->
+    <color name="text_primary">#11161C</color>
+    <color name="text_secondary">#63707E</color>
+    <color name="divider">#D9DFE6</color>
+
+    <!-- the one accent colour, and its readable pair -->
+    <color name="accent">#0F766E</color>
+    <color name="accent_text">#0F766E</color>
+    <color name="on_accent">#FFFFFF</color>
+    <color name="brand_bar">#0F766E</color>
+    <color name="on_brand_dim">#D8EFEC</color>
+
+    <color name="danger">#B42318</color>
+    <color name="ripple">#1F000000</color>
+    <color name="ripple_soft">#1F0F766E</color>
+</resources>

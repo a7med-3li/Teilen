@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#323232">
+    <title>Teilen</title>
+    <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+    <h1>Teilen</h1>
+    <div id="status" class="status offline">connecting…</div>
+</header>
+
+<main>
+    <form id="compose" autocomplete="off">
+        <input id="compose-input" type="text" placeholder="paste anything and hit enter (handy for testing)" maxlength="20000">
+        <button type="submit">send</button>
+    </form>
+
+    <form id="upload" autocomplete="off">
+        <label class="file-field" for="upload-input">
+            <input id="upload-input" type="file" multiple>
+            <span id="upload-label">Attach files…</span>
+        </label>
+        <select id="upload-ttl" title="How long the files should live">
+            <option value="300">5 min</option>
+            <option value="900">15 min</option>
+            <option value="1800" selected>30 min</option>
+            <option value="3600">1 hour</option>
+            <option value="14400">4 hours</option>
+        </select>
+        <button id="upload-send" type="submit" hidden>send</button>
+    </form>
+
+    <p id="upload-status" class="upload-status" hidden></p>
+
+    <p id="empty" class="empty" hidden>Nothing here yet — share something from your phone.</p>
+    <ul id="feed"></ul>
+</main>
+
+<footer>
+    <span id="count">0 items</span>
+    <button id="clear" type="button" hidden>delete all</button>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

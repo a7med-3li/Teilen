@@ -12,6 +12,7 @@
 
 # Package Files #
 *.jar
+!**/gradle/wrapper/gradle-wrapper.jar
 *.war
 *.nar
 *.ear
@@ -24,3 +25,17 @@ hs_err_pid*
 replay_pid*
 
 /.idea
+
+# Local planning / scratch documents
+PLAN.md
+
+# Android
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+*.apk
+*.aab
+
+# Backend build output
+backend/target/

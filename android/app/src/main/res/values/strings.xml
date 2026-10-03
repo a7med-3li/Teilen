@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Teilen</string>
+    <string name="share_label">Teilen</string>
+    <string name="process_text_label">Copy to Teilen</string>
+    <string name="header_subtitle">straight to your own inbox</string>
+
+    <string name="section_text">Text or link</string>
+    <string name="section_files">Files</string>
+    <string name="section_backend">Backend</string>
+
+    <string name="content_hint">paste text or a link</string>
+    <string name="expires_in">Disappears after</string>
+    <string name="send">Send</string>
+    <string name="sending">Sending…</string>
+    <string name="ready">Ready · %1$s</string>
+    <string name="nothing_to_send">Nothing to send — paste something first.</string>
+    <string name="sent">Sent · %1$s</string>
+    <string name="sent_toast">Sent to Teilen</string>
+    <string name="copied_toast">Copied to Teilen</string>
+    <string name="server_hint">http://10.0.2.2:8081</string>
+    <string name="server_blank">Enter a URL first.</string>
+    <string name="server_saved">Saved: %1$s</string>
+    <string name="save">Save</string>
+
+    <!-- files, up to the server-side cap -->
+    <string name="pick_file">Pick a file…</string>
+    <string name="files_hint">Up to 30 MB per file. Images, PDFs, anything — one item each.</string>
+    <string name="uploading">Uploading %1$s…</string>
+    <string name="uploading_n">Uploading %1$d files… (%2$d of %3$d)</string>
+    <string name="uploading_bytes">%1$s sent so far · limit 30 MB</string>
+    <string name="file_sent">%1$s sent</string>
+    <string name="files_sent">%1$d files sent</string>
+    <string name="file_failed">%1$s could not be sent</string>
+
+    <string name="share_sending">Sending “%1$s”…</string>
+    <string name="share_sent">Sent</string>
+    <string name="share_empty">Nothing to share</string>
+    <string name="share_uploading">Sending %1$s</string>
+    <string name="share_uploading_n">Sending %1$d files</string>
+    <string name="share_uploading_progress">%1$s of %2$s</string>
+    <string name="share_files_sent">%1$d files sent</string>
+
+    <string name="watch_title">Send what I copy</string>
+    <string name="watch_hint">Copy anything — a Teilen notification appears with a “Send” button. Nothing is ever sent until you tap it.</string>
+    <string name="watch_idle_title">Teilen is watching</string>
+    <string name="watch_idle_text">Copy something, then tap to send it</string>
+    <string name="watch_offer_title">Copied — send to Teilen?</string>
+    <string name="watch_offer_text">Tap to send the clipboard</string>
+    <string name="stop_watching">Stop</string>
+    <string name="try_clipboard">Try it now</string>
+    <string name="notifications_needed">Allow notifications, otherwise there is nothing to tap.</string>
+    <string name="watching_on">Watching the clipboard</string>
+    <string name="watching_off">No longer watching</string>
+    <string name="copied_sample">Sample text copied — check the notification shade.</string>
+    <string name="channel_clipboard">Clipboard capture</string>
+    <string name="channel_clipboard_description">The ongoing notice with a button to send what you copied</string>
+</resources>
