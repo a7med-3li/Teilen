@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- notification silhouette: an arrow going down onto a line -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,2l6,7h-4v6h-4V9H6z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M4,18h16v2H4z" />
+</vector>

@@ -86,6 +86,25 @@ Check the text action is registered on a connected device:
 adb shell pm query-activities -a android.intent.action.PROCESS_TEXT -t text/plain | grep -i teilen
 ```
 
+### Or run it as an image
+
+```bash
+docker build -t teilen-backend backend/
+
+docker run --rm -p 8081:8081 \
+  -e DB_HOST=host.docker.internal -e DB_NAME=teilen \
+  -e DB_USER=postgres -e DB_PASSWORD=postgres \
+  -v teilen-blobs:/data/blobs \
+  teilen-backend
+```
+
+`backend/Dockerfile` builds the jar with Maven and ships only the runtime, split into layers so a
+code change rebuilds the small top one. It runs as a non-root user and has a `HEALTHCHECK` that asks
+for `/api/items`. Everything is configured by environment variable — `PORT`, `DB_HOST`, `DB_PORT`,
+`DB_NAME`, `DB_USER`, `DB_PASSWORD`, `TEILEN_STORAGE_DIR`, `TEILEN_MAX_BLOB_BYTES`,
+`TEILEN_DEFAULT_TTL_SECONDS` — so nothing is baked into the image. Shared files live in the
+`/data/blobs` volume; without that mount they disappear with the container.
+
 ### Why the clipboard notification is shaped that way
 
 On Android 10+ an app may only read the clipboard while it is in the foreground (or while it is the

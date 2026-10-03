@@ -1,0 +1,11 @@
+# the build context is ./ — everything not needed to compile the jar stays out of the daemon
+target/
+data/                 # uploaded blobs from local runs
+.mvn/
+.git/
+.gitignore
+.idea/
+*.iml
+*.log
+Dockerfile
+.dockerignore

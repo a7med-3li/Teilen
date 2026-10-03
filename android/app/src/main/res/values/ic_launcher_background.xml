@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- the flat background of the launcher icon: the logo's own charcoal, so the adaptive
+         background layer and the mark in the foreground join without a seam -->
+    <color name="ic_launcher_background">#323232</color>
+</resources>

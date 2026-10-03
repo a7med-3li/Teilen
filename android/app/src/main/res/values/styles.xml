@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Shared text and button styles. They carry no colours of their own, so the same style looks
+    right in both moods.
+-->
+<resources>
+
+    <!-- empty bases: a dotted style name is shorthand for inheritance from its prefix -->
+    <style name="Text" />
+    <style name="Input" />
+
+    <!-- type scale -->
+    <style name="Text.Header">
+        <item name="android:textColor">@color/on_accent</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+
+    <style name="Text.HeaderSub">
+        <item name="android:textColor">@color/on_brand_dim</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- small caps label that opens each card -->
+    <style name="Text.Section">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.12</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
+    <style name="Text.Body">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="Text.Caption">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+    </style>
+
+    <!-- buttons: no default Material insets, the shape lives in the drawables -->
+    <style name="Button.Primary" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:background">@drawable/bg_button</item>
+        <item name="android:textColor">@color/on_accent</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="Button.Outline" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:background">@drawable/bg_button_outline</item>
+        <item name="android:textColor">@color/accent_text</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">46dp</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="Input.Field">
+        <item name="android:background">@drawable/bg_input</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textColorHint">@color/text_secondary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:padding">14dp</item>
+        <item name="android:minHeight">52dp</item>
+    </style>
+</resources>
