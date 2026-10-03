@@ -9,7 +9,9 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
 /**
- * No auth yet, so every origin (the web app, the phone, curl) is welcome.
+ * Every origin is welcome — the web app, a phone, curl — but not every caller is: the security
+ * chain wants a bearer token before anything under {@code /api} or the websocket answers. CORS is
+ * wide open because it is not what keeps the feed private.
  */
 @Configuration
 @EnableWebSocket
@@ -27,6 +29,8 @@ public class WebConfig implements WebSocketConfigurer, WebMvcConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(shareItemWebSocketHandler, "/ws")
+                // no token in the URL means no handshake, not a silent anonymous feed
+                .addInterceptors(new FeedHandshakeInterceptor())
                 .setAllowedOriginPatterns(allowedOriginPatterns);
     }
 
@@ -35,6 +39,7 @@ public class WebConfig implements WebSocketConfigurer, WebMvcConfigurer {
         registry.addMapping("/api/**")
                 .allowedOriginPatterns(allowedOriginPatterns)
                 .allowedMethods("GET", "POST", "DELETE", "OPTIONS")
-                .allowedHeaders("*");
+                .allowedHeaders("*")
+                .maxAge(3600);
     }
 }

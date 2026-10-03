@@ -1,5 +1,6 @@
 package com.backend.item;
 
+import com.backend.auth.AuthenticatedUser;
 import jakarta.validation.Valid;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
@@ -8,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,6 +26,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Every item is read and written in one account's name. The identity comes from the token, so there
+ * is no way to address somebody else's feed through this controller.
+ */
 @RestController
 @RequestMapping("/api/items")
 public class ShareItemController {
@@ -36,8 +42,9 @@ public class ShareItemController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ShareItemResponse create(@Valid @RequestBody CreateShareItemRequest request) {
-        return ShareItemResponse.from(service.create(request));
+    public ShareItemResponse create(@AuthenticationPrincipal AuthenticatedUser caller,
+                                    @Valid @RequestBody CreateShareItemRequest request) {
+        return service.create(caller.userId(), request);
     }
 
     /**
@@ -46,19 +53,26 @@ public class ShareItemController {
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
-    public ShareItemResponse upload(@RequestPart("file") MultipartFile file,
+    public ShareItemResponse upload(@AuthenticationPrincipal AuthenticatedUser caller,
+                                    @RequestPart("file") MultipartFile file,
                                     @RequestParam(value = "ttlSeconds", required = false) Long ttlSeconds) {
-        return ShareItemResponse.from(service.upload(file, ttlSeconds));
+        return service.upload(caller.userId(), file, ttlSeconds);
     }
 
     @GetMapping
-    public List<ShareItemResponse> list() {
-        return service.listLive().stream().map(ShareItemResponse::from).toList();
+    public List<ShareItemResponse> list(@AuthenticationPrincipal AuthenticatedUser caller) {
+        return service.listLive(caller.userId());
     }
 
+    /**
+     * The only endpoint reachable without a bearer token, because an inline preview cannot carry
+     * one. It takes the signed link the API handed out with the item, and refuses everything else.
+     */
     @GetMapping("/{id}/blob")
-    public ResponseEntity<Resource> blob(@PathVariable UUID id) {
-        ShareItemService.Blob blob = service.blob(id);
+    public ResponseEntity<Resource> blob(@PathVariable UUID id,
+                                         @RequestParam(name = "t", required = false) String linkToken,
+                                         @AuthenticationPrincipal AuthenticatedUser caller) {
+        ShareItemService.Blob blob = service.blob(id, linkToken, caller);
         MediaType mediaType;
         try {
             mediaType = MediaType.parseMediaType(blob.mimeType());
@@ -72,9 +86,10 @@ public class ShareItemController {
                         .filename(blob.fileName(), StandardCharsets.UTF_8).build().toString())
                 .body(blob.resource());
     }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable UUID id) {
-        service.delete(id);
+    public void delete(@AuthenticationPrincipal AuthenticatedUser caller, @PathVariable UUID id) {
+        service.delete(caller.userId(), id);
     }
 }

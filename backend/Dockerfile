@@ -10,6 +10,7 @@
 # Configuration is entirely environment variables, so nothing has to be baked in:
 #   PORT, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD,
 #   TEILEN_STORAGE_DIR, TEILEN_MAX_BLOB_BYTES, TEILEN_DEFAULT_TTL_SECONDS
+#   TEILEN_BLOB_LINK_SECRET  ← set this, or signed blob links break on every restart
 
 # ---------- build ----------
 FROM maven:3.9-eclipse-temurin-21-alpine AS build
@@ -49,8 +50,10 @@ VOLUME ["/data/blobs"]
 
 USER teilen
 
-# the app has no /actuator/health, so ask it something real: can it serve the feed?
+# There is no /actuator/health, so ask for something that needs no token. It used to be
+# /api/items, which since the auth layer answers 401 and would have marked a perfectly
+# healthy container unhealthy; the static shell is served without credentials by design.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=45s --retries=3 \
-    CMD wget -qO- "http://127.0.0.1:${PORT}/api/items" > /dev/null || exit 1
+    CMD wget -qO- "http://127.0.0.1:${PORT}/" | grep -q Teilen || exit 1
 
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -10,9 +10,14 @@ public record ShareItemResponse(
         String mimeType,
         Long sizeBytes,
         Instant createdAt,
-        Instant expiresAt) {
+        Instant expiresAt,
+        /**
+         * A signed link to the bytes, for the cases a browser cannot send a token on: an inline
+         * image preview, a PDF opened in a new tab. Null for text and links.
+         */
+        String blobUrl) {
 
-    public static ShareItemResponse from(ShareItem item) {
+    public static ShareItemResponse from(ShareItem item, String blobUrl) {
         return new ShareItemResponse(
                 item.getId(),
                 item.getType().name(),
@@ -20,6 +25,7 @@ public record ShareItemResponse(
                 item.getMimeType(),
                 item.getSizeBytes(),
                 item.getCreatedAt(),
-                item.getExpiresAt());
+                item.getExpiresAt(),
+                item.hasBlob() ? blobUrl : null);
     }
 }

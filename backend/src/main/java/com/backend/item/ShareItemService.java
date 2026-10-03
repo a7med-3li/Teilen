@@ -1,5 +1,6 @@
 package com.backend.item;
 
+import com.backend.auth.AuthenticatedUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,6 +22,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Everything about a shared item, always in the context of the account that owns it: the owner is
+ * passed in, never looked up, so there is no way to read somebody else's feed by forgetting a
+ * filter.
+ */
 @Service
 public class ShareItemService {
 
@@ -33,6 +39,7 @@ public class ShareItemService {
     private final ShareItemRepository repository;
     private final ShareItemWebSocketHandler webSocketHandler;
     private final BlobStore blobStore;
+    private final BlobLinks blobLinks;
 
     private final long defaultTtlSeconds;
     private final long minTtlSeconds;
@@ -41,37 +48,40 @@ public class ShareItemService {
     public ShareItemService(ShareItemRepository repository,
                             ShareItemWebSocketHandler webSocketHandler,
                             BlobStore blobStore,
+                            BlobLinks blobLinks,
                             @Value("${teilen.default-ttl-seconds:1800}") long defaultTtlSeconds,
                             @Value("${teilen.min-ttl-seconds:10}") long minTtlSeconds,
                             @Value("${teilen.max-ttl-seconds:86400}") long maxTtlSeconds) {
         this.repository = repository;
         this.webSocketHandler = webSocketHandler;
         this.blobStore = blobStore;
+        this.blobLinks = blobLinks;
         this.defaultTtlSeconds = defaultTtlSeconds;
         this.minTtlSeconds = minTtlSeconds;
         this.maxTtlSeconds = maxTtlSeconds;
     }
 
     @Transactional
-    public ShareItem create(CreateShareItemRequest request) {
+    public ShareItemResponse create(UUID userId, CreateShareItemRequest request) {
         String content = request.content().strip();
         ShareItemType type = resolveType(request.type(), content);
         Duration ttl = resolveTtl(request.ttlSeconds());
 
         Instant now = Instant.now();
-        ShareItem item = new ShareItem(UUID.randomUUID(), type, content, now, now.plus(ttl));
+        ShareItem item = new ShareItem(UUID.randomUUID(), userId, type, content, now, now.plus(ttl));
         repository.save(item);
 
-        log.info("created {} item {} (expires in {}s)", type, item.getId(), ttl.toSeconds());
-        afterCommit(() -> webSocketHandler.broadcast(ShareItemEvent.created(item)));
-        return item;
+        log.info("{} created {} item {} (expires in {}s)", userId, type, item.getId(), ttl.toSeconds());
+        // no blob on a text item, so there is nothing to sign
+        afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.created(item, null)));
+        return ShareItemResponse.from(item, null);
     }
 
     /**
      * A shared file. The blob is written before the row is created, so a failure leaves neither.
      */
     @Transactional
-    public ShareItem upload(MultipartFile file, Long requestedTtl) {
+    public ShareItemResponse upload(UUID userId, MultipartFile file, Long requestedTtl) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "no file in the upload");
         }
@@ -91,24 +101,46 @@ public class ShareItemService {
         Duration ttl = resolveTtl(requestedTtl);
 
         Instant now = Instant.now();
-        ShareItem item = new ShareItem(id, type, fileName, stored.storageRef(),
+        ShareItem item = new ShareItem(id, userId, type, fileName, stored.storageRef(),
                 file.getContentType(), stored.sizeBytes(), now, now.plus(ttl));
         repository.save(item);
 
-        log.info("uploaded {} item {} ({} bytes, expires in {}s)", type, id, stored.sizeBytes(), ttl.toSeconds());
-        afterCommit(() -> webSocketHandler.broadcast(ShareItemEvent.created(item)));
-        return item;
+        log.info("{} uploaded {} item {} ({} bytes, expires in {}s)", userId, type, id,
+                stored.sizeBytes(), ttl.toSeconds());
+        String blobUrl = blobLinks.linkFor(id, item.getExpiresAt());
+        afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.created(item, blobUrl)));
+        return ShareItemResponse.from(item, blobUrl);
     }
 
     @Transactional(readOnly = true)
-    public List<ShareItem> listLive() {
-        return repository.findByExpiresAtAfterOrderByCreatedAtDesc(Instant.now());
+    public List<ShareItemResponse> listLive(UUID userId) {
+        return repository.findByUserIdAndExpiresAtAfterOrderByCreatedAtDesc(userId, Instant.now()).stream()
+                .map(this::response)
+                .toList();
     }
 
+    /**
+     * The bytes behind an item.
+     *
+     * <p>Two ways in, because a browser cannot put a token in an {@code <img src>}: either the
+     * caller's token belongs to the owner, or the call carries a signed link that has not expired.
+     *
+     * <p>A signed link is a bearer credential, but not for somebody who has already said who they
+     * are: a paired stranger is turned away even with a valid link, so a forwarded URL cannot be
+     * opened from an account that should not see the file. Everything else gets the same 404 as an
+     * id that does not exist.
+     */
     @Transactional(readOnly = true)
-    public Blob blob(UUID id) {
+    public Blob blob(UUID id, String linkToken, AuthenticatedUser caller) {
         ShareItem item = repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id));
+        boolean owner = caller != null && caller.userId().equals(item.getUserId());
+        if (caller != null && !owner) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id);
+        }
+        if (!owner && !blobLinks.isValid(id, linkToken)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id);
+        }
         if (!item.hasBlob() || !blobStore.exists(item.getStorageRef())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no file for item: " + id);
         }
@@ -118,19 +150,17 @@ public class ShareItemService {
     }
 
     @Transactional
-    public void delete(UUID id) {
-        ShareItem item = repository.findById(id).orElse(null);
-        if (item == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id);
-        }
+    public void delete(UUID userId, UUID id) {
+        ShareItem item = repository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id));
         repository.deleteById(id);
-        log.info("deleted item {}", id);
+        log.info("{} deleted item {}", userId, id);
         afterCommit(() -> dropBlob(item.getStorageRef()));
-        afterCommit(() -> webSocketHandler.broadcast(ShareItemEvent.deleted(id)));
+        afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.deleted(id)));
     }
 
     /**
-     * Zero-clutter storage: whatever ran out of time is deleted and the open feeds are told.
+     * Zero-clutter storage: whatever ran out of time is deleted and its owner's feed is told.
      */
     @Scheduled(fixedDelayString = "${teilen.reap-interval-ms:5000}")
     @Transactional
@@ -143,8 +173,13 @@ public class ShareItemService {
         log.info("reaped {} expired item(s)", expired.size());
         expired.forEach(item -> {
             afterCommit(() -> dropBlob(item.getStorageRef()));
-            afterCommit(() -> webSocketHandler.broadcast(ShareItemEvent.deleted(item.getId())));
+            afterCommit(() -> webSocketHandler.broadcast(item.getUserId(),
+                    ShareItemEvent.deleted(item.getId())));
         });
+    }
+
+    private ShareItemResponse response(ShareItem item) {
+        return ShareItemResponse.from(item, blobLinks.linkFor(item.getId(), item.getExpiresAt()));
     }
 
     private void dropBlob(String storageRef) {

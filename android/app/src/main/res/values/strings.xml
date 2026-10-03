@@ -5,9 +5,48 @@
     <string name="process_text_label">Copy to Teilen</string>
     <string name="header_subtitle">straight to your own inbox</string>
 
+    <string name="section_account">Account</string>
     <string name="section_text">Text or link</string>
     <string name="section_files">Files</string>
     <string name="section_backend">Backend</string>
+
+    <!-- the account card: one of these three is on screen at any time -->
+    <string name="account_intro">Your phone number is the account. Nothing is sent to the server until you have one, and the feed below is yours alone.</string>
+    <string name="phone_hint">phone number, e.g. +49 151 2345678</string>
+    <string name="name_hint">your name (optional)</string>
+    <string name="create_account">Create my account</string>
+    <string name="account_creating">Creating the account…</string>
+    <string name="phone_needed">Enter your phone number first.</string>
+    <string name="pair_this_phone">Pair this phone instead</string>
+    <string name="pair_intro">Type this code into a device that is already paired with your account.</string>
+    <string name="pair_waiting">Waiting for approval. The code stops working in a few minutes.</string>
+    <string name="pair_failed">Could not ask for a pairing code — check the backend address below.</string>
+    <string name="pair_cancel">Cancel</string>
+    <string name="signed_in">Paired</string>
+    <string name="signed_in_as">Paired as %1$s</string>
+    <string name="sign_out">Sign out</string>
+    <string name="pair_before_sharing">Pair this phone first — open Teilen to set up your account.</string>
+    <string name="pair_before_files">Pair this phone first — files cannot be sent yet.</string>
+    <string name="pair_then_send">Kept for you. Pair this phone, then press send.</string>
+    <string name="sent_when_paired">Paired · press send to share what is in the box</string>
+
+    <!-- the pairing prompt, opened by the phone's own camera -->
+    <string name="pair_title">Pair a new device?</string>
+    <string name="pair_ask_named">%1$s (%2$s) wants to pair with this account. Once allowed, it can read and add everything you share — and you can unpair it again at any time.</string>
+    <string name="pair_code_stale">The code %1$s is not waiting for approval any more. It was already used, or it has run out. Open the other device and scan a fresh code.</string>
+    <string name="pair_kind_phone">phone</string>
+    <string name="pair_kind_web">web</string>
+    <string name="pair_allow">Allow</string>
+    <string name="pair_deny">Deny</string>
+    <string name="pair_close">Close</string>
+    <string name="pair_approving">Asking the server…</string>
+    <string name="pair_denying">Turning it down…</string>
+    <string name="pair_allowed">%1$s is now paired.</string>
+    <string name="pair_refused">%1$s was not paired.</string>
+    <string name="pair_failed_reason">Could not answer: %1$s</string>
+    <string name="pair_not_paired">This phone is not paired with any account yet, so it cannot approve another device. Open Teilen and set up your account first.</string>
+    <string name="pair_open_app">Open Teilen</string>
+    <string name="pair_no_code">That link has no pairing code in it.</string>
 
     <string name="content_hint">paste text or a link</string>
     <string name="expires_in">Disappears after</string>

@@ -10,18 +10,25 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Fan-out of item events to every open feed. Single instance, single user, no broker needed.
+ * Fan-out of item events, one bucket per account. A browser only ever hears about its own feed:
+ * the sessions are filed under the owner the handshake identified, and a broadcast goes to exactly
+ * one bucket. Single instance, so no broker is needed.
  */
 @Component
 public class ShareItemWebSocketHandler extends TextWebSocketHandler {
 
+    /** where the handshake leaves the owner; see FeedHandshakeInterceptor */
+    public static final String USER_ID = "teilen.userId";
+
     private static final Logger log = LoggerFactory.getLogger(ShareItemWebSocketHandler.class);
 
-    private final Set<WebSocketSession> sessions = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Set<WebSocketSession>> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
 
     public ShareItemWebSocketHandler(ObjectMapper objectMapper) {
@@ -30,29 +37,35 @@ public class ShareItemWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        sessions.add(session);
-        log.info("feed connected: {} ({} open)", session.getId(), sessions.size());
+        UUID userId = userIdOf(session);
+        if (userId == null) {
+            // should not happen: the handshake refuses an unauthenticated one
+            closeQuietly(session, CloseStatus.POLICY_VIOLATION);
+            return;
+        }
+        sessions.computeIfAbsent(userId, key -> ConcurrentHashMap.newKeySet()).add(session);
+        log.info("feed connected for {} ({} open for them)", userId, sessions.get(userId).size());
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        sessions.remove(session);
-        log.info("feed disconnected: {} ({} open)", session.getId(), sessions.size());
+        forget(session);
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+    public void handleTextMessage(WebSocketSession session, TextMessage message) {
         // the feed is read-only; a client sending anything is ignored
     }
 
-    public void broadcast(ShareItemEvent event) {
-        if (sessions.isEmpty()) {
+    public void broadcast(UUID userId, ShareItemEvent event) {
+        Set<WebSocketSession> open = sessions.get(userId);
+        if (open == null || open.isEmpty()) {
             return;
         }
         String payload = serialize(event);
-        for (WebSocketSession session : sessions) {
+        for (WebSocketSession session : open) {
             if (!session.isOpen()) {
-                sessions.remove(session);
+                forget(session);
                 continue;
             }
             try {
@@ -61,8 +74,33 @@ public class ShareItemWebSocketHandler extends TextWebSocketHandler {
                 }
             } catch (IOException e) {
                 log.warn("dropping feed {}: {}", session.getId(), e.getMessage());
-                sessions.remove(session);
+                forget(session);
             }
+        }
+    }
+
+    private UUID userIdOf(WebSocketSession session) {
+        Object value = session.getAttributes().get(USER_ID);
+        return value instanceof UUID userId ? userId : null;
+    }
+
+    private void forget(WebSocketSession session) {
+        UUID userId = userIdOf(session);
+        if (userId == null) {
+            return;
+        }
+        Set<WebSocketSession> open = sessions.get(userId);
+        if (open != null && open.remove(session) && open.isEmpty()) {
+            sessions.remove(userId, open);
+        }
+        log.info("feed disconnected for {}", userId);
+    }
+
+    private void closeQuietly(WebSocketSession session, CloseStatus status) {
+        try {
+            session.close(status);
+        } catch (IOException e) {
+            log.debug("could not close an unidentified feed: {}", e.getMessage());
         }
     }
 

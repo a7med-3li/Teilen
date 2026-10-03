@@ -39,6 +39,16 @@ logging:
     com.backend: DEBUG
 
 teilen:
+  auth:
+    # how long a pairing request stays answerable, and how often the waiting side should ask
+    pairing-ttl-seconds: 300
+    poll-interval-seconds: 3
+    sweep-interval-ms: 60000
+    # blob bytes are reachable by a signed link, because an <img> cannot carry a bearer token.
+    # With no secret the key is random per start, so old links stop working after a restart.
+    blob-link-secret: ${TEILEN_BLOB_LINK_SECRET:}
+    blob-link-ttl-seconds: 900
+
   # how often expired rows are swept away
   reap-interval-ms: 5000
   default-ttl-seconds: 1800

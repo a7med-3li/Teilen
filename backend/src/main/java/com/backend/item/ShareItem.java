@@ -17,6 +17,10 @@ public class ShareItem {
     @Id
     private UUID id;
 
+    /** whose feed this belongs to; the only thing that decides who may see it */
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private ShareItemType type;
@@ -48,13 +52,15 @@ public class ShareItem {
         // for JPA
     }
 
-    public ShareItem(UUID id, ShareItemType type, String content, Instant createdAt, Instant expiresAt) {
-        this(id, type, content, null, null, null, createdAt, expiresAt);
+    public ShareItem(UUID id, UUID userId, ShareItemType type, String content,
+                     Instant createdAt, Instant expiresAt) {
+        this(id, userId, type, content, null, null, null, createdAt, expiresAt);
     }
 
-    public ShareItem(UUID id, ShareItemType type, String content, String storageRef, String mimeType,
-                     Long sizeBytes, Instant createdAt, Instant expiresAt) {
+    public ShareItem(UUID id, UUID userId, ShareItemType type, String content, String storageRef,
+                     String mimeType, Long sizeBytes, Instant createdAt, Instant expiresAt) {
         this.id = id;
+        this.userId = userId;
         this.type = type;
         this.content = content;
         this.storageRef = storageRef;
@@ -70,6 +76,10 @@ public class ShareItem {
 
     public UUID getId() {
         return id;
+    }
+
+    public UUID getUserId() {
+        return userId;
     }
 
     public ShareItemType getType() {

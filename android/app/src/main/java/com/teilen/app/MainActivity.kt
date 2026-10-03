@@ -35,6 +35,12 @@ class MainActivity : Activity() {
     private lateinit var fileProgress: ProgressBar
     private lateinit var fileStatus: TextView
 
+    /** the account card, which decides whether anything below it can be used at all */
+    private lateinit var account: AccountCard
+
+    /** the cards that need a token; hidden outright when there is none */
+    private lateinit var gated: List<View>
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -47,6 +53,15 @@ class MainActivity : Activity() {
         pickFile = findViewById(R.id.pick_file)
         fileProgress = findViewById(R.id.file_progress)
         fileStatus = findViewById(R.id.file_status)
+
+        // these three cards only work with a token, so they come and go with the session
+        gated = listOf(
+            findViewById(R.id.card_text),
+            findViewById(R.id.card_files),
+            findViewById(R.id.card_clipboard)
+        )
+        account = AccountCard(this) { applyGating() }
+        account.render()
 
         spinner.adapter = ArrayAdapter(
             this,
@@ -82,11 +97,8 @@ class MainActivity : Activity() {
 
         setupClipboardWatch()
 
-        // arriving from the share sheet when the upload failed: the text is handed over
-        intent?.getStringExtra(EXTRA_TEXT)?.let {
-            content.setText(it)
-            intent.removeExtra(EXTRA_TEXT)
-        }
+        // arriving from the share sheet: the text is handed over rather than sent
+        takeHandedOverText(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -94,6 +106,24 @@ class MainActivity : Activity() {
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_STOP_WATCHING, false)) {
             setWatching(false)
+        }
+        // singleTop means this screen is reused rather than recreated, so the share sheet's
+        // handover has to be picked up here too — otherwise it is silently dropped
+        takeHandedOverText(intent)
+    }
+
+    /**
+     * Puts text somebody shared into the box without sending it, and says so.
+     *
+     * This is what a share does when the phone is not paired yet: the content lands here, the
+     * account card is what the user is looking at, and nothing is uploaded until they press send.
+     */
+    private fun takeHandedOverText(intent: Intent?) {
+        val handedOver = intent?.getStringExtra(EXTRA_TEXT) ?: return
+        intent.removeExtra(EXTRA_TEXT)
+        content.setText(handedOver)
+        if (!Session.isPaired(this)) {
+            status.text = getString(R.string.pair_then_send)
         }
     }
 
@@ -138,6 +168,7 @@ class MainActivity : Activity() {
         TeilenApi.uploadAll(
             context = this,
             baseUrl = url,
+            token = Session.token(this),
             uris = uris,
             ttlSeconds = ttls[spinner.selectedItemPosition],
             onProgress = { index, count, written, total ->
@@ -165,6 +196,11 @@ class MainActivity : Activity() {
             onDone = { outcome ->
                 setBusy(false)
                 fileProgress.visibility = View.GONE
+                // a batch can fail for one reason, and if that reason is the session, re-render
+                if (outcome.lastError == TeilenApi.UNPAIRED_MESSAGE) {
+                    Session.clear(this)
+                    account.render()
+                }
                 if (outcome.failed == 0) {
                     val message = if (outcome.sent == 1) {
                         getString(R.string.file_sent, uris.first().let { TeilenApi.displayName(this, it) })
@@ -252,15 +288,24 @@ class MainActivity : Activity() {
         Server.set(this, url)
 
         setBusy(true)
-        TeilenApi.send(url, text, ttls[spinner.selectedItemPosition]) { ok, message ->
+        TeilenApi.send(url, Session.token(this), text, ttls[spinner.selectedItemPosition]) { ok, message ->
             setBusy(false)
-            if (ok) {
-                content.setText("")
-                status.text = getString(R.string.sent, message)
-                Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
-            } else {
-                status.text = message
-                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+            when {
+                ok -> {
+                    content.setText("")
+                    status.text = getString(R.string.sent, message)
+                    Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
+                }
+                // the token was revoked or expired somewhere else: drop it and show the card again
+                message == TeilenApi.UNPAIRED_MESSAGE -> {
+                    Session.clear(this)
+                    account.render()
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                }
+                else -> {
+                    status.text = message
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -269,6 +314,33 @@ class MainActivity : Activity() {
         send.isEnabled = !busy
         send.text = getString(if (busy) R.string.sending else R.string.send)
         pickFile.isEnabled = !busy
+    }
+
+    /**
+     * No token, no sending — so the text, file and clipboard cards are hidden rather than left
+     * there to fail. The server card stays visible throughout, since it is what makes pairing work.
+     */
+    private fun applyGating() {
+        val paired = Session.isPaired(this)
+        gated.forEach { it.visibility = if (paired) View.VISIBLE else View.GONE }
+        if (!paired) {
+            return
+        }
+        // paired now, so say the only thing left: whatever was brought in is waiting to be sent
+        status.text = if (content.text.isNullOrBlank()) {
+            getString(R.string.ready, Server.get(this))
+        } else {
+            getString(R.string.sent_when_paired)
+        }
+    }
+
+    /** the one place a token is needed, checked where the intent came in rather than at the wire */
+    private fun requireSession(): Boolean {
+        if (Session.isPaired(this)) {
+            return true
+        }
+        Toast.makeText(this, R.string.pair_before_sharing, Toast.LENGTH_LONG).show()
+        return false
     }
 
     companion object {

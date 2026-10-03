@@ -5,15 +5,15 @@ authenticated session, and watch it disappear automatically after a set time.
 - Three properties define the product:
 
 - **Zero-friction capture** — uses the OS native Share Sheet, no app to open on the sending end
-- **Zero-friction retrieval** — device pairs once (QR), then just works, forever, across sessions
+- **Zero-friction retrieval** — a device pairs once (scan a QR), then just works, forever, across sessions
 - **Zero-clutter storage** — everything expires; there is no library to manage
 
 - Sequence — sharing an item
 
   1. User is in any app (browser, WhatsApp, college group PDF viewer) → taps native Share → selects your app
-  2. Your app receives the shared content via Android/iOS share-extension intent
-  3. App uploads content (or the link/text) to backend with `expires_in` (default e.g. 30 min, user-configurable)
-  4. Backend stores it, starts a TTL countdown
+  2. Your app receives the shared content via the Android share intent (`ACTION_SEND` / `ACTION_SEND_MULTIPLE`)
+  3. App uploads the content (or the link/text) to the backend with `ttlSeconds` (30 minutes by default), carrying this device's bearer token
+  4. Backend stores it against that account and starts a TTL countdown
   5. Web app (already open or opened later) receives it via WebSocket push, or fetches it on load — shows as a card in a feed
   6. User clicks the card → item opens inline (PDF/image renders in browser; link opens in new tab; text/number just displays)
   7. TTL expires → scheduled job deletes the row and the blob → item vanishes from the feed automatically (real-time push if the tab is open)
@@ -21,15 +21,25 @@ authenticated session, and watch it disappear automatically after a set time.
 ## Data Model
 
 - #### User
-  - ##### id, phone_or_email, created_at
+  - ##### id, phone (unique), display_name, created_at
 
 - #### Device
-  - ##### id, user_id, device_type (mobile/web), session_token_hash, paired_at, last_seen_at, name (e.g. "Ahmed's MacBook")
+  - ##### id, user_id, device_type (PHONE | WEB), name (e.g. "Ahmed's MacBook"), token_hash, created_at, last_seen_at
+
+  Only the SHA-256 of the token is stored, so a database dump is not a set of usable tokens.
+
+- #### PairingRequest
+  - ##### id, device_code_hash, user_code_hash, device_name, device_type, platform, status (PENDING | APPROVED | DENIED), device_id, token_value, created_at, expires_at, resolved_at
+
+  The two hashes are the two secrets of one pairing: `user_code_hash` is the short code a human reads
+  off a screen, `device_code_hash` is the long secret the waiting device polls with. A resolved
+  request keeps its plaintext token in `token_value` until it is collected, exactly once, then only
+  the device's `token_hash` remains.
 
 - #### ShareItem
   - ##### id, user_id, type (link | pdf | image | text | file), storage_ref (S3/disk path, null for plain text/links), content (inline text/URL, null for files), mime_type, size_bytes, created_at, expires_at, opened_at (optional — useful for "open once" mode later)
 
-## MVP status — text and files up to 30 MB, no auth
+## MVP status — text and files up to 30 MB, paired devices
 
 The first vertical slice is implemented and working end to end:
 
@@ -47,23 +57,70 @@ The first vertical slice is implemented and working end to end:
     Text and links are sent as text; **files are uploaded**, one feed item per file, so a multi-select
     share of six photos becomes six cards that each expire on their own. Each share is
     upload-and-close: a small card with a progress bar, then a toast — no full app launch.
-  - **The app itself** — a screen to paste into, **pick a file** (30 MB cap, checked on the bytes as
-    they stream), pick a TTL and watch the server URL.
+  - **The app itself** — an **account card** (claim your number, or pair this phone from a device you
+    already have, or sign out), then a screen to paste into, **pick a file** (30 MB cap, checked on the
+    bytes as they stream), pick a TTL and watch the server URL. The three cards below the account need a
+    token, so they are hidden outright until this phone is paired — and any of the four ways in above
+    hands its content over to the account card rather than failing, so nothing is lost to a 401.
   All four upload in the background over plain `HttpURLConnection`. The app follows the system light/dark
   setting; the palette is paper, ink and one deep teal, declared once in `values/colors.xml` and
   swapped by `values-night/colors.xml`.
-- `backend/` — Spring Boot: one model (`share_items`), `POST/GET/DELETE /api/items`, a WebSocket at `/ws`
-  pushing `created`/`deleted` events, and a scheduled sweep that deletes expired rows **and their blobs**
-  and tells the open feeds. Blobs live on local disk under `backend/data/blobs` (git-ignored), one file per
-  item, named after the item id. It also serves the web app.
-- The web app — plain HTML/CSS/JS in `backend/src/main/resources/static`, no build step. It loads the current
-  items once and then follows the WebSocket, so a share shows up without a refresh and disappears when it expires.
-  Files appear as cards with the name, the size and a way through: images preview inline, PDFs and other
-  files open in a new tab. It can also upload files itself — drag them onto **Attach files…**, pick how long
-  they should live, and press send; anything over 30 MB is refused before it leaves the browser.
+- `backend/` — Spring Boot: three auth tables (`users`, `devices`, `pairing_requests`) and one content
+  table (`share_items`), `POST/GET/DELETE /api/items`, a WebSocket at `/ws` pushing `created`/`deleted`
+  events to that account's sockets only, and a scheduled sweep that deletes expired rows **and their
+  blobs** and tells the open feeds. Blobs live on local disk under `backend/data/blobs` (git-ignored),
+  one file per item, named after the item id. It also serves the web app.
+- The web app — plain HTML/CSS/JS in `backend/src/main/resources/static`, no build step. Behind a
+  **pair this browser** screen that shows the QR, then the feed, an account panel listing every paired
+  device you can revoke, and the upload affordance: drag files onto **Attach files…**, pick how long they
+  should live, press send. Items load once and then follow the WebSocket, so a share shows up without a
+  refresh and disappears when it expires; files appear as cards with the name, the size and a way
+  through — images preview inline, PDFs open in a new tab. Anything over 30 MB is refused before it
+  leaves the browser.
 
-**No authentication at all yet — do not expose this to a network you do not control.** Pairing and device
-tokens are the next step. `PLAN.md` (git-ignored) has the phased breakdown.
+### Pairing — how a device gets in
+
+An account is a phone number. The first device claims it and is paired on the spot; every device after
+that has to be approved by one that is already paired. There is one set of endpoints for both flows,
+shaped like RFC 8628 so it reads like something you already know:
+
+```text
+POST /api/auth/account         the first phone creates the account, is paired at once   (open)
+POST /api/auth/device/code     a newcomer asks for a code                              (open)
+GET  /api/auth/device/qr.svg   that code as a QR, encoding teilen://pair?code=…        (open)
+GET  /api/auth/device/pending  what that code is asking for, for the prompt           (open)
+POST /api/auth/device/approve  a paired device approves it
+POST /api/auth/device/deny     …or does not
+POST /api/auth/device/token    the newcomer polls; 202 while waiting, 200 with a token (open)
+GET  /api/me                   who am I
+GET  /api/devices              everything paired to this account
+DELETE /api/devices/{id}       unpair one
+```
+
+A browser asks for a code, draws it as a QR, and polls `/token` every few seconds. You point your
+phone's **camera** at the QR; the QR holds `teilen://pair?code=K7PM-3XQD`, the phone opens Teilen and
+shows a dialog naming the device that is asking and what allowing it means. Allow, and the browser's
+next poll returns its token. Deny, and the poll answers `403 pairing_denied` and stops. The second
+phone pairs the same way round: it shows a code, and you type it into the account menu of a device
+that is already paired.
+
+That is deliberately one mechanism for both directions: no QR library, no camera permission, nothing
+to scan from the inside of the app. The camera app does the scanning, and the code is also readable
+aloud for anyone who would rather type it.
+
+Codes are eight characters from an alphabet with no `I`, `O`, `0` or `1`, live for five minutes, and
+are stored only as hashes. They are single-use: `approve` mints the newcomer's token and hands it to
+the waiting device exactly once, after which the request is spent and the code answers `410`.
+
+**Devices can be revoked** from the account menu in the web app, which is also what signing out does.
+A device may revoke itself, because that is what signing out means — with one exception: the *last*
+device cannot unpair itself, since the account would then have nobody left who could approve anything
+and there would be no way back in. It answers `400 cannot_revoke_self` and says so.
+
+**The one real gap: account creation proves nothing about the phone number.** Whoever asks for a number
+first owns it. Adding an OTP means checking one code inside `AuthService.createAccount` and nothing
+else would move. Everything after that first claim is approval-based, and there is no other
+unauthenticated path into the feed.
 
 ### Run it
 
@@ -99,11 +156,15 @@ docker run --rm -p 8081:8081 \
 ```
 
 `backend/Dockerfile` builds the jar with Maven and ships only the runtime, split into layers so a
-code change rebuilds the small top one. It runs as a non-root user and has a `HEALTHCHECK` that asks
-for `/api/items`. Everything is configured by environment variable — `PORT`, `DB_HOST`, `DB_PORT`,
+code change rebuilds the small top one. It runs as a non-root user, and its `HEALTHCHECK` asks for
+`/` rather than `/api/items` — the API needs a token now, so a healthy container would have reported
+itself unhealthy. Everything is configured by environment variable — `PORT`, `DB_HOST`, `DB_PORT`,
 `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `TEILEN_STORAGE_DIR`, `TEILEN_MAX_BLOB_BYTES`,
-`TEILEN_DEFAULT_TTL_SECONDS` — so nothing is baked into the image. Shared files live in the
-`/data/blobs` volume; without that mount they disappear with the container.
+`TEILEN_DEFAULT_TTL_SECONDS`, `TEILEN_BLOB_LINK_SECRET` — so nothing is baked into the image. Shared
+files live in the `/data/blobs` volume; without that mount they disappear with the container.
+
+**This image has never actually been built.** It is written and looks right; nobody has run
+`docker build` on it.
 
 ### Why the clipboard notification is shaped that way
 
@@ -120,14 +181,23 @@ Database connection is overridable with `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USE
 
 ### API
 
+Everything below `/api` needs a paired device's token, as `Authorization: Bearer <token>`. Nothing is
+session-based: there are no cookies, no CSRF token and no login form, because every call carries its
+own proof and nothing else would do. A missing or unknown token is `401` with a `message` of
+`not_authenticated`.
+
 | method | path                   | body                                                        |
 |--------|------------------------|-------------------------------------------------------------|
 | POST   | `/api/items` (JSON)    | `{"content": "…", "type": "TEXT\|LINK", "ttlSeconds": 1800}` — all but `content` optional |
 | POST   | `/api/items` (multipart) | `file=<binary>`, optional `ttlSeconds` — one item per file   |
-| GET    | `/api/items`           | live (non-expired) items, newest first                       |
+| GET    | `/api/items`           | live (non-expired) items, newest first, for this account only |
 | GET    | `/api/items/{id}/blob` | the bytes of a shared file, inline, with its original name    |
 | DELETE | `/api/items/{id}`      | delete now (row and blob)                                    |
-| WS     | `/ws`                  | `{"event":"created","item":{…}}` / `{"event":"deleted","id":"…"}` |
+| WS     | `/ws?token=…`          | `{"event":"created","item":{…}}` / `{"event":"deleted","id":"…"}` |
+
+Every item carries an `owner` — the phone number it belongs to — and a file item also carries a
+`blobUrl`. Rows are filtered by the caller's account on the way out, so there is no id-guessing to
+worry about: another account's id answers `404`, the same as one that never existed.
 
 `ttlSeconds` is clamped to 10…86400, `type` is auto-detected (links from the content, uploads from their
 MIME type with the file name as the tie-breaker), and the share sheet sends 30 minutes.
@@ -137,8 +207,21 @@ the limit, and `BlobStore` counts the bytes as it writes them, so a lying `Conte
 past it — and a rejected upload leaves no partial file behind. On the phone the same check runs before
 and during the upload, so an oversized file is never put on the wire.
 
+#### Why blobs are the one unauthenticated thing
+
+A browser cannot put an `Authorization` header on `<img src>` or a PDF the user opens in a tab, so a
+`blobUrl` is signed instead: `?t=<expiryMillis>-<HMAC-SHA-256>` over the item id and its expiry, keyed
+by `teilen.auth.blob-link-secret`. The link works until the item expires, which is exactly as long as
+the item is meant to live, and it cannot be edited to reach a different item or a later expiry.
+
+It is still a bearer credential, so one rule applies: **a paired stranger is refused, valid link or
+not.** Someone who has already identified themselves to us as a different account does not get to
+borrow a forwarded URL; they get the same `404` as an id that never existed. That is what stops a link
+pasted into the wrong account from quietly becoming readable.
+
 ```bash
-curl -X POST localhost:8081/api/items -F 'file=@invoice.pdf' -F ttlSeconds=3600
-curl -O -J localhost:8081/api/items/<id>/blob
+curl -X POST localhost:8081/api/items -H "Authorization: Bearer $TOKEN" \
+     -F 'file=@invoice.pdf' -F ttlSeconds=3600
+curl -OJ "$BLOB_URL"          # signed, so no header needed
 ```
 

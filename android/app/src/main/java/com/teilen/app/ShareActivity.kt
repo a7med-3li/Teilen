@@ -47,6 +47,16 @@ class ShareActivity : Activity() {
         val text = textOf(intent)
         val uris = streamUris(intent)
 
+        // nothing can be sent without a token, so the share goes straight to the account card
+        // instead of bouncing off a 401 — with the text handed over, so nothing is lost
+        if (!Session.isPaired(this)) {
+            status.text = getString(
+                if (!uris.isNullOrEmpty()) R.string.pair_before_files else R.string.pair_before_sharing
+            )
+            handOver(intent, text)
+            return
+        }
+
         // text wins: some apps attach both a snippet and a preview URI
         if (!text.isNullOrBlank()) {
             sendText(text)
@@ -60,7 +70,7 @@ class ShareActivity : Activity() {
     private fun sendText(text: String) {
         title.text = getString(R.string.app_name)
         status.text = getString(R.string.share_sending, text.take(80))
-        TeilenApi.send(Server.get(this), text, DEFAULT_TTL_SECONDS) { ok, message ->
+        TeilenApi.send(Server.get(this), Session.token(this), text, DEFAULT_TTL_SECONDS) { ok, message ->
             if (ok) {
                 status.text = getString(R.string.share_sent)
                 Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
@@ -68,6 +78,10 @@ class ShareActivity : Activity() {
             } else {
                 // hand the text back to the full screen so nothing is lost
                 status.text = message
+                if (message == TeilenApi.UNPAIRED_MESSAGE) {
+                    // the token is gone: forget it, or the app looks paired and is not
+                    Session.clear(this)
+                }
                 startActivity(
                     Intent(this, MainActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -89,6 +103,7 @@ class ShareActivity : Activity() {
         TeilenApi.uploadAll(
             context = this,
             baseUrl = Server.get(this),
+            token = Session.token(this),
             uris = uris,
             ttlSeconds = DEFAULT_TTL_SECONDS,
             onProgress = { index, count, written, total ->
@@ -130,6 +145,21 @@ class ShareActivity : Activity() {
                 }
             }
         )
+    }
+
+    /**
+     * Hands the share over to the full screen, carrying the text so it can be sent once the account
+     * exists. Files cannot travel this way — the URI grant belongs to this task — so they are
+     * simply refused, with the reason on screen rather than a silent nothing.
+     */
+    private fun handOver(intent: Intent, text: String?) {
+        val onwards = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        if (!text.isNullOrBlank()) {
+            onwards.putExtra(MainActivity.EXTRA_TEXT, text)
+        }
+        startActivity(onwards)
+        finishSoon()
     }
 
     /** EXTRA_TEXT plus EXTRA_SUBJECT, which is how mail clients share a link's title alongside it */

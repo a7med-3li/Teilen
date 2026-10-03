@@ -27,7 +27,7 @@ class ProcessTextActivity : Activity() {
 
         setResult(RESULT_OK, Intent().putExtra(Intent.EXTRA_PROCESS_TEXT, selected))
 
-        TeilenApi.send(Server.get(this), selected, DEFAULT_TTL_SECONDS) { ok, message ->
+        TeilenApi.send(Server.get(this), Session.token(this), selected, DEFAULT_TTL_SECONDS) { ok, message ->
             if (ok) {
                 Toast.makeText(this, R.string.copied_toast, Toast.LENGTH_SHORT).show()
             } else {

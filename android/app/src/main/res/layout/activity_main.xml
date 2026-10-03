@@ -43,8 +43,150 @@
             android:paddingTop="16dp"
             android:paddingEnd="16dp">
 
-            <!-- text and links -->
+            <!--
+                the account. Everything below it needs a token, so this card is what a first run
+                and a signed-out run actually consist of.
+            -->
             <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    style="@style/Text.Section"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/section_account" />
+
+                <!-- paired: who this device is -->
+                <TextView
+                    android:id="@+id/account_who"
+                    style="@style/Text.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:visibility="gone" />
+
+                <!-- not paired: claim a number -->
+                <LinearLayout
+                    android:id="@+id/account_create"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/Text.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/account_intro" />
+
+                    <EditText
+                        android:id="@+id/phone"
+                        style="@style/Input.Field"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:hint="@string/phone_hint"
+                        android:imeOptions="actionNext"
+                        android:inputType="phone"
+                        android:maxLength="24" />
+
+                    <EditText
+                        android:id="@+id/display_name"
+                        style="@style/Input.Field"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:hint="@string/name_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="textPersonName"
+                        android:maxLength="80" />
+
+                    <Button
+                        android:id="@+id/create_account"
+                        style="@style/Button.Primary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/create_account" />
+                </LinearLayout>
+
+                <!-- pairing this phone from another one -->
+                <LinearLayout
+                    android:id="@+id/account_pair"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        style="@style/Text.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/pair_intro" />
+
+                    <!-- the code, big: it gets typed into another device by hand -->
+                    <TextView
+                        android:id="@+id/pair_code"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.12"
+                        android:textColor="@color/text_primary"
+                        android:textSize="32sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/pair_status"
+                        style="@style/Text.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp" />
+
+                    <Button
+                        android:id="@+id/pair_cancel"
+                        style="@style/Button.Outline"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:text="@string/pair_cancel" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/account_status"
+                    style="@style/Text.Caption"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:visibility="gone" />
+
+                <!-- the escape hatch from the create form: pair instead -->
+                <Button
+                    android:id="@+id/account_pair_start"
+                    style="@style/Button.Outline"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/pair_this_phone" />
+
+                <Button
+                    android:id="@+id/sign_out"
+                    style="@style/Button.Outline"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/sign_out"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- text and links; this card and the two after it need a token -->
+            <LinearLayout
+                android:id="@+id/card_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_card"
@@ -102,6 +244,7 @@
 
             <!-- files -->
             <LinearLayout
+                android:id="@+id/card_files"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
@@ -150,6 +293,7 @@
 
             <!-- clipboard offer -->
             <LinearLayout
+                android:id="@+id/card_clipboard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"

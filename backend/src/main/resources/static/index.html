@@ -13,10 +13,49 @@
 <body>
 <header>
     <h1>Teilen</h1>
-    <div id="status" class="status offline">connecting…</div>
+    <div class="head-right">
+        <div id="status" class="status offline">connecting…</div>
+        <button id="account" class="ghost" type="button" hidden aria-expanded="false">…</button>
+    </div>
 </header>
 
-<main>
+<!-- no token yet: nothing here is reachable without a paired device -->
+<section id="pair" hidden>
+    <div class="panel">
+        <h2>Pair this browser</h2>
+        <p class="panel-lead">Open Teilen on your phone and point its camera at this code.</p>
+
+        <img id="qr" class="qr" alt="Pairing code as a QR code" width="228" height="228">
+
+        <p id="pair-code" class="pair-code">····-····</p>
+        <p id="pair-state" class="panel-lead">waiting for approval…</p>
+
+        <button id="pair-retry" type="button" hidden>get a new code</button>
+    </div>
+</section>
+
+<!-- the account menu: who is signed in, what else is paired, how to add or drop one -->
+<section id="devices" hidden>
+    <div class="panel">
+        <h2>Paired devices</h2>
+        <p id="account-phone" class="panel-lead"></p>
+        <ul id="device-list" class="devices"></ul>
+
+        <form id="approve-form" autocomplete="off">
+            <label for="approve-code">Pair another phone — type the code it shows</label>
+            <div class="row">
+                <input id="approve-code" type="text" placeholder="ABCD-EFGH" maxlength="9"
+                       autocapitalize="characters" spellcheck="false">
+                <button type="submit">pair it</button>
+            </div>
+        </form>
+        <p id="device-status" class="panel-lead" hidden></p>
+
+        <button id="sign-out" class="danger" type="button">sign out of this browser</button>
+    </div>
+</section>
+
+<main id="app" hidden>
     <form id="compose" autocomplete="off">
         <input id="compose-input" type="text" placeholder="paste anything and hit enter (handy for testing)" maxlength="20000">
         <button type="submit">send</button>
@@ -43,7 +82,7 @@
     <ul id="feed"></ul>
 </main>
 
-<footer>
+<footer id="foot" hidden>
     <span id="count">0 items</span>
     <button id="clear" type="button" hidden>delete all</button>
 </footer>

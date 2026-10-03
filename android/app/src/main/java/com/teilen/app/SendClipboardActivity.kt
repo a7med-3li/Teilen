@@ -2,6 +2,7 @@ package com.teilen.app
 
 import android.app.Activity
 import android.content.ClipboardManager
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 
@@ -25,12 +26,27 @@ class SendClipboardActivity : Activity() {
         }
 
         ClipboardWatchService.lastCopy = text
-        TeilenApi.send(Server.get(this), text, DEFAULT_TTL_SECONDS) { ok, message ->
+        val token = Session.token(this)
+        if (token == null) {
+            // nothing can be sent without a token; the copy is kept so the tap is not wasted
+            Toast.makeText(this, R.string.pair_before_sharing, Toast.LENGTH_LONG).show()
+            startActivity(
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            )
+            finish()
+            return
+        }
+
+        TeilenApi.send(Server.get(this), token, text, DEFAULT_TTL_SECONDS) { ok, message ->
             if (ok) {
                 Toast.makeText(this, R.string.copied_toast, Toast.LENGTH_SHORT).show()
                 ClipboardWatchService.reset(this)
                 ClipboardWatchService.lastCopy = null
             } else {
+                if (message == TeilenApi.UNPAIRED_MESSAGE) {
+                    Session.clear(this)
+                }
                 Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             }
         }
