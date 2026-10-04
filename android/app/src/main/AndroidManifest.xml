@@ -27,6 +27,18 @@
             </intent-filter>
         </activity>
 
+        <!-- everything this account has shared, read back on the phone -->
+        <activity
+            android:name=".FeedActivity"
+            android:exported="false"
+            android:label="@string/feed_title" />
+
+        <!-- one shared image, full screen; the tap target that closes it is the whole screen -->
+        <activity
+            android:name=".ImageViewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Teilen.Share" />
+
         <!--
             the far end of pairing: a browser draws a QR holding teilen://pair?code=…, the phone's
             own camera opens that link, and this is what it lands on. No camera permission and no

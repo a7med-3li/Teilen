@@ -6,6 +6,7 @@
     <string name="header_subtitle">straight to your own inbox</string>
 
     <string name="section_account">Account</string>
+    <string name="section_feed">Feed</string>
     <string name="section_text">Text or link</string>
     <string name="section_files">Files</string>
     <string name="section_backend">Backend</string>
@@ -47,6 +48,20 @@
     <string name="pair_not_paired">This phone is not paired with any account yet, so it cannot approve another device. Open Teilen and set up your account first.</string>
     <string name="pair_open_app">Open Teilen</string>
     <string name="pair_no_code">That link has no pairing code in it.</string>
+
+    <!-- the feed: everything the account has shared, from any device -->
+    <string name="feed_intro">Everything you share with Teilen, from the phone and from the web. Newest first.</string>
+    <string name="open_feed">Open feed</string>
+    <string name="feed_title">Feed</string>
+    <string name="feed_subtitle">from all your devices</string>
+    <string name="feed_count">%1$d shared · newest first</string>
+    <string name="feed_empty">Nothing here yet. Share something from the phone or from the web app and it turns up here.</string>
+    <string name="feed_thumb">Shared image</string>
+    <string name="feed_open_link">Open</string>
+    <string name="feed_no_viewer">No app on this phone can open %1$s.</string>
+    <string name="image_failed">This image is gone — it may have expired, or the link is no longer signed.</string>
+    <string name="feed_need_pair">Pair this phone first — the feed belongs to one account.</string>
+    <string name="refresh">Refresh</string>
 
     <string name="content_hint">paste text or a link</string>
     <string name="expires_in">Disappears after</string>

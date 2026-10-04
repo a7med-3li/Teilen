@@ -3,6 +3,7 @@ package com.teilen.app
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.FileNotFoundException
@@ -259,6 +260,45 @@ object TeilenApi {
     }
 
     // ------------------------------------------------------------------ items
+
+    /**
+     * The whole live feed for the token's account, newest first. One request, no cursor: the list
+     * is bounded by the time-to-live, so re-reading it costs less than keeping a delta in step.
+     *
+     * @param onResult (items, error), always on the main thread; exactly one of the two is set
+     */
+    fun fetchItems(baseUrl: String, token: String?, onResult: (List<FeedItem>?, String?) -> Unit) {
+        Thread {
+            val result = try {
+                val connection = open(baseUrl, "/api/items", token, "GET")
+                val (status, text) = try {
+                    readBody(connection)
+                } finally {
+                    connection.disconnect()
+                }
+                when {
+                    status in 200..299 -> parseItems(text) to null
+                    status == 401 -> null to UNPAIRED_MESSAGE
+                    else -> null to "server said $status"
+                }
+            } catch (e: IOException) {
+                null to unreachable(baseUrl, e)
+            } catch (e: Exception) {
+                null to (e.message ?: e.javaClass.simpleName)
+            }
+            val items = result.first
+            val error = result.second
+            main.post { onResult(items, error) }
+        }.apply { name = "teilen-feed" }.start()
+    }
+
+    /** the feed is a bare array, so it cannot go through [Reply]'s object parser */
+    private fun parseItems(text: String): List<FeedItem> {
+        val array = runCatching { JSONArray(text) }.getOrNull() ?: return emptyList()
+        return (0 until array.length()).mapNotNull { index ->
+            array.optJSONObject(index)?.let { FeedItem.parse(it) }
+        }
+    }
 
     /** @param onResult (ok, message), always on the main thread */
     fun send(
@@ -550,10 +590,16 @@ object TeilenApi {
         return connection
     }
 
-    private fun readReply(connection: HttpURLConnection): Reply {
+    /** the status code and the body as text, which is all a caller needs to pick a parser */
+    private fun readBody(connection: HttpURLConnection): Pair<Int, String> {
         val status = connection.responseCode
         val stream = if (status in 200..299) connection.inputStream else connection.errorStream
         val text = stream?.let { BufferedInputStream(it) }?.bufferedReader()?.use { it.readText() }.orEmpty()
+        return status to text
+    }
+
+    private fun readReply(connection: HttpURLConnection): Reply {
+        val (status, text) = readBody(connection)
         val json = if (text.isBlank()) null else runCatching { JSONObject(text) }.getOrNull()
         return Reply(status, json)
     }

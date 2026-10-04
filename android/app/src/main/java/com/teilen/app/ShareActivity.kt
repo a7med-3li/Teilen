@@ -57,24 +57,41 @@ class ShareActivity : Activity() {
             return
         }
 
-        // text wins: some apps attach both a snippet and a preview URI
+        if (uris.isNullOrEmpty()) {
+            if (text.isNullOrBlank()) {
+                finishWith(getString(R.string.share_empty))
+            } else {
+                sendText(text)
+            }
+            return
+        }
+
+        // A share that carries streams is a file share, whatever else came with it: file managers
+        // attach the name in EXTRA_TEXT and mail clients the subject in EXTRA_SUBJECT. Reading the
+        // text first sent the name and silently dropped the file, so the streams go first and any
+        // text rides along as its own item rather than replacing them.
         if (!text.isNullOrBlank()) {
-            sendText(text)
-        } else if (!uris.isNullOrEmpty()) {
-            sendFiles(uris)
+            sendText(text) {
+                sendFiles(uris)
+            }
         } else {
-            finishWith(getString(R.string.share_empty))
+            sendFiles(uris)
         }
     }
 
-    private fun sendText(text: String) {
+    /** @param then what to do once the text is away, when more of the same share still follows */
+    private fun sendText(text: String, then: (() -> Unit)? = null) {
         title.text = getString(R.string.app_name)
         status.text = getString(R.string.share_sending, text.take(80))
         TeilenApi.send(Server.get(this), Session.token(this), text, DEFAULT_TTL_SECONDS) { ok, message ->
             if (ok) {
-                status.text = getString(R.string.share_sent)
-                Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
-                finishSoon()
+                if (then != null) {
+                    then()
+                } else {
+                    status.text = getString(R.string.share_sent)
+                    Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
+                    finishSoon()
+                }
             } else {
                 // hand the text back to the full screen so nothing is lost
                 status.text = message

@@ -54,8 +54,9 @@ class MainActivity : Activity() {
         fileProgress = findViewById(R.id.file_progress)
         fileStatus = findViewById(R.id.file_status)
 
-        // these three cards only work with a token, so they come and go with the session
+        // these cards only work with a token, so they come and go with the session
         gated = listOf(
+            findViewById(R.id.card_feed),
             findViewById(R.id.card_text),
             findViewById(R.id.card_files),
             findViewById(R.id.card_clipboard)
@@ -84,6 +85,10 @@ class MainActivity : Activity() {
         }
 
         send.setOnClickListener { submit() }
+
+        findViewById<Button>(R.id.open_feed).setOnClickListener {
+            startActivity(Intent(this, FeedActivity::class.java))
+        }
 
         pickFile.setOnClickListener {
             // ACTION_OPEN_DOCUMENT needs no storage permission and hands back a readable URI
