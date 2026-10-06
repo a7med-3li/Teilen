@@ -1,5 +1,6 @@
-package com.backend.auth;
+package com.backend.auth.entity;
 
+import com.backend.auth.service.AuthService;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;

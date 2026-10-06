@@ -1,5 +1,20 @@
-package com.backend.auth;
+package com.backend.auth.service;
 
+import com.backend.auth.dto.ApprovalResponse;
+import com.backend.auth.domain.AuthenticatedUser;
+import com.backend.auth.entity.Device;
+import com.backend.auth.repository.DeviceRepository;
+import com.backend.auth.dto.DeviceResponse;
+import com.backend.auth.enums.DeviceType;
+import com.backend.auth.entity.PairingRequest;
+import com.backend.auth.repository.PairingRequestRepository;
+import com.backend.auth.domain.PairingStartResponse;
+import com.backend.auth.dto.SessionResponse;
+import com.backend.auth.dto.TokenClaimResponse;
+import com.backend.auth.domain.Tokens;
+import com.backend.auth.repository.UserRepository;
+import com.backend.auth.dto.UserResponse;
+import com.backend.auth.entity.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

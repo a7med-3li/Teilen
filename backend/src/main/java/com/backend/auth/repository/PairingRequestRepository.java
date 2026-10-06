@@ -1,5 +1,6 @@
-package com.backend.auth;
+package com.backend.auth.repository;
 
+import com.backend.auth.entity.PairingRequest;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.Instant;

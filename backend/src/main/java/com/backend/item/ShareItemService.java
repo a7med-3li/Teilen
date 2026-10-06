@@ -1,6 +1,6 @@
 package com.backend.item;
 
-import com.backend.auth.AuthenticatedUser;
+import com.backend.auth.domain.AuthenticatedUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

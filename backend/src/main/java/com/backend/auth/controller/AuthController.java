@@ -1,5 +1,19 @@
-package com.backend.auth;
+package com.backend.auth.controller;
 
+import com.backend.auth.dto.ApprovalResponse;
+import com.backend.auth.service.AuthService;
+import com.backend.auth.domain.AuthenticatedUser;
+import com.backend.auth.dto.ClaimTokenRequest;
+import com.backend.auth.dto.CreateAccountRequest;
+import com.backend.auth.dto.DeviceResponse;
+import com.backend.auth.dto.PairingDecisionRequest;
+import com.backend.auth.dto.PairingPreview;
+import com.backend.auth.domain.PairingStartResponse;
+import com.backend.auth.QrCodes;
+import com.backend.auth.dto.SessionResponse;
+import com.backend.auth.domain.StartPairingRequest;
+import com.backend.auth.dto.TokenClaimResponse;
+import com.backend.auth.dto.UserResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

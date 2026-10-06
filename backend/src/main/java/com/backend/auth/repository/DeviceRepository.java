@@ -1,5 +1,6 @@
-package com.backend.auth;
+package com.backend.auth.repository;
 
+import com.backend.auth.entity.Device;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

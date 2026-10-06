@@ -1,6 +1,8 @@
-package com.backend.auth;
+package com.backend.auth.dto;
 
 import java.time.Instant;
+import com.backend.auth.entity.PairingRequest;
+import com.backend.auth.enums.DeviceType;
 
 /**
  * What a pairing code is asking for, read before anyone approves it.

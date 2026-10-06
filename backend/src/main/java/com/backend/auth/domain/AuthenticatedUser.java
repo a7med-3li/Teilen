@@ -1,4 +1,4 @@
-package com.backend.auth;
+package com.backend.auth.domain;
 
 import java.security.Principal;
 import java.util.UUID;

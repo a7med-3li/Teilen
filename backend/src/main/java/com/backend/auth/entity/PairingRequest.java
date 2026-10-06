@@ -1,5 +1,7 @@
-package com.backend.auth;
+package com.backend.auth.entity;
 
+import com.backend.auth.enums.DeviceType;
+import com.backend.auth.enums.PairingStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

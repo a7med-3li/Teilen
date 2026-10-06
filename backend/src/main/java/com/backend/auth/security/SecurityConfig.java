@@ -1,5 +1,6 @@
-package com.backend.auth;
+package com.backend.auth.security;
 
+import com.backend.auth.service.AuthService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;

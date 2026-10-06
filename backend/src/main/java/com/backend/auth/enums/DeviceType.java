@@ -1,4 +1,4 @@
-package com.backend.auth;
+package com.backend.auth.enums;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;

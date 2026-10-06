@@ -1,5 +1,7 @@
-package com.backend.auth;
+package com.backend.auth.security;
 
+import com.backend.auth.domain.AuthenticatedUser;
+import com.backend.auth.service.AuthService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

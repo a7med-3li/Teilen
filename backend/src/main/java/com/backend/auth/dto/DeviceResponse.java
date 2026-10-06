@@ -1,7 +1,9 @@
-package com.backend.auth;
+package com.backend.auth.dto;
 
 import java.time.Instant;
 import java.util.UUID;
+import com.backend.auth.enums.DeviceType;
+import com.backend.auth.entity.Device;
 
 /** One row of the device list: paired when, last used, and whether that is this very browser. */
 public record DeviceResponse(

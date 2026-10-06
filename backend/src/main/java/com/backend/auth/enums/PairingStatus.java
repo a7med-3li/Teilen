@@ -1,4 +1,4 @@
-package com.backend.auth;
+package com.backend.auth.enums;
 
 public enum PairingStatus {
 

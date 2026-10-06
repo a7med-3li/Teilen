@@ -1,4 +1,4 @@
-package com.backend.auth;
+package com.backend.auth.domain;
 
 import jakarta.validation.constraints.Size;
 

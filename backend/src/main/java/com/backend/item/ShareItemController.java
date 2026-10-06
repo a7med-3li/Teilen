@@ -1,6 +1,6 @@
 package com.backend.item;
 
-import com.backend.auth.AuthenticatedUser;
+import com.backend.auth.domain.AuthenticatedUser;
 import jakarta.validation.Valid;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
