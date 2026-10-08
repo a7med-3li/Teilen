@@ -25,7 +25,7 @@ jobs:
           context: ./backend
           platforms: linux/arm64
           push: true
-          tags: ghcr.io/YOUR_GITHUB_USER_LOWERCASE/teilen:latest
+          tags: ghcr.io/a7med-3li/teilen:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - uses: appleboy/ssh-action@v1
