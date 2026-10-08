@@ -13,16 +13,20 @@ services:
       retries: 10
 
   app:
-    image: ghcr.io/YOUR_GITHUB_USER_LOWERCASE/teilen:latest
+    image: ghcr.io/a7med-3li/teilen:latest
     restart: unless-stopped
     depends_on:
       db: { condition: service_healthy }
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/teilen
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      PORT: 8081
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: teilen
+      DB_USER: teilen
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      TEILEN_BLOB_LINK_SECRET: ${TEILEN_BLOB_LINK_SECRET}
       JAVA_TOOL_OPTIONS: "-Xmx512m"
-    volumes: [uploads:/data/uploads]
+    volumes: [blobs:/data/blobs]
 
   caddy:
     image: caddy:2
