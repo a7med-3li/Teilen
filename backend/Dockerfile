@@ -23,8 +23,10 @@ RUN mvn -B -q dependency:go-offline
 COPY src ./src
 RUN mvn -B -DskipTests package
 
-# split the fat jar into layers so a code change only redraws the small top one
-RUN java -Djarmode=layertools -jar target/backend-*.jar extract --layers
+# split the fat jar into layers (Spring Boot 3.3+ "tools" jarmode).
+# The jar is renamed first so the extracted launcher is always called application.jar.
+RUN mv target/backend-*.jar application.jar \
+    && java -Djarmode=tools -jar application.jar extract --layers --destination extracted
 
 # ---------- runtime ----------
 FROM eclipse-temurin:21-jre-alpine AS runtime
@@ -36,10 +38,10 @@ RUN addgroup -S teilen && adduser -S -G teilen teilen \
 
 WORKDIR /app
 # least-changing first: only application/ changes when the code does
-COPY --from=build --chown=teilen:teilen /build/dependencies/ ./
-COPY --from=build --chown=teilen:teilen /build/spring-boot-loader/ ./
-COPY --from=build --chown=teilen:teilen /build/snapshot-dependencies/ ./
-COPY --from=build --chown=teilen:teilen /build/application/ ./
+COPY --from=build --chown=teilen:teilen /build/extracted/dependencies/ ./
+COPY --from=build --chown=teilen:teilen /build/extracted/spring-boot-loader/ ./
+COPY --from=build --chown=teilen:teilen /build/extracted/snapshot-dependencies/ ./
+COPY --from=build --chown=teilen:teilen /build/extracted/application/ ./
 
 ENV PORT=8081 \
     TEILEN_STORAGE_DIR=/data/blobs \
@@ -56,4 +58,4 @@ USER teilen
 HEALTHCHECK --interval=30s --timeout=3s --start-period=45s --retries=3 \
     CMD wget -qO- "http://127.0.0.1:${PORT}/" | grep -q Teilen || exit 1
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "application.jar"]
