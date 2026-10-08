@@ -30,7 +30,7 @@ jobs:
           cache-to: type=gha,mode=max
       - uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.SSH_HOST }}
+          host: ${{ secrets.TEILEN_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
