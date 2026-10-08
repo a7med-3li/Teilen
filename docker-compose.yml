@@ -1,20 +1,36 @@
 services:
   db:
-    image: postgres:17-alpine
-    container_name: teilen-db
+    image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: teilen
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - teilen-db-data:/var/lib/postgresql/data
+    volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d teilen"]
       interval: 5s
-      timeout: 3s
       retries: 10
 
-volumes:
-  teilen-db-data:
+  app:
+    image: ghcr.io/YOUR_GITHUB_USER_LOWERCASE/teilen:latest
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/teilen
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JAVA_TOOL_OPTIONS: "-Xmx512m"
+    volumes: [uploads:/data/uploads]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["81:81", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes: { pgdata: , uploads: , caddy_data: , caddy_config: }
