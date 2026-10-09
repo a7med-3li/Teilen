@@ -109,4 +109,7 @@
     <string name="copied_sample">Sample text copied — check the notification shade.</string>
     <string name="channel_clipboard">Clipboard capture</string>
     <string name="channel_clipboard_description">The ongoing notice with a button to send what you copied</string>
+    <string name="channel_transfer">Transfers</string>
+    <string name="channel_transfer_description">Progress while a share is uploaded in the background</string>
+    <string name="sending_toast">Sending to Teilen…</string>
 </resources>

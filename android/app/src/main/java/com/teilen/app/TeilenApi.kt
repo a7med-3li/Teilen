@@ -2,6 +2,7 @@ package com.teilen.app
 
 import android.content.Context
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import org.json.JSONArray
 import org.json.JSONObject
@@ -433,7 +434,7 @@ object TeilenApi {
     ) {
         Thread {
             val result = try {
-                uploadBlocking(context, baseUrl, token, uri, displayName, ttlSeconds, onProgress)
+                uploadBlocking(baseUrl, token, sourceOf(context, uri, displayName), ttlSeconds, onProgress)
             } catch (e: TooLargeException) {
                 false to e.message!!
             } catch (e: FileNotFoundException) {
@@ -447,22 +448,127 @@ object TeilenApi {
         }.apply { name = "teilen-file" }.start()
     }
 
-    private fun uploadBlocking(
-        context: Context,
+    /**
+     * The background-service counterpart of [uploadAll]: the descriptors were opened by the
+     * sharing activity because a content:// read grant dies with that activity's task, while a
+     * descriptor can be handed on and outlive it.
+     *
+     * @param onProgress index (1-based), file count, bytes written, total bytes if known
+     * @param onDone always on the main thread, once, after the last file
+     */
+    fun uploadAllFds(
         baseUrl: String,
         token: String?,
-        uri: Uri,
+        fds: List<ParcelFileDescriptor>,
+        names: List<String>,
+        mimes: List<String>,
+        sizes: List<Long?>,
+        ttlSeconds: Long,
+        onProgress: (index: Int, count: Int, written: Long, total: Long?) -> Unit,
+        onDone: (BatchOutcome) -> Unit
+    ) {
+        if (fds.isEmpty()) {
+            onDone(BatchOutcome(0, 0, null))
+            return
+        }
+        var sent = 0
+        var lastError: String? = null
+
+        fun next(index: Int) {
+            if (index >= fds.size) {
+                onDone(BatchOutcome(sent, fds.size, lastError))
+                return
+            }
+            val name = names.getOrElse(index) { "shared-file" }
+            uploadFd(
+                baseUrl = baseUrl,
+                token = token,
+                fd = fds[index],
+                displayName = name,
+                mime = mimes.getOrElse(index) { "application/octet-stream" },
+                declaredSize = sizes.getOrNull(index),
+                ttlSeconds = ttlSeconds,
+                onProgress = { written, total -> onProgress(index + 1, fds.size, written, total) },
+                onResult = { ok, message ->
+                    if (ok) {
+                        sent++
+                    } else {
+                        lastError = "$name — $message"
+                    }
+                    next(index + 1)
+                }
+            )
+        }
+
+        next(0)
+    }
+
+    private fun uploadFd(
+        baseUrl: String,
+        token: String?,
+        fd: ParcelFileDescriptor,
         displayName: String,
+        mime: String,
+        declaredSize: Long?,
+        ttlSeconds: Long,
+        onProgress: (written: Long, total: Long?) -> Unit,
+        onResult: (ok: Boolean, message: String) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                uploadBlocking(
+                    baseUrl = baseUrl,
+                    token = token,
+                    source = Source(displayName, mime, declaredSize) {
+                        ParcelFileDescriptor.AutoCloseInputStream(fd)
+                    },
+                    ttlSeconds = ttlSeconds,
+                    onProgress = onProgress
+                )
+            } catch (e: TooLargeException) {
+                false to e.message!!
+            } catch (e: IOException) {
+                false to "upload failed (${e.message ?: "network error"})"
+            } catch (e: Exception) {
+                false to (e.message ?: e.javaClass.simpleName)
+            } finally {
+                // AutoCloseInputStream usually got there first; closing twice is a no-op
+                runCatching { fd.close() }
+            }
+            main.post { onResult(result.first, result.second) }
+        }.apply { name = "teilen-file" }.start()
+    }
+
+    /** one upload's bytes, however they are opened: a content:// URI or a passed descriptor */
+    private class Source(
+        val name: String,
+        val mime: String,
+        val declaredSize: Long?,
+        val open: () -> InputStream
+    )
+
+    private fun sourceOf(context: Context, uri: Uri, displayName: String): Source {
+        val resolver = context.contentResolver
+        return Source(
+            name = displayName,
+            mime = resolver.getType(uri) ?: "application/octet-stream",
+            declaredSize = declaredSize(context, uri),
+            open = { resolver.openInputStream(uri) ?: throw FileNotFoundException("no stream for $displayName") }
+        )
+    }
+
+    private fun uploadBlocking(
+        baseUrl: String,
+        token: String?,
+        source: Source,
         ttlSeconds: Long,
         onProgress: (Long, Long?) -> Unit
     ): Pair<Boolean, String> {
-        val resolver = context.contentResolver
-        val mime = resolver.getType(uri) ?: "application/octet-stream"
-        val declared = declaredSize(context, uri)
+        val declared = source.declaredSize
 
         // reject early on an honest length, but never trust it: the stream is counted too
         if (declared != null && declared > MAX_UPLOAD_BYTES) {
-            throw TooLargeException("$displayName is ${humanSize(declared)} — the limit is 30 MB")
+            throw TooLargeException("${source.name} is ${humanSize(declared)} — the limit is 30 MB")
         }
 
         val boundary = "teilen-${System.currentTimeMillis()}"
@@ -482,16 +588,16 @@ object TeilenApi {
         try {
             connection.outputStream.buffered().use { out ->
                 writePart(out, boundary, "ttlSeconds", ttlSeconds.toString())
-                writeFileHeader(out, boundary, displayName, mime)
+                writeFileHeader(out, boundary, source.name, source.mime)
 
-                resolver.openInputStream(uri)?.use { input ->
+                source.open().use { input ->
                     copy(input, out) { written ->
                         if (written > MAX_UPLOAD_BYTES) {
-                            throw TooLargeException("$displayName is over the 30 MB limit")
+                            throw TooLargeException("${source.name} is over the 30 MB limit")
                         }
                         onProgress(written, declared)
                     }
-                } ?: throw FileNotFoundException("no stream for $displayName")
+                }
 
                 out.write("\r\n--$boundary--\r\n".toByteArray())
             }
@@ -635,7 +741,7 @@ object TeilenApi {
         )
     }
 
-    private fun declaredSize(context: Context, uri: Uri): Long? = runCatching {
+    fun declaredSize(context: Context, uri: Uri): Long? = runCatching {
         context.contentResolver
             .query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
             ?.use { cursor ->

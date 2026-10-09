@@ -38,8 +38,14 @@ kotlin {
 }
 
 // libsodium (bundles the native .so for every ABI) and its JNA bridge; JNA also ships as an aar
-// on Android. Everything else is still the platform: EditText and HttpURLConnection.
+// on Android. Everything else is still the platform: EditText and HttpURLConnection — plus the
+// libwebrtc stack and an OkHttp WebSocket for the direct LAN fast-path (Phase 4).
 dependencies {
     implementation("com.goterl:lazysodium-android:5.1.0@aar")
     implementation("net.java.dev.jna:jna:5.13.0@aar")
+    // official libwebrtc Android build (the org.webrtc:google-webrtc artifact died with JCenter):
+    // PeerConnection + DataChannel for the local fast-path
+    implementation("io.github.webrtc-sdk:android:125.6422.07")
+    // the signaling socket only; the data channel carries the actual bytes
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }

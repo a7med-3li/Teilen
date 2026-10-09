@@ -192,13 +192,13 @@ object PairingCrypto {
         return if (ok) message else null
     }
 
-    private fun signDetached(message: ByteArray, secretKey: ByteArray): ByteArray {
+    fun signDetached(message: ByteArray, secretKey: ByteArray): ByteArray {
         val signature = ByteArray(Sign.ED25519_BYTES)
         sodium.cryptoSignDetached(signature, message, message.size.toLong(), secretKey)
         return signature
     }
 
-    private fun verifyDetached(signature: ByteArray, message: ByteArray, publicKey: ByteArray): Boolean =
+    fun verifyDetached(signature: ByteArray, message: ByteArray, publicKey: ByteArray): Boolean =
         signature.size == Sign.ED25519_BYTES &&
             sodium.cryptoSignVerifyDetached(signature, message, message.size, publicKey)
 

@@ -306,7 +306,75 @@ button:hover {
 
 .ttl {
     margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-variant-numeric: tabular-nums;
+}
+
+/* the countdown: an SVG ring that drains as the item runs out */
+.ring {
+    flex: none;
+    transform: rotate(-90deg);
+}
+
+.ring-track {
+    fill: none;
+    stroke: var(--line);
+    stroke-width: 3;
+}
+
+.ring-fill {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.9s linear;
+}
+
+.ring-fill.low {
+    stroke: var(--danger);
+}
+
+.ttl-text {
+    white-space: nowrap;
+}
+
+.extend {
+    margin-left: 6px;
+    padding: 2px 9px;
+    font: inherit;
+    font-size: 11px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.extend:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+/* the whole-window drop target, shown only while a drag is over the page */
+#drop-veil {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    border: 3px dashed var(--accent);
+    color: var(--accent);
+    font-size: 22px;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+#drop-veil[hidden] {
+    display: none;
 }
 
 .card-body {

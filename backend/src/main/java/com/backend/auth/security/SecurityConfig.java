@@ -53,7 +53,7 @@ public class SecurityConfig {
                         // links work; the endpoint still checks the signature or the owner's token
                         .requestMatchers(HttpMethod.GET, "/api/items/*/blob").permitAll()
                         .requestMatchers(OPEN_PATHS).permitAll()
-                        .requestMatchers("/ws").authenticated()
+                        .requestMatchers("/ws", "/ws/signal").authenticated()
                         .requestMatchers("/api/**").authenticated()
                         // the web app itself: index.html, app.js, style.css, the icons
                         .anyRequest().permitAll())

@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -73,6 +74,7 @@
             <intent-filter android:priority="10">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="com.teilen.app.category.DIRECT_SHARE" />
                 <data android:mimeType="text/*" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="application/pdf" />
@@ -83,12 +85,28 @@
             <intent-filter android:priority="10">
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="com.teilen.app.category.DIRECT_SHARE" />
                 <data android:mimeType="text/*" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="*/*" />
             </intent-filter>
+
+            <!-- pins Teilen to the top row of the share sheet (see res/xml/shortcuts.xml) -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!--
+            the actual upload, kept alive without a window so a big file finishes even after the
+            share sheet is gone; starts the moment a share is dispatched and posts its progress
+            to the notification shade.
+        -->
+        <service
+            android:name=".TransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- "Copy to Teilen" in the selection toolbar of every app on the phone -->
         <activity

@@ -4,6 +4,7 @@
 
     const API = '/api/items';
     const AUTH = '/api/auth';
+    const SVG_NS = 'http://www.w3.org/2000/svg';
 
     // ---------- the token ----------
 
@@ -122,6 +123,70 @@
         });
     }
 
+    // ---------- the arrival signal ----------
+
+    /**
+     * Ask the browser to wake this account when something lands, even with the tab closed. The
+     * server only ever sends a content-free "something arrived" signal, so subscribing gives away
+     * nothing. Best effort throughout: a browser without push, or a server without VAPID keys,
+     * should change nothing else.
+     */
+    async function enablePush() {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !token.get()) {
+            return;
+        }
+        try {
+            const registration = await navigator.serviceWorker.register('/sw.js');
+            const response = await api('/api/push/public-key');
+            if (!response.ok) {
+                return;
+            }
+            const {publicKey} = await response.json();
+            if (!publicKey) {
+                return;
+            }
+            const existing = await registration.pushManager.getSubscription();
+            const subscription = existing || await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(publicKey)
+            });
+            await api('/api/push/subscribe', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(subscription.toJSON())
+            });
+        } catch (e) {
+            console.warn('push is unavailable:', e);
+        }
+    }
+
+    /** the standard base64url → Uint8Array, which is what applicationServerKey wants */
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const raw = atob(base64);
+        const bytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) {
+            bytes[i] = raw.charCodeAt(i);
+        }
+        return bytes;
+    }
+
+    // ---------- the direct LAN fast-path ----------
+
+    /** listen for a paired phone offering a file straight over WebRTC */
+    function startLan() {
+        if (window.TeilenLan && token.get()) {
+            TeilenLan.start(token.get(), upsert);
+        }
+    }
+
+    function stopLan() {
+        if (window.TeilenLan) {
+            TeilenLan.stop();
+        }
+    }
+
     function setStatus(text, cls) {
         statusEl.textContent = text;
         statusEl.className = 'status ' + cls;
@@ -137,6 +202,7 @@
         accountBtn.hidden = true;
         stopSocket();
         stopPolling();
+        stopLan();
         startPairing();
     }
 
@@ -148,6 +214,7 @@
         setStatus('connecting…', 'offline');
         load().then(connect);
         loadAccount();
+        startLan();
     }
 
     /** step one: ask for a code to show */
@@ -222,6 +289,7 @@
             pairUserCode = null;
             pairState.textContent = 'paired as ' + claim.deviceName;
             showFeed();
+            enablePush();
         } catch (e) {
             pairState.textContent = 'pairing did not work out: ' + e.message;
             pairRetry.hidden = false;
@@ -423,9 +491,36 @@
         badge.textContent = badgeLabel(item);
         const at = document.createElement('span');
         at.textContent = new Date(item.createdAt).toLocaleTimeString();
-        const ttl = document.createElement('span');
-        ttl.className = 'ttl';
-        head.append(badge, at, ttl);
+        const clock = document.createElement('span');
+        clock.className = 'ttl';
+        const ring = document.createElementNS(SVG_NS, 'svg');
+        ring.setAttribute('class', 'ring');
+        ring.setAttribute('viewBox', '0 0 36 36');
+        ring.setAttribute('width', '30');
+        ring.setAttribute('height', '30');
+        const track = document.createElementNS(SVG_NS, 'circle');
+        track.setAttribute('class', 'ring-track');
+        track.setAttribute('cx', '18');
+        track.setAttribute('cy', '18');
+        track.setAttribute('r', '15.5');
+        const fill = document.createElementNS(SVG_NS, 'circle');
+        fill.setAttribute('class', 'ring-fill');
+        fill.setAttribute('cx', '18');
+        fill.setAttribute('cy', '18');
+        fill.setAttribute('r', '15.5');
+        ring.append(track, fill);
+        const ttlText = document.createElement('span');
+        ttlText.className = 'ttl-text';
+        clock.append(ring, ttlText);
+        const extendBtn = document.createElement('button');
+        extendBtn.type = 'button';
+        extendBtn.className = 'extend';
+        extendBtn.title = 'keep it longer';
+        extendBtn.textContent = 'extend';
+        // a LAN-received item only exists in this tab, so there is nothing on the server to extend
+        extendBtn.hidden = String(item.id).startsWith('lan-');
+        extendBtn.addEventListener('click', () => extendItem(item.id));
+        head.append(badge, at, clock, extendBtn);
 
         const body = document.createElement('div');
         body.className = 'card-body';
@@ -444,7 +539,7 @@
 
         li.append(head, body);
         feed.prepend(li);
-        cards.set(item.id, {item, element: li, ttl});
+        cards.set(item.id, {item, element: li, ttl: ttlText, ring: fill});
         setTimeout(() => li.classList.remove('new'), 1500);
         refresh();
     }
@@ -539,16 +634,53 @@
         return m > 0 ? m + 'm ' + String(s).padStart(2, '0') + 's left' : s + 's left';
     }
 
-    // one timer for every card: tick the countdown and drop anything that ran out
+    // one timer for every card: tick the countdown ring and drop anything that ran out
     setInterval(() => {
         for (const [id, entry] of cards) {
             const left = remaining(entry.item);
             entry.ttl.textContent = formatLeft(left);
+            if (entry.ring) {
+                const total = totalSeconds(entry.item);
+                const fraction = total > 0 ? Math.max(0, Math.min(1, left / total)) : 0;
+                const circumference = 2 * Math.PI * 15.5;
+                entry.ring.style.strokeDasharray = circumference.toFixed(1);
+                entry.ring.style.strokeDashoffset = (circumference * (1 - fraction)).toFixed(1);
+                entry.ring.classList.toggle('low', fraction <= 0.2);
+            }
             if (left <= 0) {
                 remove(id);
             }
         }
     }, 1000);
+
+    function totalSeconds(item) {
+        return Math.max(1, Math.round((new Date(item.expiresAt).getTime()
+            - new Date(item.createdAt).getTime()) / 1000));
+    }
+
+    /** one tap of "extend": ask the server to push the deadline out, then follow its answer */
+    async function extendItem(id) {
+        try {
+            const response = await api('/api/v1/items/' + id + '/extend', {method: 'POST'});
+            if (!response.ok) {
+                return;
+            }
+            applyExtended(await response.json());
+        } catch (e) {
+            /* the old deadline still stands */
+        }
+    }
+
+    /** the same update whether it came from this tap or another device over the socket */
+    function applyExtended(item) {
+        const entry = cards.get(item.id);
+        if (!entry) {
+            return;
+        }
+        entry.item = item;
+        entry.ttl.textContent = formatLeft(remaining(item));
+        refresh();
+    }
 
     async function load() {
         try {
@@ -587,6 +719,8 @@
             }
             if (event.event === 'created' && event.item) {
                 upsert(event.item, true);
+            } else if (event.event === 'extended' && event.item) {
+                applyExtended(event.item);
             } else if (event.event === 'deleted' && event.id) {
                 remove(event.id);
             }
@@ -703,27 +837,121 @@
             return;
         }
         uploadSend.disabled = true;
+        await sendFiles(files);
+        uploadInput.value = '';
+        uploadLabel.textContent = 'Attach files…';
+        uploadSend.hidden = true;
+        uploadSend.disabled = false;
+    });
+
+    /** the one upload loop: the picker, a paste and a drop all end up here */
+    async function sendFiles(files) {
+        const usable = files.filter((f) => f.size <= MAX_BYTES);
+        const tooBig = files.filter((f) => f.size > MAX_BYTES).map((f) => f.name);
+        if (tooBig.length) {
+            showUploadStatus('over the 30 MB limit: ' + tooBig.join(', '), true);
+        }
+        if (usable.length === 0) {
+            return;
+        }
         const ttl = uploadTtl.value;
         let sent = 0;
-        for (const file of files) {
-            showUploadStatus('sending ' + file.name + ' (' + sent + '/' + files.length + ')…', false);
+        for (const file of usable) {
+            showUploadStatus('sending ' + file.name + ' (' + sent + '/' + usable.length + ')…', false);
             const body = new FormData();
             body.append('file', file);
             body.append('ttlSeconds', ttl);
             const response = await api(API, {method: 'POST', body});
             if (!response.ok) {
                 showUploadStatus(file.name + ': ' + (await why(response)), true);
-                uploadSend.disabled = false;
                 return;
             }
             sent++;
         }
-        uploadInput.value = '';
-        uploadLabel.textContent = 'Attach files…';
-        uploadSend.hidden = true;
-        uploadSend.disabled = false;
         showUploadStatus(sent === 1 ? '1 file sent' : sent + ' files sent', false);
         setTimeout(() => showUploadStatus(''), 4000);
+    }
+
+    // ---------- paste & drop: the desktop sending the other way ----------
+
+    async function sendText(text) {
+        const content = (text || '').trim();
+        if (!content) {
+            return;
+        }
+        const response = await postJson(API, {content: content.slice(0, 20000)});
+        if (!response.ok) {
+            showUploadStatus(await why(response), true);
+        }
+    }
+
+    // a paste anywhere but a text field becomes a transfer; in the compose box it stays a paste
+    window.addEventListener('paste', (event) => {
+        if (!token.get()) {
+            return;
+        }
+        const target = event.target;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+            return;
+        }
+        const items = event.clipboardData && event.clipboardData.items;
+        if (!items) {
+            return;
+        }
+        const files = [];
+        for (const item of items) {
+            if (item.kind === 'file') {
+                const file = item.getAsFile();
+                if (file) {
+                    files.push(file);
+                }
+            } else if (item.kind === 'string' && item.type === 'text/plain') {
+                item.getAsString((value) => sendText(value));
+            }
+        }
+        if (files.length) {
+            event.preventDefault();
+            sendFiles(files);
+        }
+    });
+
+    // drag a file (or a selection) anywhere onto the page
+    const dropVeil = el('drop-veil');
+    let dragDepth = 0;
+    window.addEventListener('dragenter', (event) => {
+        if (!token.get() || !event.dataTransfer || !app.hidden) {
+            return;
+        }
+        dragDepth++;
+        dropVeil.hidden = false;
+    });
+    window.addEventListener('dragover', (event) => {
+        if (!app.hidden) {
+            event.preventDefault();
+        }
+    });
+    window.addEventListener('dragleave', () => {
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) {
+            dropVeil.hidden = true;
+        }
+    });
+    window.addEventListener('drop', (event) => {
+        if (!event.dataTransfer) {
+            return;
+        }
+        event.preventDefault();
+        dragDepth = 0;
+        dropVeil.hidden = true;
+        if (!token.get()) {
+            return;
+        }
+        const files = [...event.dataTransfer.files];
+        if (files.length) {
+            sendFiles(files);
+        } else {
+            sendText(event.dataTransfer.getData('text/plain'));
+        }
     });
 
     clearBtn.addEventListener('click', async () => {
@@ -736,6 +964,7 @@
     refresh();
     if (token.get()) {
         showFeed();
+        enablePush();
     } else {
         showPairing();
     }

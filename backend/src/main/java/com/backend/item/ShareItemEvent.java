@@ -14,6 +14,10 @@ public record ShareItemEvent(String event, ShareItemResponse item, String id) {
         return new ShareItemEvent("created", ShareItemResponse.from(item, blobUrl), null);
     }
 
+    public static ShareItemEvent extended(ShareItem item, String blobUrl) {
+        return new ShareItemEvent("extended", ShareItemResponse.from(item, blobUrl), null);
+    }
+
     public static ShareItemEvent deleted(java.util.UUID id) {
         return new ShareItemEvent("deleted", null, id.toString());
     }

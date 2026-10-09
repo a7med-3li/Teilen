@@ -1,5 +1,7 @@
 package com.backend.item;
 
+import com.backend.signal.SignalHandshakeInterceptor;
+import com.backend.signal.SignalWebSocketHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -18,11 +20,14 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 public class WebConfig implements WebSocketConfigurer, WebMvcConfigurer {
 
     private final ShareItemWebSocketHandler shareItemWebSocketHandler;
+    private final SignalWebSocketHandler signalWebSocketHandler;
     private final String[] allowedOriginPatterns;
 
     public WebConfig(ShareItemWebSocketHandler shareItemWebSocketHandler,
+                     SignalWebSocketHandler signalWebSocketHandler,
                      @Value("${teilen.allowed-origin-patterns:*}") String[] allowedOriginPatterns) {
         this.shareItemWebSocketHandler = shareItemWebSocketHandler;
+        this.signalWebSocketHandler = signalWebSocketHandler;
         this.allowedOriginPatterns = allowedOriginPatterns;
     }
 
@@ -31,6 +36,11 @@ public class WebConfig implements WebSocketConfigurer, WebMvcConfigurer {
         registry.addHandler(shareItemWebSocketHandler, "/ws")
                 // no token in the URL means no handshake, not a silent anonymous feed
                 .addInterceptors(new FeedHandshakeInterceptor())
+                .setAllowedOriginPatterns(allowedOriginPatterns);
+
+        registry.addHandler(signalWebSocketHandler, "/ws/signal")
+                // the WebRTC relay; same rule, the handshake proves the account and the device
+                .addInterceptors(new SignalHandshakeInterceptor())
                 .setAllowedOriginPatterns(allowedOriginPatterns);
     }
 

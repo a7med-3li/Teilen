@@ -54,9 +54,23 @@ teilen:
   default-ttl-seconds: 1800
   min-ttl-seconds: 10
   max-ttl-seconds: 86400
+  # "keep it longer": what one tap of extend buys, capped by max-ttl-seconds
+  extend-ttl-seconds: 3600
+  # the plan's ephemerality invariant, applied to the /api/v1 relay surface: nothing registered
+  # there may outlive this, whatever the client asks for
+  relay-max-ttl-seconds: 600
   max-content-length: 20000
   # origins allowed to call the API / open the websocket
   allowed-origin-patterns: "*"
+
+  # Web Push (zero-content arrival signal). With no VAPID key pair configured the whole pipeline
+  # stays silent and the browser never subscribes — nothing else changes. Mint a pair with:
+  #   openssl ecparam -genkey -name prime256v1 -noout -out vapid.pem
+  # and take the public/private as base64url (the push service requires the uncompressed public key).
+  push:
+    vapid-public-key: ${TEILEN_VAPID_PUBLIC_KEY:}
+    vapid-private-key: ${TEILEN_VAPID_PRIVATE_KEY:}
+    subject: ${TEILEN_VAPID_SUBJECT:mailto:admin@teilen.app}
 
   # shared files live here; wiped item by item when the TTL runs out
   storage-dir: ./data/blobs

@@ -1,6 +1,7 @@
 package com.backend.item;
 
 import com.backend.auth.domain.AuthenticatedUser;
+import com.backend.push.PushService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,6 +41,7 @@ public class ShareItemService {
     private final ShareItemWebSocketHandler webSocketHandler;
     private final BlobStore blobStore;
     private final BlobLinks blobLinks;
+    private final PushService pushService;
 
     private final long defaultTtlSeconds;
     private final long minTtlSeconds;
@@ -49,6 +51,7 @@ public class ShareItemService {
                             ShareItemWebSocketHandler webSocketHandler,
                             BlobStore blobStore,
                             BlobLinks blobLinks,
+                            PushService pushService,
                             @Value("${teilen.default-ttl-seconds:1800}") long defaultTtlSeconds,
                             @Value("${teilen.min-ttl-seconds:10}") long minTtlSeconds,
                             @Value("${teilen.max-ttl-seconds:86400}") long maxTtlSeconds) {
@@ -56,6 +59,7 @@ public class ShareItemService {
         this.webSocketHandler = webSocketHandler;
         this.blobStore = blobStore;
         this.blobLinks = blobLinks;
+        this.pushService = pushService;
         this.defaultTtlSeconds = defaultTtlSeconds;
         this.minTtlSeconds = minTtlSeconds;
         this.maxTtlSeconds = maxTtlSeconds;
@@ -74,6 +78,7 @@ public class ShareItemService {
         log.info("{} created {} item {} (expires in {}s)", userId, type, item.getId(), ttl.toSeconds());
         // no blob on a text item, so there is nothing to sign
         afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.created(item, null)));
+        afterCommit(() -> pushService.notifyAvailable(userId));
         return ShareItemResponse.from(item, null);
     }
 
@@ -109,6 +114,7 @@ public class ShareItemService {
                 stored.sizeBytes(), ttl.toSeconds());
         String blobUrl = blobLinks.linkFor(id, item.getExpiresAt());
         afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.created(item, blobUrl)));
+        afterCommit(() -> pushService.notifyAvailable(userId));
         return ShareItemResponse.from(item, blobUrl);
     }
 
@@ -157,6 +163,23 @@ public class ShareItemService {
         log.info("{} deleted item {}", userId, id);
         afterCommit(() -> dropBlob(item.getStorageRef()));
         afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.deleted(id)));
+    }
+
+    /**
+     * One-tap extension: the owner pushes an item's deadline out without re-uploading it. Blob
+     * links are signed against the expiry, so the response carries a fresh one.
+     */
+    @Transactional
+    public ShareItemResponse extend(UUID userId, UUID id, Long requestedSeconds) {
+        ShareItem item = repository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id));
+        Duration ttl = resolveTtl(requestedSeconds);
+        item.extendTo(Instant.now().plus(ttl));
+        repository.save(item);
+        log.info("{} extended item {} by {}s", userId, id, ttl.toSeconds());
+        ShareItemResponse response = response(item);
+        afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.extended(item, response.blobUrl())));
+        return response;
     }
 
     /**

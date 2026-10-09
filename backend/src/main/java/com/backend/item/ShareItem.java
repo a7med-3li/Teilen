@@ -74,6 +74,11 @@ public class ShareItem {
         return storageRef != null;
     }
 
+    /** pushes the deadline out; the reaper only ever looks at {@code expires_at} */
+    public void extendTo(Instant newExpiresAt) {
+        this.expiresAt = newExpiresAt;
+    }
+
     public UUID getId() {
         return id;
     }

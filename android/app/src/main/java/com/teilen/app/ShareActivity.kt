@@ -5,14 +5,22 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
+import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import java.util.ArrayList
 
 /**
- * What the system share sheet starts. It grabs the content, pushes it, and gets out of the way —
- * no window the user has to look at unless something goes wrong.
+ * What the system share sheet starts. Since Phase 2 the upload itself does not happen here: a
+ * paired share is handed to [TransferService], which keeps going after this activity is gone, with
+ * progress in the notification shade instead of a window.
+ *
+ * This activity only opens the files (the read grant for a shared URI dies with its task; a
+ * descriptor does not), gives an immediate signal, and gets out of the way. It shows a window only
+ * when it has something to say: not paired yet, or nothing to send.
  *
  * Registered for every MIME type (text, links, images, PDFs, anything) so Teilen is always one
  * tap away, plus ACTION_SEND_MULTIPLE for multi-select. Text goes as text; files are uploaded
@@ -20,148 +28,108 @@ import android.widget.Toast
  */
 class ShareActivity : Activity() {
 
-    private lateinit var title: TextView
-    private lateinit var status: TextView
-    private lateinit var spinner: ProgressBar
-    private lateinit var progress: ProgressBar
+    private var title: TextView? = null
+    private var status: TextView? = null
+    private var spinner: ProgressBar? = null
+    private var progress: ProgressBar? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_share)
-
-        title = findViewById(R.id.share_title)
-        status = findViewById(R.id.share_status)
-        spinner = findViewById(R.id.share_spinner)
-        progress = findViewById(R.id.share_progress)
-
-        handle(intent)
+        dispatch(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handle(intent)
+        dispatch(intent)
     }
 
-    private fun handle(intent: Intent) {
-        val text = textOf(intent)
-        val uris = streamUris(intent)
+    private fun dispatch(incoming: Intent?) {
+        if (incoming == null) {
+            finish()
+            return
+        }
+        val text = textOf(incoming)
+        val uris = streamUris(incoming)
 
         // nothing can be sent without a token, so the share goes straight to the account card
         // instead of bouncing off a 401 — with the text handed over, so nothing is lost
         if (!Session.isPaired(this)) {
-            status.text = getString(
+            showCard()
+            status?.text = getString(
                 if (!uris.isNullOrEmpty()) R.string.pair_before_files else R.string.pair_before_sharing
             )
-            handOver(intent, text)
+            handOver(incoming, text)
             return
         }
 
+        if (uris.isNullOrEmpty() && text.isNullOrBlank()) {
+            showCard()
+            finishWith(getString(R.string.share_empty))
+            return
+        }
+
+        if (!dispatchToService(text, uris)) {
+            showCard()
+            finishWith(getString(R.string.share_empty))
+            return
+        }
+
+        // the instant acknowledgement, then gone: the notification carries the rest
+        haptic()
+        Toast.makeText(this, R.string.sending_toast, Toast.LENGTH_SHORT).show()
+        finish()
+    }
+
+    /**
+     * Opens every stream here, on purpose: a shared URI's read grant is tied to this activity's
+     * task and would be revoked the moment it finishes. A descriptor travels with the intent and
+     * lets the service read the file long after this activity is gone.
+     *
+     * @return false only when there is genuinely nothing the service could send
+     */
+    private fun dispatchToService(text: String?, uris: List<Uri>?): Boolean {
         if (uris.isNullOrEmpty()) {
-            if (text.isNullOrBlank()) {
-                finishWith(getString(R.string.share_empty))
-            } else {
-                sendText(text)
-            }
-            return
+            TransferService.start(this, text.orEmpty(), null, null, null, null, DEFAULT_TTL_SECONDS)
+            return true
         }
 
-        // A share that carries streams is a file share, whatever else came with it: file managers
-        // attach the name in EXTRA_TEXT and mail clients the subject in EXTRA_SUBJECT. Reading the
-        // text first sent the name and silently dropped the file, so the streams go first and any
-        // text rides along as its own item rather than replacing them.
-        if (!text.isNullOrBlank()) {
-            sendText(text) {
-                sendFiles(uris)
+        val fds = ArrayList<ParcelFileDescriptor>()
+        val names = ArrayList<String>()
+        val mimes = ArrayList<String>()
+        val sizes = ArrayList<Long>()
+        for (uri in uris) {
+            val descriptor = runCatching { contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
+            if (descriptor == null) {
+                continue
             }
-        } else {
-            sendFiles(uris)
+            fds.add(descriptor)
+            names.add(TeilenApi.displayName(this, uri))
+            mimes.add(contentResolver.getType(uri) ?: "application/octet-stream")
+            sizes.add(TeilenApi.declaredSize(this, uri) ?: -1L)
         }
-    }
 
-    /** @param then what to do once the text is away, when more of the same share still follows */
-    private fun sendText(text: String, then: (() -> Unit)? = null) {
-        title.text = getString(R.string.app_name)
-        status.text = getString(R.string.share_sending, text.take(80))
-        TeilenApi.send(Server.get(this), Session.token(this), text, DEFAULT_TTL_SECONDS) { ok, message ->
-            if (ok) {
-                if (then != null) {
-                    then()
-                } else {
-                    status.text = getString(R.string.share_sent)
-                    Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
-                    finishSoon()
-                }
-            } else {
-                // hand the text back to the full screen so nothing is lost
-                status.text = message
-                if (message == TeilenApi.UNPAIRED_MESSAGE) {
-                    // the token is gone: forget it, or the app looks paired and is not
-                    Session.clear(this)
-                }
-                startActivity(
-                    Intent(this, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        .putExtra(MainActivity.EXTRA_TEXT, text)
-                )
-                finish()
+        if (fds.isEmpty()) {
+            // no file could be opened; a text that rode along can still be sent
+            if (!text.isNullOrBlank()) {
+                TransferService.start(this, text, null, null, null, null, DEFAULT_TTL_SECONDS)
+                return true
             }
+            return false
         }
-    }
 
-    private fun sendFiles(uris: List<Uri>) {
-        title.text = if (uris.size == 1) {
-            getString(R.string.share_uploading, TeilenApi.displayName(this, uris.first()))
-        } else {
-            getString(R.string.share_uploading_n, uris.size)
-        }
-        status.text = getString(R.string.share_sending, getString(R.string.app_name))
-
-        TeilenApi.uploadAll(
-            context = this,
-            baseUrl = Server.get(this),
-            token = Session.token(this),
-            uris = uris,
-            ttlSeconds = DEFAULT_TTL_SECONDS,
-            onProgress = { index, count, written, total ->
-                // one file is already finished or in flight: show where the current one stands
-                if (total != null && total > 0) {
-                    progress.visibility = View.VISIBLE
-                    progress.progress = ((written * 100) / total).toInt()
-                    status.text = getString(
-                        R.string.share_uploading_progress,
-                        TeilenApi.humanSize(written),
-                        TeilenApi.humanSize(total)
-                    )
-                } else {
-                    progress.visibility = View.GONE
-                    status.text = if (written > 0) {
-                        getString(R.string.uploading_bytes, TeilenApi.humanSize(written))
-                    } else {
-                        getString(R.string.sending)
-                    }
-                }
-                if (count > 1) {
-                    title.text = getString(R.string.uploading_n, count, index, count)
-                }
-            },
-            onDone = { outcome ->
-                if (outcome.failed == 0) {
-                    status.text = if (outcome.sent == 1) {
-                        getString(R.string.share_sent)
-                    } else {
-                        getString(R.string.share_files_sent, outcome.sent)
-                    }
-                    Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
-                    finishSoon()
-                } else {
-                    // stay open on a failure: the reason is the whole point of the window
-                    progress.visibility = View.GONE
-                    spinner.visibility = View.GONE
-                    status.text = getString(R.string.file_failed, outcome.lastError ?: "")
-                }
-            }
+        // streams go first: file managers attach the name in EXTRA_TEXT, and reading the text
+        // first sent the name and silently dropped the file
+        TransferService.start(
+            this,
+            text,
+            fds,
+            names,
+            mimes,
+            sizes.toLongArray(),
+            DEFAULT_TTL_SECONDS
         )
+        return true
     }
 
     /**
@@ -169,7 +137,7 @@ class ShareActivity : Activity() {
      * exists. Files cannot travel this way — the URI grant belongs to this task — so they are
      * simply refused, with the reason on screen rather than a silent nothing.
      */
-    private fun handOver(intent: Intent, text: String?) {
+    private fun handOver(incoming: Intent, text: String?) {
         val onwards = Intent(this, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         if (!text.isNullOrBlank()) {
@@ -177,6 +145,27 @@ class ShareActivity : Activity() {
         }
         startActivity(onwards)
         finishSoon()
+    }
+
+    private fun showCard() {
+        if (title != null) {
+            return
+        }
+        setContentView(R.layout.activity_share)
+        title = findViewById(R.id.share_title)
+        status = findViewById(R.id.share_status)
+        spinner = findViewById(R.id.share_spinner)
+        progress = findViewById(R.id.share_progress)
+    }
+
+    private fun haptic() {
+        val view = window?.decorView ?: return
+        val feedback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            HapticFeedbackConstants.CONFIRM
+        } else {
+            HapticFeedbackConstants.KEYBOARD_TAP
+        }
+        view.performHapticFeedback(feedback)
     }
 
     /** EXTRA_TEXT plus EXTRA_SUBJECT, which is how mail clients share a link's title alongside it */
@@ -205,7 +194,7 @@ class ShareActivity : Activity() {
     }
 
     private fun finishWith(message: String) {
-        status.text = message
+        status?.text = message
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         finishSoon()
     }
