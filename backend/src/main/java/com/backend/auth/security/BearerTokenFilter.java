@@ -66,6 +66,8 @@ public class BearerTokenFilter extends OncePerRequestFilter {
 
     /** Spring maps the handshake to this handler, so the path is a reliable marker */
     private boolean isWebSocketHandshake(HttpServletRequest request) {
-        return request.getRequestURI() != null && request.getRequestURI().endsWith("/ws");
+        String uri = request.getRequestURI();
+        // the feed socket and the WebRTC signaling socket both authenticate with ?token=
+        return uri != null && (uri.endsWith("/ws") || uri.endsWith("/ws/signal"));
     }
 }

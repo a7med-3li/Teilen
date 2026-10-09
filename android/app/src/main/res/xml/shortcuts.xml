@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Direct Share: this pins Teilen to the top row of the system share sheet for any content type,
+    so sharing is the first item rather than a scroll. The target class is the activity that
+    already handles ACTION_SEND; the category here must also appear on that activity's
+    intent-filter (see AndroidManifest.xml).
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <share-target android:targetClass="com.teilen.app.ShareActivity">
+        <data android:mimeType="*/*" />
+        <category android:name="com.teilen.app.category.DIRECT_SHARE" />
+    </share-target>
+</shortcuts>
