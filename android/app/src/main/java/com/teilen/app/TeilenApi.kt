@@ -61,14 +61,24 @@ object TeilenApi {
         /** nobody has answered yet: not an error, so not an error string */
         data object Waiting : PairingPoll()
 
-        data class Paired(val signedIn: SignedIn) : PairingPoll()
+        /** @param keyPackage the approver's sealed account-key bundle, or null if none was left */
+        data class Paired(val signedIn: SignedIn, val keyPackage: String?) : PairingPoll()
 
         /** denied, expired, or never issued — the message says which */
         data class Failed(val message: String) : PairingPoll()
     }
 
-    /** what a scanned code is asking for, so the prompt can name it before anyone taps allow */
-    data class PairingPreview(val deviceName: String, val deviceType: String, val platform: String?)
+    /**
+     * What a scanned code is asking for, so the prompt can name it before anyone taps allow.
+     *
+     * @param publicKey the newcomer's single-use X25519 key, to seal the account key to, or null
+     */
+    data class PairingPreview(
+        val deviceName: String,
+        val deviceType: String,
+        val platform: String?,
+        val publicKey: String?
+    )
 
     /**
      * Claims a phone number and pairs this device with it.
@@ -124,26 +134,28 @@ object TeilenApi {
     /**
      * Step one of pairing from this phone: ask for a code, then keep polling for a token.
      *
+     * @param publicKey this device's single-use X25519 public key, base64, so the approving device
+     *                  can seal the account key to it; null to pair without a key exchange
      * @param onOffer the code to show, always on the main thread
      * @param onPolled the outcome of every poll, always on the main thread
      */
     fun pairThisDevice(
         baseUrl: String,
         deviceName: String,
+        publicKey: String?,
         onOffer: (PairingOffer?) -> Unit,
         onPolled: (PairingPoll) -> Unit
     ) {
         Thread {
             val offer = try {
-                val reply = postBlocking(
-                    baseUrl,
-                    "/api/auth/device/code",
-                    token = null,
-                    JSONObject()
-                        .put("deviceName", deviceName)
-                        .put("deviceType", "PHONE")
-                        .put("platform", "Android ${android.os.Build.VERSION.RELEASE}")
-                )
+                val body = JSONObject()
+                    .put("deviceName", deviceName)
+                    .put("deviceType", "PHONE")
+                    .put("platform", "Android ${android.os.Build.VERSION.RELEASE}")
+                if (publicKey != null) {
+                    body.put("publicKey", publicKey)
+                }
+                val reply = postBlocking(baseUrl, "/api/auth/device/code", token = null, body)
                 if (!reply.ok) {
                     null
                 } else {
@@ -177,7 +189,7 @@ object TeilenApi {
                 )
                 when {
                     reply.status == 202 -> PairingPoll.Waiting
-                    reply.ok -> PairingPoll.Paired(signedInFrom(reply))
+                    reply.ok -> PairingPoll.Paired(signedInFrom(reply), reply.str("keyPackage"))
                     else -> PairingPoll.Failed(reply.message)
                 }
             } catch (e: IOException) {
@@ -213,7 +225,8 @@ object TeilenApi {
                     PairingPreview(
                         deviceName = reply.str("deviceName") ?: "a device",
                         deviceType = reply.str("deviceType") ?: "WEB",
-                        platform = reply.str("platform")
+                        platform = reply.str("platform"),
+                        publicKey = reply.str("publicKey")
                     )
                 } else {
                     null
@@ -228,6 +241,8 @@ object TeilenApi {
     /**
      * Step two, from a device that is already paired: allow or turn down a code someone showed.
      *
+     * @param keyPackage on approve, the account key sealed for the newcomer's offered public key;
+     *                   null when there was no key to exchange and pairing proceeds without one
      * @param onResult (ok, message), always on the main thread
      */
     fun decidePairing(
@@ -235,15 +250,20 @@ object TeilenApi {
         token: String,
         userCode: String,
         allow: Boolean,
+        keyPackage: String?,
         onResult: (ok: Boolean, message: String) -> Unit
     ) {
         Thread {
             val result = try {
+                val body = JSONObject().put("userCode", userCode)
+                if (allow && keyPackage != null) {
+                    body.put("keyPackage", keyPackage)
+                }
                 val reply = postBlocking(
                     baseUrl,
                     "/api/auth/device/" + if (allow) "approve" else "deny",
                     token,
-                    JSONObject().put("userCode", userCode)
+                    body
                 )
                 if (reply.ok) {
                     true to (reply.str("deviceName") ?: if (allow) "paired" else "turned down")

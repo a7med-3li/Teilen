@@ -39,3 +39,6 @@ android/app/build/
 
 # Backend build output
 backend/target/
+
+teilen_system_architecture_implementation_plan.md
+teilen-debug.apk

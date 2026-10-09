@@ -75,7 +75,8 @@ public class AuthController {
     @PostMapping("/api/auth/device/code")
     @ResponseStatus(HttpStatus.CREATED)
     public PairingStartResponse startPairing(@Valid @RequestBody StartPairingRequest request) {
-        return auth.startPairing(request.deviceName(), request.deviceType(), request.platform());
+        return auth.startPairing(request.deviceName(), request.deviceType(), request.platform(),
+                request.publicKey());
     }
 
     /** the QR encodes a deep link, so the phone's own camera is all the scanning hardware needed */
@@ -105,7 +106,7 @@ public class AuthController {
     @PostMapping("/api/auth/device/approve")
     public ApprovalResponse approve(@AuthenticationPrincipal AuthenticatedUser caller,
                                     @Valid @RequestBody PairingDecisionRequest request) {
-        return auth.approve(caller.userId(), request.userCode());
+        return auth.approve(caller.userId(), request.userCode(), request.keyPackage());
     }
 
     @PostMapping("/api/auth/device/deny")

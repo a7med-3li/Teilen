@@ -15,5 +15,12 @@ public record StartPairingRequest(
 
         /** user agent or platform, only used to name the newcomer in the approval prompt */
         @Size(max = 160, message = "platform must be at most 160 characters")
-        String platform) {
+        String platform,
+
+        /**
+         * The newcomer's single-use X25519 public key, base64. Optional — a device that does not
+         * take part in the key exchange sends nothing, and pairing is unchanged.
+         */
+        @Size(max = 200, message = "publicKey must be at most 200 characters")
+        String publicKey) {
 }

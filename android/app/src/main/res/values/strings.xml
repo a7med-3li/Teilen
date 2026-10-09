@@ -72,7 +72,7 @@
     <string name="sent">Sent · %1$s</string>
     <string name="sent_toast">Sent to Teilen</string>
     <string name="copied_toast">Copied to Teilen</string>
-    <string name="server_hint">http://10.0.2.2:8081</string>
+    <string name="server_hint">Already set to the built-in server — only change this to run your own.</string>
     <string name="server_blank">Enter a URL first.</string>
     <string name="server_saved">Saved: %1$s</string>
     <string name="save">Save</string>

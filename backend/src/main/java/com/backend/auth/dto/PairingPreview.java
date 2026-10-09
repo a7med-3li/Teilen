@@ -14,10 +14,12 @@ public record PairingPreview(
         String deviceName,
         DeviceType deviceType,
         String platform,
+        /** the newcomer's single-use X25519 public key to wrap the account key to, or null */
+        String publicKey,
         Instant expiresAt) {
 
     public static PairingPreview of(PairingRequest request) {
         return new PairingPreview(request.getDeviceName(), request.getDeviceType(),
-                request.getPlatform(), request.getExpiresAt());
+                request.getPlatform(), request.getNewcomerPublicKey(), request.getExpiresAt());
     }
 }

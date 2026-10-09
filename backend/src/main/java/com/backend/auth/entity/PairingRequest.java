@@ -37,6 +37,20 @@ public class PairingRequest {
     @Column(name = "user_code_hash", nullable = false, unique = true, length = 64)
     private String userCodeHash;
 
+    /**
+     * The newcomer's single-use X25519 public key, base64. Only relayed to the approving device so
+     * it can wrap the account key for this pairing; this server can do nothing with it.
+     */
+    @Column(name = "newcomer_public_key", length = 200)
+    private String newcomerPublicKey;
+
+    /**
+     * The approver's sealed account-key bundle, opaque to this server. Left here until the newcomer
+     * collects it with its token, then the row is swept like any other spent pairing request.
+     */
+    @Column(name = "key_package", length = 4000)
+    private String keyPackage;
+
     @Column(name = "device_name", nullable = false, length = 120)
     private String deviceName;
 
@@ -138,6 +152,22 @@ public class PairingRequest {
 
     public String getDeviceName() {
         return deviceName;
+    }
+
+    public String getNewcomerPublicKey() {
+        return newcomerPublicKey;
+    }
+
+    public void setNewcomerPublicKey(String newcomerPublicKey) {
+        this.newcomerPublicKey = newcomerPublicKey;
+    }
+
+    public String getKeyPackage() {
+        return keyPackage;
+    }
+
+    public void setKeyPackage(String keyPackage) {
+        this.keyPackage = keyPackage;
     }
 
     public DeviceType getDeviceType() {

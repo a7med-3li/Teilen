@@ -37,6 +37,9 @@ kotlin {
     }
 }
 
-// no dependencies on purpose: the app only needs an EditText and HttpURLConnection
+// libsodium (bundles the native .so for every ABI) and its JNA bridge; JNA also ships as an aar
+// on Android. Everything else is still the platform: EditText and HttpURLConnection.
 dependencies {
+    implementation("com.goterl:lazysodium-android:5.1.0@aar")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
 }

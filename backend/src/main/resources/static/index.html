@@ -87,6 +87,10 @@
     <button id="clear" type="button" hidden>delete all</button>
 </footer>
 
+<!-- libsodium first (it defines window.libsodium), then its wrappers (window.sodium) -->
+<script src="vendor/libsodium-sumo.js"></script>
+<script src="vendor/libsodium-wrappers.js"></script>
+<script src="cryptoStore.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -105,7 +105,8 @@ public class AuthService {
      * in it.
      */
     @Transactional
-    public PairingStartResponse startPairing(String rawDeviceName, String requestedType, String platform) {
+    public PairingStartResponse startPairing(String rawDeviceName, String requestedType, String platform,
+                                             String publicKey) {
         DeviceType type = DeviceType.parse(requestedType);
         Instant now = Instant.now();
 
@@ -125,6 +126,7 @@ public class AuthService {
                         clean(platform, 160),
                         now,
                         now.plus(pairingTtl));
+                request.setNewcomerPublicKey(clean(publicKey, 200));
                 pairings.save(request);
                 break;
             } catch (DataIntegrityViolationException e) {
@@ -150,7 +152,7 @@ public class AuthService {
      * newcomer's token now; the newcomer picks it up by polling.
      */
     @Transactional
-    public ApprovalResponse approve(UUID userId, String rawUserCode) {
+    public ApprovalResponse approve(UUID userId, String rawUserCode, String keyPackage) {
         Instant now = Instant.now();
         PairingRequest request = findPairingByUserCode(rawUserCode);
 
@@ -168,6 +170,8 @@ public class AuthService {
                 request.getDeviceName(), Tokens.hash(token), now);
         devices.save(device);
         request.approve(device.getId(), token, now);
+        // sealed here, unreadable here: the newcomer unwraps it with the private half of its key
+        request.setKeyPackage(clean(keyPackage, 4000));
 
         log.info("{} approved a {} device: {}", request.describe(), request.getDeviceType(),
                 request.getDeviceName());
@@ -218,7 +222,7 @@ public class AuthService {
         User user = findUser(device.getUserId());
         log.info("paired {} device {} for {}", request.getDeviceType(), device.getName(), user.label());
         return new TokenClaimResponse(token, device.getId(), device.getDeviceType(), device.getName(),
-                UserResponse.from(user));
+                request.getKeyPackage(), UserResponse.from(user));
     }
 
     /** the code behind a QR, so the phone knows which request the user is approving */

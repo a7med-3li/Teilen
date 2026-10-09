@@ -128,38 +128,63 @@ class AccountCard(
         render()
         val url = saveServerUrl()
 
-        TeilenApi.pairThisDevice(url, deviceName, onOffer = { offer ->
-            if (!pairing) {
-                return@pairThisDevice
-            }
-            if (offer == null) {
-                pairing = false
-                say(activity.getString(R.string.pair_failed), isError = true)
-                render()
-                return@pairThisDevice
-            }
-            pairCode.text = offer.userCode
-            pairStatus.text = activity.getString(R.string.pair_waiting)
-        }, onPolled = { poll ->
-            if (!pairing) {
-                return@pairThisDevice
-            }
-            when (poll) {
-                is TeilenApi.PairingPoll.Waiting -> Unit // nothing to say; the code is still up
-                is TeilenApi.PairingPoll.Paired -> {
-                    pairing = false
-                    Session.save(activity, poll.signedIn.token, poll.signedIn.phone,
-                        poll.signedIn.deviceName)
-                    render()
+        // offer a throwaway key so the approving device can hand back the account key sealed to it
+        val pairingKey = PairingCrypto.newPairingKey()
+        var shownCode: String? = null
+
+        TeilenApi.pairThisDevice(
+            url,
+            deviceName,
+            PairingCrypto.b64(pairingKey.publicKey),
+            onOffer = { offer ->
+                if (!pairing) {
+                    return@pairThisDevice
                 }
-                // expired, denied, or a code the server has never heard of: the loop has stopped
-                is TeilenApi.PairingPoll.Failed -> {
+                if (offer == null) {
                     pairing = false
-                    say(poll.message, isError = true)
+                    say(activity.getString(R.string.pair_failed), isError = true)
                     render()
+                    return@pairThisDevice
+                }
+                pairCode.text = offer.userCode
+                shownCode = offer.userCode
+                pairStatus.text = activity.getString(R.string.pair_waiting)
+            },
+            onPolled = { poll ->
+                if (!pairing) {
+                    return@pairThisDevice
+                }
+                when (poll) {
+                    is TeilenApi.PairingPoll.Waiting -> Unit // nothing to say; the code is still up
+                    is TeilenApi.PairingPoll.Paired -> {
+                        pairing = false
+                        // open the approver's sealed account key; pairing stands even if this fails
+                        val packageJson = poll.keyPackage
+                        val code = shownCode
+                        if (packageJson != null && code != null) {
+                            try {
+                                PairingCrypto.openFromApprover(
+                                    activity, packageJson, pairingKey.secretKey, code
+                                )
+                            } catch (e: Exception) {
+                                // paired, but with no account key to seal content under yet
+                            }
+                        }
+                        Session.save(
+                            activity, poll.signedIn.token, poll.signedIn.phone,
+                            poll.signedIn.deviceName
+                        )
+                        render()
+                    }
+                    // expired, denied, or a code the server has never heard of: the loop has stopped
+                    is TeilenApi.PairingPoll.Failed -> {
+                        pairing = false
+                        say(poll.message, isError = true)
+                        render()
+                    }
                 }
             }
-        })
+        )
     }
 
     private fun renderPairing() {

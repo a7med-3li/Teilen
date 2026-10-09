@@ -80,6 +80,10 @@
     let retryDelay = 1000;
     let pollTimer = null;
     let pairTimer = null;
+    // the current pairing attempt's throwaway key and the code shown, both needed to receive the
+    // account key the approving device seals for this browser
+    let pairKey = null;
+    let pairUserCode = null;
 
     // ---------- transport ----------
 
@@ -154,12 +158,26 @@
         pairState.textContent = 'asking for a code…';
         qr.removeAttribute('src');
 
+        // offer a throwaway key so the approving device can hand back the account key sealed to it;
+        // if the crypto layer is unavailable pairing still works, this browser just stays keyless
+        pairKey = null;
+        pairUserCode = null;
+        let publicKey = null;
+        try {
+            await TeilenCrypto.ready;
+            pairKey = TeilenCrypto.newPairingKey();
+            publicKey = TeilenCrypto.b64(pairKey.publicKey);
+        } catch (e) {
+            pairKey = null;
+        }
+
         let start;
         try {
             const response = await postJson(AUTH + '/device/code', {
                 deviceName: describeBrowser(),
                 deviceType: 'WEB',
-                platform: navigator.userAgent
+                platform: navigator.userAgent,
+                publicKey: publicKey
             });
             if (!response.ok) {
                 throw new Error(await why(response));
@@ -173,6 +191,7 @@
 
         qr.src = start.qrSvgUrl;
         pairCode.textContent = start.userCode;
+        pairUserCode = start.userCode;
         pairState.textContent = 'waiting for approval on your phone…';
         collectToken(start.deviceCode, start.pollIntervalSeconds * 1000);
     }
@@ -190,6 +209,17 @@
             }
             const claim = await response.json();
             token.set(claim.token);
+            // the approving device may have sealed the account key for the key we offered; keep it
+            // before showing the feed. A failure here must not cost the user their pairing.
+            if (claim.keyPackage && pairKey && pairUserCode) {
+                try {
+                    await TeilenCrypto.openFromApprover(claim.keyPackage, pairKey.privateKey, pairUserCode);
+                } catch (e) {
+                    console.warn('could not keep the account key from this pairing:', e);
+                }
+            }
+            pairKey = null;
+            pairUserCode = null;
             pairState.textContent = 'paired as ' + claim.deviceName;
             showFeed();
         } catch (e) {
@@ -299,7 +329,20 @@
         deviceStatus.hidden = false;
         deviceStatus.textContent = 'pairing…';
 
-        const response = await postJson(AUTH + '/device/approve', {userCode});
+        // seal this browser's account key to the newcomer's key, if it offered one. Without that the
+        // pair still works, the newcomer just has no way to read anything sealed later.
+        let keyPackage = null;
+        try {
+            await TeilenCrypto.ready;
+            const preview = await (await api(AUTH + '/device/pending?code=' + encodeURIComponent(userCode))).json();
+            if (preview && preview.publicKey) {
+                keyPackage = await TeilenCrypto.sealForNewcomer(preview.publicKey, userCode);
+            }
+        } catch (err) {
+            keyPackage = null;
+        }
+
+        const response = await postJson(AUTH + '/device/approve', {userCode, keyPackage});
         if (response.ok) {
             const approved = await response.json();
             deviceStatus.textContent = approved.deviceName + ' is paired. It picks its token up on its own.';

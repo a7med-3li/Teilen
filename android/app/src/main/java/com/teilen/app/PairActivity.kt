@@ -68,20 +68,35 @@ class PairActivity : Activity() {
         }
         builder
             .setMessage(getString(R.string.pair_ask_named, preview.deviceName, kind))
-            .setPositiveButton(R.string.pair_allow) { _, _ -> decide(code, token, allow = true) }
-            .setNegativeButton(R.string.pair_deny) { _, _ -> decide(code, token, allow = false) }
+            .setPositiveButton(R.string.pair_allow) { _, _ ->
+                decide(code, token, allow = true, newcomerPublicKey = preview.publicKey)
+            }
+            .setNegativeButton(R.string.pair_deny) { _, _ ->
+                decide(code, token, allow = false, newcomerPublicKey = null)
+            }
             // backing out is a "no": the code just stays pending until it runs out
             .setOnCancelListener { finish() }
             .show()
     }
 
-    private fun decide(code: String, token: String, allow: Boolean) {
+    private fun decide(code: String, token: String, allow: Boolean, newcomerPublicKey: String?) {
         val pending = getString(
             if (allow) R.string.pair_approving else R.string.pair_denying
         )
         Toast.makeText(this, pending, Toast.LENGTH_SHORT).show()
 
-        TeilenApi.decidePairing(Server.get(this), token, code, allow) { ok, message ->
+        // seal this phone's account key to the newcomer's key, if it offered one. If that fails the
+        // pairing still goes through; the newcomer just has no key to read sealed content with.
+        var keyPackage: String? = null
+        if (allow && newcomerPublicKey != null) {
+            keyPackage = try {
+                PairingCrypto.sealForNewcomer(this, PairingCrypto.unb64(newcomerPublicKey), code)
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        TeilenApi.decidePairing(Server.get(this), token, code, allow, keyPackage) { ok, message ->
             val said = if (ok) {
                 getString(if (allow) R.string.pair_allowed else R.string.pair_refused, message)
             } else {
