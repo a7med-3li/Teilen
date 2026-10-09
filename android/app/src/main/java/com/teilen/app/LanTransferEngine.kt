@@ -286,7 +286,7 @@ class LanTransferEngine(private val context: Context) {
             }
         }
 
-        fun flush() {
+        override fun flush() {
             if (count > 0) {
                 flushChunk()
             }

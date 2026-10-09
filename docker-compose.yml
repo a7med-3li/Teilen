@@ -25,6 +25,10 @@ services:
       DB_USER: teilen
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       TEILEN_BLOB_LINK_SECRET: ${TEILEN_BLOB_LINK_SECRET}
+      # Web Push (Phase 3). Leave unset to keep push silently disabled.
+      TEILEN_VAPID_PUBLIC_KEY: ${TEILEN_VAPID_PUBLIC_KEY:-}
+      TEILEN_VAPID_PRIVATE_KEY: ${TEILEN_VAPID_PRIVATE_KEY:-}
+      TEILEN_VAPID_SUBJECT: ${TEILEN_VAPID_SUBJECT:-mailto:admin@teilen.app}
       JAVA_TOOL_OPTIONS: "-Xmx512m"
     volumes: [blobs:/data/blobs]
 
