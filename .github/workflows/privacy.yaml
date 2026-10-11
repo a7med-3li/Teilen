@@ -30,10 +30,10 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Privacy-police directory
+      - name: Upload Privacy-Policy directory
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./Privacy-police
+          path: ./Privacy-Policy
 
       - name: Deploy to GitHub Pages
         id: deployment
