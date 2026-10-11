@@ -42,3 +42,7 @@ backend/target/
 
 teilen_system_architecture_implementation_plan.md
 teilen-debug.apk
+
+android/release-keystore.jks
+.env
+android/keystore.properties

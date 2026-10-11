@@ -1,4 +1,14 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.FileInputStream
+import java.util.Properties
+
+
+val keystorePropertiesFile: File? = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile?.exists() == true) {
+        load(FileInputStream(keystorePropertiesFile))
+    }
+}
 
 plugins {
     id("com.android.application")
@@ -10,6 +20,14 @@ android {
     compileSdk = 36
     buildToolsVersion = "36.0.0"
 
+    signingConfigs {
+        create("release") {
+            storeFile = file(keystoreProperties.getProperty("storeFile"))
+            storePassword = keystoreProperties.getProperty("storePassword")
+            keyAlias = keystoreProperties.getProperty("keyAlias")
+            keyPassword = keystoreProperties.getProperty("keyPassword")
+        }
+    }
     defaultConfig {
         applicationId = "com.teilen.app"
         // 26 = notification channels; the clipboard flow is built on them
@@ -21,7 +39,13 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 
