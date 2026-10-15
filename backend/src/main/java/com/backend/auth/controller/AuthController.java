@@ -6,6 +6,7 @@ import com.backend.auth.domain.AuthenticatedUser;
 import com.backend.auth.dto.ClaimTokenRequest;
 import com.backend.auth.dto.CreateAccountRequest;
 import com.backend.auth.dto.DeviceResponse;
+import com.backend.auth.dto.LoginRequest;
 import com.backend.auth.dto.PairingDecisionRequest;
 import com.backend.auth.dto.PairingPreview;
 import com.backend.auth.domain.PairingStartResponse;
@@ -58,11 +59,20 @@ public class AuthController {
         this.qrCodes = qrCodes;
     }
 
-    /** the very first phone: a phone number, and the account plus a token come back */
+    /** creates an account with phone and password, pairs this device */
     @PostMapping("/api/auth/account")
     public ResponseEntity<SessionResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
-        SessionResponse session = auth.createAccount(request.phone(), request.displayName(), request.deviceName());
+        SessionResponse session = auth.createAccount(request.phone(), request.password(), request.displayName(),
+                request.deviceName(), request.deviceType());
         return ResponseEntity.status(HttpStatus.CREATED).body(session);
+    }
+
+    /** logs in with phone and password, pairs this device */
+    @PostMapping("/api/auth/login")
+    public ResponseEntity<SessionResponse> login(@Valid @RequestBody LoginRequest request) {
+        SessionResponse session = auth.login(request.phone(), request.password(), request.deviceName(),
+                request.deviceType());
+        return ResponseEntity.ok(session);
     }
 
     @GetMapping("/api/me")

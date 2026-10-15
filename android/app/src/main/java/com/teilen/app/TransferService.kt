@@ -251,7 +251,7 @@ class TransferService : Service() {
         private const val EXTRA_MIMES = "mimes"
         private const val EXTRA_SIZES = "sizes"
         private const val EXTRA_TTL = "ttl"
-        private const val DEFAULT_TTL_SECONDS = 1800L
+        private const val DEFAULT_TTL_SECONDS = 3600L
 
         /**
          * Hands a share to the background. [fds] is null for a text-only share; when present it is

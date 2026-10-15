@@ -204,6 +204,6 @@ class ShareActivity : Activity() {
     }
 
     private companion object {
-        const val DEFAULT_TTL_SECONDS = 1800L
+        const val DEFAULT_TTL_SECONDS = 3600L
     }
 }

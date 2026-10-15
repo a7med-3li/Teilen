@@ -51,7 +51,7 @@ teilen:
 
   # how often expired rows are swept away
   reap-interval-ms: 5000
-  default-ttl-seconds: 1800
+  default-ttl-seconds: 3600
   min-ttl-seconds: 10
   max-ttl-seconds: 86400
   # "keep it longer": what one tap of extend buys, capped by max-ttl-seconds

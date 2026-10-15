@@ -12,13 +12,16 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
 /**
  * Stateless bearer-token security.
  *
  * <p>Off: sessions, CSRF tokens, form login, HTTP Basic — none of which have anything to do with
  * an app that proves itself with a token on every call, and all of which would only get in the way.
  *
- * <p>Open: creating an account, the steps of pairing (asking for a code, polling for a token,
+ * <p>Open: creating an account, logging in, the steps of pairing (asking for a code, polling for a token,
  * drawing and describing the QR), and the web app's own files. Everything else under {@code /api}
  * needs a token, and so does the websocket handshake — a browser passes it as {@code /ws?token=…}.
  */
@@ -27,17 +30,23 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     /**
-     * The only endpoints that answer to a stranger. Everything here is a step of pairing or the one
-     * call that creates an account; the last two only answer with what a code already says about
+     * The only endpoints that answer to a stranger. Everything here is a step of pairing, login, or the
+     * call that creates an account; the QR endpoints only answer with what a code already says about
      * itself, so knowing the code is knowing everything they know.
      */
     static final String[] OPEN_PATHS = {
             "/api/auth/account",
+            "/api/auth/login",
             "/api/auth/device/code",
             "/api/auth/device/token",
             "/api/auth/device/qr.svg",
             "/api/auth/device/pending"
     };
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public BearerTokenFilter bearerTokenFilter(AuthService auth) {

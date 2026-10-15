@@ -1,25 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:background="@color/bg"
+    android:orientation="vertical">
 
+    <!-- top brand bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingBottom="24dp">
+        android:background="@drawable/bg_header"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="20dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="16dp">
 
-        <!-- the brand band; the status bar behind it uses the same colour -->
         <LinearLayout
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_header"
-            android:orientation="vertical"
-            android:paddingStart="20dp"
-            android:paddingTop="22dp"
-            android:paddingEnd="20dp"
-            android:paddingBottom="26dp">
+            android:layout_weight="1"
+            android:orientation="vertical">
 
             <TextView
                 style="@style/Text.Header"
@@ -31,199 +33,49 @@
                 style="@style/Text.HeaderSub"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="1dp"
                 android:text="@string/header_subtitle" />
         </LinearLayout>
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/header_session_badge"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingStart="16dp"
-            android:paddingTop="16dp"
-            android:paddingEnd="16dp">
+            android:background="@drawable/bg_tab_indicator"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
+            android:text="@string/signed_in"
+            android:textColor="@color/accent"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+    </LinearLayout>
 
-            <!--
-                the account. Everything below it needs a token, so this card is what a first run
-                and a signed-out run actually consist of.
-            -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_card"
-                android:orientation="vertical"
-                android:padding="16dp">
+    <!-- non-scrollable page container -->
+    <FrameLayout
+        android:id="@+id/page_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingStart="16dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp">
 
-                <TextView
-                    style="@style/Text.Section"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/section_account" />
+        <!-- ==================== TAB 1: TEXT / SEND ==================== -->
+        <LinearLayout
+            android:id="@+id/page_send"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
 
-                <!-- paired: who this device is -->
-                <TextView
-                    android:id="@+id/account_who"
-                    style="@style/Text.Body"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:visibility="gone" />
-
-                <!-- not paired: claim a number -->
-                <LinearLayout
-                    android:id="@+id/account_create"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <TextView
-                        style="@style/Text.Caption"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="@string/account_intro" />
-
-                    <EditText
-                        android:id="@+id/phone"
-                        style="@style/Input.Field"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:hint="@string/phone_hint"
-                        android:imeOptions="actionNext"
-                        android:inputType="phone"
-                        android:maxLength="24" />
-
-                    <EditText
-                        android:id="@+id/display_name"
-                        style="@style/Input.Field"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:hint="@string/name_hint"
-                        android:imeOptions="actionDone"
-                        android:inputType="textPersonName"
-                        android:maxLength="80" />
-
-                    <Button
-                        android:id="@+id/create_account"
-                        style="@style/Button.Primary"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/create_account" />
-                </LinearLayout>
-
-                <!-- pairing this phone from another one -->
-                <LinearLayout
-                    android:id="@+id/account_pair"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
-
-                    <TextView
-                        style="@style/Text.Caption"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="@string/pair_intro" />
-
-                    <!-- the code, big: it gets typed into another device by hand -->
-                    <TextView
-                        android:id="@+id/pair_code"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:fontFamily="monospace"
-                        android:letterSpacing="0.12"
-                        android:textColor="@color/text_primary"
-                        android:textSize="32sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/pair_status"
-                        style="@style/Text.Caption"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp" />
-
-                    <Button
-                        android:id="@+id/pair_cancel"
-                        style="@style/Button.Outline"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/pair_cancel" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/account_status"
-                    style="@style/Text.Caption"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:visibility="gone" />
-
-                <!-- the escape hatch from the create form: pair instead -->
-                <Button
-                    android:id="@+id/account_pair_start"
-                    style="@style/Button.Outline"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/pair_this_phone" />
-
-                <Button
-                    android:id="@+id/sign_out"
-                    style="@style/Button.Outline"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/sign_out"
-                    android:visibility="gone" />
-            </LinearLayout>
-
-            <!--
-                the feed. Placed above the composer because reading what you already sent is a
-                thing you do more often than sending, and it needs a token like everything below.
-            -->
-            <LinearLayout
-                android:id="@+id/card_feed"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_card"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    style="@style/Text.Section"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/section_feed" />
-
-                <TextView
-                    style="@style/Text.Caption"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/feed_intro" />
-
-                <Button
-                    android:id="@+id/open_feed"
-                    style="@style/Button.Outline"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/open_feed" />
-            </LinearLayout>
-
-            <!-- text and links; this card and the two after it need a token -->
+            <!-- Card when paired -->
             <LinearLayout
                 android:id="@+id/card_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
                 android:background="@drawable/bg_card"
                 android:orientation="vertical"
                 android:padding="16dp">
@@ -239,34 +91,43 @@
                     style="@style/Input.Field"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="10dp"
                     android:gravity="top|start"
                     android:hint="@string/content_hint"
                     android:inputType="textMultiLine|textCapSentences"
                     android:maxLength="20000"
-                    android:minLines="4" />
+                    android:lines="4"
+                    android:maxLines="6" />
 
-                <TextView
-                    style="@style/Text.Caption"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="@string/expires_in" />
-
-                <Spinner
-                    android:id="@+id/ttl"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:popupBackground="@color/surface"
-                    android:spinnerMode="dropdown" />
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/Text.Caption"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/expires_in" />
+
+                    <Spinner
+                        android:id="@+id/ttl"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:popupBackground="@color/surface"
+                        android:spinnerMode="dropdown" />
+                </LinearLayout>
 
                 <Button
                     android:id="@+id/send"
                     style="@style/Button.Primary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="12dp"
                     android:text="@string/send" />
 
                 <TextView
@@ -274,15 +135,54 @@
                     style="@style/Text.Caption"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp" />
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
 
-            <!-- files -->
+            <!-- Banner when not paired -->
+            <LinearLayout
+                android:id="@+id/gate_banner_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Text.Section"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/section_account" />
+
+                <TextView
+                    style="@style/Text.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/sign_in_required_banner" />
+
+                <Button
+                    android:id="@+id/go_to_account_text"
+                    style="@style/Button.Primary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/go_to_account" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ==================== TAB 2: FILES ==================== -->
+        <LinearLayout
+            android:id="@+id/page_files"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
             <LinearLayout
                 android:id="@+id/card_files"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
                 android:background="@drawable/bg_card"
                 android:orientation="vertical"
                 android:padding="16dp">
@@ -293,12 +193,19 @@
                     android:layout_height="wrap_content"
                     android:text="@string/section_files" />
 
-                <Button
-                    android:id="@+id/pick_file"
-                    style="@style/Button.Outline"
+                <TextView
+                    style="@style/Text.Caption"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/files_hint" />
+
+                <Button
+                    android:id="@+id/pick_file"
+                    style="@style/Button.Primary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
                     android:text="@string/pick_file" />
 
                 <ProgressBar
@@ -317,24 +224,315 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
                     android:visibility="gone" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/gate_banner_files"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Text.Section"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/section_account" />
+
+                <TextView
+                    style="@style/Text.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/sign_in_required_banner" />
+
+                <Button
+                    android:id="@+id/go_to_account_files"
+                    style="@style/Button.Primary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/go_to_account" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ==================== TAB 3: FEED ==================== -->
+        <LinearLayout
+            android:id="@+id/page_feed"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/card_feed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    style="@style/Text.Section"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/section_feed" />
 
                 <TextView
                     style="@style/Text.Caption"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="@string/files_hint" />
+                    android:layout_marginTop="8dp"
+                    android:text="@string/feed_intro" />
+
+                <Button
+                    android:id="@+id/open_feed"
+                    style="@style/Button.Primary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/open_feed" />
             </LinearLayout>
 
-            <!-- clipboard offer -->
+            <LinearLayout
+                android:id="@+id/gate_banner_feed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Text.Section"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/section_account" />
+
+                <TextView
+                    style="@style/Text.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/sign_in_required_banner" />
+
+                <Button
+                    android:id="@+id/go_to_account_feed"
+                    style="@style/Button.Primary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/go_to_account" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ==================== TAB 4: ACCOUNT & SETTINGS ==================== -->
+        <LinearLayout
+            android:id="@+id/page_account"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- Account Box -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    style="@style/Text.Section"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/section_account" />
+
+                <!-- Signed In View -->
+                <TextView
+                    android:id="@+id/account_who"
+                    style="@style/Text.Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/sign_out"
+                    style="@style/Button.Outline"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/sign_out"
+                    android:visibility="gone" />
+
+                <!-- Signed Out: Login & Register Form -->
+                <LinearLayout
+                    android:id="@+id/account_create"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <!-- Segmented tab toggle: Sign in / Register -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="42dp"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/bg_segmented_container"
+                        android:orientation="horizontal"
+                        android:padding="3dp">
+
+                        <Button
+                            android:id="@+id/auth_switch_login"
+                            style="?android:attr/borderlessButtonStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_segmented_selected"
+                            android:text="@string/tab_login"
+                            android:textColor="@color/accent"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <Button
+                            android:id="@+id/auth_switch_register"
+                            style="?android:attr/borderlessButtonStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@android:color/transparent"
+                            android:text="@string/tab_register"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/auth_intro"
+                        style="@style/Text.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/account_mode_login_hint" />
+
+                    <EditText
+                        android:id="@+id/phone"
+                        style="@style/Input.Field"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:hint="@string/phone_hint"
+                        android:imeOptions="actionNext"
+                        android:inputType="phone"
+                        android:maxLength="24"
+                        android:padding="10dp"
+                        android:textSize="14sp" />
+
+                    <EditText
+                        android:id="@+id/password"
+                        style="@style/Input.Field"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:hint="@string/password_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="textPassword"
+                        android:maxLength="128"
+                        android:padding="10dp"
+                        android:textSize="14sp" />
+
+                    <EditText
+                        android:id="@+id/display_name"
+                        style="@style/Input.Field"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:hint="@string/name_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="textPersonName"
+                        android:maxLength="80"
+                        android:padding="10dp"
+                        android:textSize="14sp"
+                        android:visibility="gone" />
+
+                    <Button
+                        android:id="@+id/create_account"
+                        style="@style/Button.Primary"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/login_button" />
+
+                    <Button
+                        android:id="@+id/account_pair_start"
+                        style="@style/Button.Outline"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/pair_this_phone" />
+                </LinearLayout>
+
+                <!-- Pairing in flight -->
+                <LinearLayout
+                    android:id="@+id/account_pair"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        style="@style/Text.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/pair_intro" />
+
+                    <TextView
+                        android:id="@+id/pair_code"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="monospace"
+                        android:letterSpacing="0.12"
+                        android:textColor="@color/text_primary"
+                        android:textSize="26sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/pair_status"
+                        style="@style/Text.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp" />
+
+                    <Button
+                        android:id="@+id/pair_cancel"
+                        style="@style/Button.Outline"
+                        android:layout_width="wrap_content"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="10dp"
+                        android:text="@string/pair_cancel" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/account_status"
+                    style="@style/Text.Caption"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Settings: Clipboard & Server -->
             <LinearLayout
                 android:id="@+id/card_clipboard"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/bg_card"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="14dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -348,39 +546,36 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/watch_title"
+                        android:textSize="14sp"
                         android:textStyle="bold" />
 
                     <Switch
                         android:id="@+id/watch"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp" />
+                        android:layout_marginStart="8dp" />
                 </LinearLayout>
-
-                <TextView
-                    style="@style/Text.Caption"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:text="@string/watch_hint" />
 
                 <Button
                     android:id="@+id/try_clipboard"
                     style="@style/Button.Outline"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/try_clipboard" />
+                    android:layout_height="38dp"
+                    android:layout_marginTop="8dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="@string/try_clipboard"
+                    android:textSize="13sp" />
             </LinearLayout>
 
-            <!-- where the items go -->
+            <!-- Server URL card -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/bg_card"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="14dp">
 
                 <TextView
                     style="@style/Text.Section"
@@ -388,25 +583,163 @@
                     android:layout_height="wrap_content"
                     android:text="@string/section_backend" />
 
-                <EditText
-                    android:id="@+id/server"
-                    style="@style/Input.Field"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:hint="@string/server_hint"
-                    android:imeOptions="actionDone"
-                    android:inputType="textUri"
-                    android:textSize="14sp" />
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <Button
-                    android:id="@+id/save_server"
-                    style="@style/Button.Outline"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/save" />
+                    <EditText
+                        android:id="@+id/server"
+                        style="@style/Input.Field"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:hint="@string/server_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="textUri"
+                        android:padding="8dp"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/save_server"
+                        style="@style/Button.Outline"
+                        android:layout_width="wrap_content"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="8dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="@string/save" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
+    </FrameLayout>
+
+    <!-- ==================== BOTTOM NAVIGATION BAR ==================== -->
+    <LinearLayout
+        android:id="@+id/bottom_nav_bar"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="@drawable/bg_nav_bar"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- Tab 1: Text -->
+        <LinearLayout
+            android:id="@+id/nav_tab_send"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?android:attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:id="@+id/nav_icon_send"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="💬"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/nav_label_send"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/nav_send"
+                android:textColor="@color/nav_item_selected"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Tab 2: Files -->
+        <LinearLayout
+            android:id="@+id/nav_tab_files"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?android:attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:id="@+id/nav_icon_files"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📁"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/nav_label_files"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/nav_files"
+                android:textColor="@color/nav_item_unselected"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Tab 3: Feed -->
+        <LinearLayout
+            android:id="@+id/nav_tab_feed"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?android:attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:id="@+id/nav_icon_feed"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📥"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/nav_label_feed"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/nav_feed"
+                android:textColor="@color/nav_item_unselected"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Tab 4: Account -->
+        <LinearLayout
+            android:id="@+id/nav_tab_account"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="?android:attr/selectableItemBackground"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:id="@+id/nav_icon_account"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="👤"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/nav_label_account"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/nav_account"
+                android:textColor="@color/nav_item_unselected"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
-</ScrollView>
+</LinearLayout>

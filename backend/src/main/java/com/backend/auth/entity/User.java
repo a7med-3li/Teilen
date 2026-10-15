@@ -27,6 +27,9 @@ public class User {
     @Column(name = "display_name", length = 80)
     private String displayName;
 
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -34,11 +37,16 @@ public class User {
         // for JPA
     }
 
-    public User(UUID id, String phone, String displayName, Instant createdAt) {
+    public User(UUID id, String phone, String displayName, String passwordHash, Instant createdAt) {
         this.id = id;
         this.phone = phone;
         this.displayName = displayName;
+        this.passwordHash = passwordHash;
         this.createdAt = createdAt;
+    }
+
+    public User(UUID id, String phone, String displayName, Instant createdAt) {
+        this(id, phone, displayName, null, createdAt);
     }
 
     public UUID getId() {
@@ -51,6 +59,14 @@ public class User {
 
     public String getDisplayName() {
         return displayName;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
     }
 
     public Instant getCreatedAt() {

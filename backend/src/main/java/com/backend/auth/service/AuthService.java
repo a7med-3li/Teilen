@@ -55,15 +55,18 @@ public class AuthService {
     private final UserRepository users;
     private final DeviceRepository devices;
     private final PairingRequestRepository pairings;
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     public AuthService(UserRepository users,
                        DeviceRepository devices,
                        PairingRequestRepository pairings,
+                       org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                        @Value("${teilen.auth.pairing-ttl-seconds:300}") long pairingTtlSeconds,
                        @Value("${teilen.auth.poll-interval-seconds:3}") long pollIntervalSeconds) {
         this.users = users;
         this.devices = devices;
         this.pairings = pairings;
+        this.passwordEncoder = passwordEncoder;
         this.pairingTtl = Duration.ofSeconds(pairingTtlSeconds);
         this.pollInterval = Duration.ofSeconds(pollIntervalSeconds);
     }
@@ -71,24 +74,56 @@ public class AuthService {
     // ------------------------------------------------------------------ accounts
 
     /**
-     * Creates the account and pairs the phone that asked for it.
+     * Creates the account with phone and password, and pairs the device that asked for it.
      *
-     * @throws ResponseStatusException 409 if the number is already taken — the caller should pair
-     *                                  that device from an existing one instead
+     * @throws ResponseStatusException 409 if the number is already taken
      */
     @Transactional
-    public SessionResponse createAccount(String rawPhone, String displayName, String rawDeviceName) {
+    public SessionResponse createAccount(String rawPhone, String password, String displayName,
+                                         String rawDeviceName, String requestedType) {
         String phone = requirePhone(rawPhone);
+        if (password == null || password.isBlank() || password.length() < 6) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "password must be at least 6 characters");
+        }
         if (users.findByPhone(phone).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "account_exists: this number already has an account, pair this device instead");
+                    "account_exists: this number already has an account, log in or pair this device instead");
         }
 
         Instant now = Instant.now();
-        User user = new User(UUID.randomUUID(), phone, clean(displayName, 80), now);
+        String passwordHash = passwordEncoder.encode(password);
+        User user = new User(UUID.randomUUID(), phone, clean(displayName, 80), passwordHash, now);
         users.save(user);
-        SessionResponse session = pairDevice(user, DeviceType.PHONE, rawDeviceName, now);
-        log.info("created account {} and paired the first device {}", phone, session.deviceName());
+        DeviceType type = requestedType != null ? DeviceType.parse(requestedType) : DeviceType.PHONE;
+        SessionResponse session = pairDevice(user, type, rawDeviceName, now);
+        log.info("created account {} and paired device {}", phone, session.deviceName());
+        return session;
+    }
+
+    /**
+     * Logs in using phone number and password, and mints a new device session.
+     *
+     * @throws ResponseStatusException 401 on incorrect credentials
+     */
+    @Transactional
+    public SessionResponse login(String rawPhone, String password, String rawDeviceName, String requestedType) {
+        String phone = requirePhone(rawPhone);
+        if (password == null || password.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "password must not be blank");
+        }
+        User user = users.findByPhone(phone)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                        "invalid_credentials: phone number or password incorrect"));
+        if (user.getPasswordHash() == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "invalid_credentials: phone number or password incorrect");
+        }
+
+        Instant now = Instant.now();
+        DeviceType type = requestedType != null ? DeviceType.parse(requestedType) : DeviceType.PHONE;
+        SessionResponse session = pairDevice(user, type, rawDeviceName, now);
+        log.info("logged in account {} on device {}", phone, session.deviceName());
         return session;
     }
 

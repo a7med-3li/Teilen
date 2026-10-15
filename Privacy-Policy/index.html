@@ -40,7 +40,7 @@
 </head>
 <body>
     <h1>Privacy Policy</h1>
-    <p class="meta">Last updated: <strong>October 12, 2026</strong></p>
+    <p class="meta">Last updated: <strong>October 15, 2026</strong></p>
 
     <p>
         This Privacy Policy explains how <strong>Ahmed Mohamed Ali Mohamed</strong> ("we", "us", "our") collects,
@@ -75,8 +75,8 @@
         <li>Teilen has <strong>no advertising and no third-party analytics or tracking SDKs</strong>.</li>
         <li>We do <strong>not sell</strong> your personal data, and we do <strong>not share</strong> it for advertising.</li>
         <li>We do <strong>not</strong> collect your location, contacts, calendar, call logs, SMS, health data, or biometric data, and we do <strong>not</strong> access your camera or your photo library.</li>
-        <li>We collect your <strong>phone number</strong> (as your account identifier), basic <strong>device information</strong>, and the <strong>content you deliberately choose to send</strong>.</li>
-        <li>Your shared content is stored on our server only until it <strong>expires (by default 30 minutes, from 10 seconds up to 24 hours at most)</strong>, and you can delete it at any time. Then it is gone permanently.</li>
+        <li>We collect your <strong>phone number</strong> (as your account identifier), <strong>password</strong> (stored exclusively as a salted cryptographic hash), basic <strong>device information</strong>, and the <strong>content you deliberately choose to send</strong>.</li>
+        <li>Your shared content is stored on our server only until it <strong>expires (by default 1 hour, from 10 seconds up to 24 hours at most)</strong>, and you can delete it at any time. Then it is gone permanently.</li>
         <li>The clipboard feature is <strong>off by default, opt-in, and never sends anything automatically</strong>. Nothing is transmitted until you tap "Send".</li>
     </ul>
 
@@ -97,18 +97,18 @@
         <tbody>
             <tr>
                 <td><strong>Account information</strong></td>
-                <td>Your phone number (used as your account ID) and an optional display name.</td>
-                <td>When you create an account in the app.</td>
+                <td>Your phone number (used as your account ID), your password (stored exclusively as a salted cryptographic hash, never in plaintext), and an optional display name.</td>
+                <td>When you create an account in the app or web client.</td>
             </tr>
             <tr>
                 <td><strong>Device information</strong></td>
                 <td>A device name you provide or that is generated (for example "Ahmed's phone" or "Chrome on Windows"), the device type (phone or web browser), the platform, and the time the device was last seen.</td>
-                <td>When you create an account or pair a device.</td>
+                <td>When you create an account, log in, or pair a device.</td>
             </tr>
             <tr>
                 <td><strong>Authentication data</strong></td>
-                <td>Device access tokens. Tokens are stored only as one-way SHA-256 hashes, never in readable form.</td>
-                <td>When a device is paired.</td>
+                <td>Salted password hashes (BCrypt) and device access tokens. Tokens and passwords are stored only as one-way cryptographic hashes, never in readable form.</td>
+                <td>When you register, log in, or pair a device.</td>
             </tr>
             <tr>
                 <td><strong>Shared content</strong></td>
@@ -186,9 +186,9 @@
 
     <h2>7. Data Retention and Deletion</h2>
     <ul>
-        <li><strong>Shared content is temporary by design.</strong> Every item has an expiry time that you choose when sending. The default is <strong>30 minutes</strong>, the minimum is <strong>10 seconds</strong>, and the maximum is <strong>24 hours</strong>. When it expires, the item and any uploaded file are automatically and permanently deleted from our server.</li>
+        <li><strong>Shared content is temporary by design.</strong> Every item has an expiry time that you choose when sending. The default is <strong>1 hour</strong>, the minimum is <strong>10 seconds</strong>, and the maximum is <strong>24 hours</strong>. When it expires, the item and any uploaded file are automatically and permanently deleted from our server.</li>
         <li><strong>You can delete sooner.</strong> You can delete any item immediately from the app or web feed. Deletion removes both the database record and the stored file.</li>
-        <li><strong>Account and device data</strong> (phone number, display name, device names, hashed tokens) is kept while your account is active.</li>
+        <li><strong>Account and device data</strong> (phone number, display name, salted password hash, device names, hashed tokens) is kept while your account is active.</li>
         <li><strong>Pairing codes</strong> live for about 5 minutes and are stored only as hashes; expired pairing requests are swept automatically.</li>
         <li><strong>Server logs</strong> are kept for a short period for security and troubleshooting, then deleted or anonymized.</li>
         <li><strong>Account deletion.</strong> You can request deletion of your account and all associated data at any time by emailing <a href="mailto:ahmedmohamedalyyy@gmail.com">ahmedmohamedalyyy@gmail.com</a>. We will delete the account, its devices, and any remaining content. Because your phone number is your account identifier, deleting the account releases the number. Note: the <em>last</em> paired device cannot unpair itself from within the app (to prevent locking the account), so account deletion is done by request.</li>
@@ -200,6 +200,7 @@
     </p>
     <ul>
         <li><strong>Encryption in transit.</strong> The app and web app communicate with the server over HTTPS/TLS.</li>
+        <li><strong>Salted password hashing.</strong> Passwords are never stored in plaintext and are hashed using industry-standard salted hashing (BCrypt).</li>
         <li><strong>Hashed tokens.</strong> Device access tokens are stored only as one-way SHA-256 hashes, so a database leak does not expose usable tokens.</li>
         <li><strong>Hashed pairing codes.</strong> Pairing codes are single-use, short-lived, and stored only as hashes.</li>
         <li><strong>Signed file links.</strong> File downloads use tamper-proof, expiring signed links that cannot be edited to reach a different item or a later expiry.</li>
@@ -303,7 +304,7 @@
     </ul>
 
     <footer>
-        <p>Privacy Policy for Teilen (<code>com.teilen.app</code>). Last updated October 12, 2026.</p>
+        <p>Privacy Policy for Teilen (<code>com.teilen.app</code>). Last updated October 15, 2026.</p>
     </footer>
 </body>
 </html>

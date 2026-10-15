@@ -112,4 +112,24 @@
     <string name="channel_transfer">Transfers</string>
     <string name="channel_transfer_description">Progress while a share is uploaded in the background</string>
     <string name="sending_toast">Sending to Teilen…</string>
+
+    <!-- auth and login -->
+    <string name="password_hint">password (at least 6 characters)</string>
+    <string name="password_needed">Enter your password.</string>
+    <string name="password_short">Password must be at least 6 characters.</string>
+    <string name="tab_login">Sign in</string>
+    <string name="tab_register">Register</string>
+    <string name="login_button">Sign in</string>
+    <string name="logging_in">Signing in…</string>
+    <string name="login_failed">Sign in failed: %1$s</string>
+    <string name="account_mode_register_hint">Create an account with your phone number and password.</string>
+    <string name="account_mode_login_hint">Sign in to your account with your phone number and password.</string>
+
+    <!-- bottom navigation tabs -->
+    <string name="nav_send">Text</string>
+    <string name="nav_files">Files</string>
+    <string name="nav_feed">Feed</string>
+    <string name="nav_account">Account</string>
+    <string name="sign_in_required_banner">Sign in or register an account in the Account tab to start sharing.</string>
+    <string name="go_to_account">Go to Account</string>
 </resources>

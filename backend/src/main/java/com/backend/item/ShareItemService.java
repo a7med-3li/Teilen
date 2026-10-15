@@ -52,7 +52,7 @@ public class ShareItemService {
                             BlobStore blobStore,
                             BlobLinks blobLinks,
                             PushService pushService,
-                            @Value("${teilen.default-ttl-seconds:1800}") long defaultTtlSeconds,
+                            @Value("${teilen.default-ttl-seconds:3600}") long defaultTtlSeconds,
                             @Value("${teilen.min-ttl-seconds:10}") long minTtlSeconds,
                             @Value("${teilen.max-ttl-seconds:86400}") long maxTtlSeconds) {
         this.repository = repository;

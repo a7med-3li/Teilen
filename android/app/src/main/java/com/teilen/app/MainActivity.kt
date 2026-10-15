@@ -13,6 +13,7 @@ import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.Switch
@@ -20,10 +21,13 @@ import android.widget.TextView
 import android.widget.Toast
 
 /**
- * The manual path: open the app, paste a text or pick a file, send.
+ * Non-scrollable tabbed interface: Send, Files, Feed, and Account.
  */
 class MainActivity : Activity() {
 
+    enum class Tab { SEND, FILES, FEED, ACCOUNT }
+
+    // Expiration options; 3600L (1 hour) is the default
     private val ttls = listOf(60L, 300L, 900L, 1800L, 3600L, 14400L)
 
     private lateinit var content: EditText
@@ -35,11 +39,33 @@ class MainActivity : Activity() {
     private lateinit var fileProgress: ProgressBar
     private lateinit var fileStatus: TextView
 
-    /** the account card, which decides whether anything below it can be used at all */
-    private lateinit var account: AccountCard
+    private lateinit var pageSend: View
+    private lateinit var pageFiles: View
+    private lateinit var pageFeed: View
+    private lateinit var pageAccount: View
 
-    /** the cards that need a token; hidden outright when there is none */
-    private lateinit var gated: List<View>
+    private lateinit var cardText: View
+    private lateinit var cardFiles: View
+    private lateinit var cardFeed: View
+    private lateinit var cardClipboard: View
+
+    private lateinit var gateBannerText: View
+    private lateinit var gateBannerFiles: View
+    private lateinit var gateBannerFeed: View
+
+    private lateinit var navTabSend: LinearLayout
+    private lateinit var navTabFiles: LinearLayout
+    private lateinit var navTabFeed: LinearLayout
+    private lateinit var navTabAccount: LinearLayout
+
+    private lateinit var navLabelSend: TextView
+    private lateinit var navLabelFiles: TextView
+    private lateinit var navLabelFeed: TextView
+    private lateinit var navLabelAccount: TextView
+
+    private lateinit var headerSessionBadge: TextView
+
+    private lateinit var account: AccountCard
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,13 +80,34 @@ class MainActivity : Activity() {
         fileProgress = findViewById(R.id.file_progress)
         fileStatus = findViewById(R.id.file_status)
 
-        // these cards only work with a token, so they come and go with the session
-        gated = listOf(
-            findViewById(R.id.card_feed),
-            findViewById(R.id.card_text),
-            findViewById(R.id.card_files),
-            findViewById(R.id.card_clipboard)
-        )
+        pageSend = findViewById(R.id.page_send)
+        pageFiles = findViewById(R.id.page_files)
+        pageFeed = findViewById(R.id.page_feed)
+        pageAccount = findViewById(R.id.page_account)
+
+        cardText = findViewById(R.id.card_text)
+        cardFiles = findViewById(R.id.card_files)
+        cardFeed = findViewById(R.id.card_feed)
+        cardClipboard = findViewById(R.id.card_clipboard)
+
+        gateBannerText = findViewById(R.id.gate_banner_text)
+        gateBannerFiles = findViewById(R.id.gate_banner_files)
+        gateBannerFeed = findViewById(R.id.gate_banner_feed)
+
+        navTabSend = findViewById(R.id.nav_tab_send)
+        navTabFiles = findViewById(R.id.nav_tab_files)
+        navTabFeed = findViewById(R.id.nav_tab_feed)
+        navTabAccount = findViewById(R.id.nav_tab_account)
+
+        navLabelSend = findViewById(R.id.nav_label_send)
+        navLabelFiles = findViewById(R.id.nav_label_files)
+        navLabelFeed = findViewById(R.id.nav_label_feed)
+        navLabelAccount = findViewById(R.id.nav_label_account)
+
+        headerSessionBadge = findViewById(R.id.header_session_badge)
+
+        setupNavigation()
+
         account = AccountCard(this) { applyGating() }
         account.render()
 
@@ -69,6 +116,9 @@ class MainActivity : Activity() {
             android.R.layout.simple_spinner_dropdown_item,
             ttls.map { Server.label(it) }
         )
+        // Default to 1 hour (3600L)
+        val defaultTtlIndex = ttls.indexOf(3600L).takeIf { it >= 0 } ?: 0
+        spinner.setSelection(defaultTtlIndex)
 
         server.setText(Server.get(this))
         status.text = getString(R.string.ready, Server.get(this))
@@ -91,7 +141,6 @@ class MainActivity : Activity() {
         }
 
         pickFile.setOnClickListener {
-            // ACTION_OPEN_DOCUMENT needs no storage permission and hands back a readable URI
             val open = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "*/*"
@@ -100,10 +149,41 @@ class MainActivity : Activity() {
             startActivityForResult(open, REQ_OPEN_DOCUMENT)
         }
 
+        findViewById<Button>(R.id.go_to_account_text).setOnClickListener { selectTab(Tab.ACCOUNT) }
+        findViewById<Button>(R.id.go_to_account_files).setOnClickListener { selectTab(Tab.ACCOUNT) }
+        findViewById<Button>(R.id.go_to_account_feed).setOnClickListener { selectTab(Tab.ACCOUNT) }
+
         setupClipboardWatch()
 
-        // arriving from the share sheet: the text is handed over rather than sent
         takeHandedOverText(intent)
+    }
+
+    private fun setupNavigation() {
+        navTabSend.setOnClickListener { selectTab(Tab.SEND) }
+        navTabFiles.setOnClickListener { selectTab(Tab.FILES) }
+        navTabFeed.setOnClickListener { selectTab(Tab.FEED) }
+        navTabAccount.setOnClickListener { selectTab(Tab.ACCOUNT) }
+
+        selectTab(Tab.SEND)
+    }
+
+    fun selectTab(tab: Tab) {
+        pageSend.visibility = if (tab == Tab.SEND) View.VISIBLE else View.GONE
+        pageFiles.visibility = if (tab == Tab.FILES) View.VISIBLE else View.GONE
+        pageFeed.visibility = if (tab == Tab.FEED) View.VISIBLE else View.GONE
+        pageAccount.visibility = if (tab == Tab.ACCOUNT) View.VISIBLE else View.GONE
+
+        updateTabItem(navTabSend, navLabelSend, tab == Tab.SEND)
+        updateTabItem(navTabFiles, navLabelFiles, tab == Tab.FILES)
+        updateTabItem(navTabFeed, navLabelFeed, tab == Tab.FEED)
+        updateTabItem(navTabAccount, navLabelAccount, tab == Tab.ACCOUNT)
+    }
+
+    private fun updateTabItem(container: LinearLayout, label: TextView, active: Boolean) {
+        label.setTextColor(
+            getColor(if (active) R.color.nav_item_selected else R.color.nav_item_unselected)
+        )
+        label.setTypeface(null, if (active) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -112,21 +192,14 @@ class MainActivity : Activity() {
         if (intent.getBooleanExtra(EXTRA_STOP_WATCHING, false)) {
             setWatching(false)
         }
-        // singleTop means this screen is reused rather than recreated, so the share sheet's
-        // handover has to be picked up here too — otherwise it is silently dropped
         takeHandedOverText(intent)
     }
 
-    /**
-     * Puts text somebody shared into the box without sending it, and says so.
-     *
-     * This is what a share does when the phone is not paired yet: the content lands here, the
-     * account card is what the user is looking at, and nothing is uploaded until they press send.
-     */
     private fun takeHandedOverText(intent: Intent?) {
         val handedOver = intent?.getStringExtra(EXTRA_TEXT) ?: return
         intent.removeExtra(EXTRA_TEXT)
         content.setText(handedOver)
+        selectTab(Tab.SEND)
         if (!Session.isPaired(this)) {
             status.text = getString(R.string.pair_then_send)
         }
@@ -142,7 +215,6 @@ class MainActivity : Activity() {
         if (picked.isEmpty()) {
             return
         }
-        // hold on to the read grant for as long as this screen is around
         picked.forEach { uri ->
             runCatching {
                 contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -201,7 +273,6 @@ class MainActivity : Activity() {
             onDone = { outcome ->
                 setBusy(false)
                 fileProgress.visibility = View.GONE
-                // a batch can fail for one reason, and if that reason is the session, re-render
                 if (outcome.lastError == TeilenApi.UNPAIRED_MESSAGE) {
                     Session.clear(this)
                     account.render()
@@ -276,7 +347,6 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_NOTIFICATIONS && grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
-            // without notifications there is no button to tap, so the feature is pointless
             setWatching(false)
             Toast.makeText(this, R.string.notifications_needed, Toast.LENGTH_LONG).show()
         }
@@ -301,7 +371,6 @@ class MainActivity : Activity() {
                     status.text = getString(R.string.sent, message)
                     Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
                 }
-                // the token was revoked or expired somewhere else: drop it and show the card again
                 message == TeilenApi.UNPAIRED_MESSAGE -> {
                     Session.clear(this)
                     account.render()
@@ -321,31 +390,32 @@ class MainActivity : Activity() {
         pickFile.isEnabled = !busy
     }
 
-    /**
-     * No token, no sending — so the text, file and clipboard cards are hidden rather than left
-     * there to fail. The server card stays visible throughout, since it is what makes pairing work.
-     */
     private fun applyGating() {
         val paired = Session.isPaired(this)
-        gated.forEach { it.visibility = if (paired) View.VISIBLE else View.GONE }
-        if (!paired) {
-            return
-        }
-        // paired now, so say the only thing left: whatever was brought in is waiting to be sent
-        status.text = if (content.text.isNullOrBlank()) {
-            getString(R.string.ready, Server.get(this))
-        } else {
-            getString(R.string.sent_when_paired)
-        }
-    }
 
-    /** the one place a token is needed, checked where the intent came in rather than at the wire */
-    private fun requireSession(): Boolean {
-        if (Session.isPaired(this)) {
-            return true
+        cardText.visibility = if (paired) View.VISIBLE else View.GONE
+        gateBannerText.visibility = if (paired) View.GONE else View.VISIBLE
+
+        cardFiles.visibility = if (paired) View.VISIBLE else View.GONE
+        gateBannerFiles.visibility = if (paired) View.GONE else View.VISIBLE
+
+        cardFeed.visibility = if (paired) View.VISIBLE else View.GONE
+        gateBannerFeed.visibility = if (paired) View.GONE else View.VISIBLE
+
+        cardClipboard.visibility = if (paired) View.VISIBLE else View.GONE
+
+        headerSessionBadge.visibility = if (paired) View.VISIBLE else View.GONE
+        if (paired) {
+            headerSessionBadge.text = Session.phone(this) ?: getString(R.string.signed_in)
         }
-        Toast.makeText(this, R.string.pair_before_sharing, Toast.LENGTH_LONG).show()
-        return false
+
+        if (paired) {
+            status.text = if (content.text.isNullOrBlank()) {
+                getString(R.string.ready, Server.get(this))
+            } else {
+                getString(R.string.sent_when_paired)
+            }
+        }
     }
 
     companion object {

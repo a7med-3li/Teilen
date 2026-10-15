@@ -25,4 +25,10 @@
     <color name="danger">#B42318</color>
     <color name="ripple">#1F000000</color>
     <color name="ripple_soft">#1F0F766E</color>
+
+    <!-- navigation -->
+    <color name="nav_bg">#FFFFFF</color>
+    <color name="nav_item_selected">#0F766E</color>
+    <color name="nav_item_unselected">#63707E</color>
+    <color name="nav_indicator">#E6F4F2</color>
 </resources>

@@ -93,6 +93,7 @@ object TeilenApi {
     fun createAccount(
         baseUrl: String,
         phone: String,
+        password: String,
         displayName: String,
         deviceName: String,
         onResult: (CreateResult) -> Unit
@@ -105,8 +106,10 @@ object TeilenApi {
                     token = null,
                     JSONObject()
                         .put("phone", phone)
+                        .put("password", password)
                         .put("displayName", displayName)
                         .put("deviceName", deviceName)
+                        .put("deviceType", "PHONE")
                 )
                 when {
                     reply.ok -> CreateResult.Created(signedInFrom(reply))
@@ -126,10 +129,52 @@ object TeilenApi {
     sealed class CreateResult {
         data class Created(val signedIn: SignedIn) : CreateResult()
 
-        /** the number already has an account, so this device has to be paired from another one */
+        /** the number already has an account, so this device has to be paired or logged into */
         data class Taken(val message: String) : CreateResult()
 
         data class Failed(val message: String) : CreateResult()
+    }
+
+    /**
+     * Logs into an existing account with phone number and password.
+     */
+    fun login(
+        baseUrl: String,
+        phone: String,
+        password: String,
+        deviceName: String,
+        onResult: (LoginResult) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val reply = postBlocking(
+                    baseUrl,
+                    "/api/auth/login",
+                    token = null,
+                    JSONObject()
+                        .put("phone", phone)
+                        .put("password", password)
+                        .put("deviceName", deviceName)
+                        .put("deviceType", "PHONE")
+                )
+                when {
+                    reply.ok -> LoginResult.Success(signedInFrom(reply))
+                    reply.status == 401 -> LoginResult.InvalidCredentials(reply.message)
+                    else -> LoginResult.Failed(reply.message)
+                }
+            } catch (e: IOException) {
+                LoginResult.Failed(unreachable(baseUrl, e))
+            } catch (e: Exception) {
+                LoginResult.Failed(e.message ?: e.javaClass.simpleName)
+            }
+            main.post { onResult(result) }
+        }.apply { name = "teilen-login" }.start()
+    }
+
+    sealed class LoginResult {
+        data class Success(val signedIn: SignedIn) : LoginResult()
+        data class InvalidCredentials(val message: String) : LoginResult()
+        data class Failed(val message: String) : LoginResult()
     }
 
     /**

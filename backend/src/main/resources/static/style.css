@@ -599,3 +599,80 @@ button.danger:hover {
     border-color: var(--danger);
     color: var(--danger);
 }
+
+.auth-toggle {
+    display: flex;
+    gap: 8px;
+    background: var(--bg);
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    width: 100%;
+}
+
+.auth-btn {
+    flex: 1;
+    padding: 8px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.auth-btn.active {
+    background: var(--card);
+    color: var(--fg);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+#login-container {
+    width: 100%;
+}
+
+#login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+#login-form .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+}
+
+#login-form label {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+#login-form input {
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+}
+
+#login-form .submit-btn {
+    margin-top: 8px;
+    padding: 10px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+#login-form .submit-btn:hover {
+    filter: brightness(1.08);
+}

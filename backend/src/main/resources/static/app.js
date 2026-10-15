@@ -63,6 +63,15 @@
     const pairState = el('pair-state');
     const pairRetry = el('pair-retry');
 
+    const authTabLogin = el('auth-tab-login');
+    const authTabPair = el('auth-tab-pair');
+    const loginContainer = el('login-container');
+    const pairContainer = el('pair-container');
+    const loginForm = el('login-form');
+    const loginPhone = el('login-phone');
+    const loginPassword = el('login-password');
+    const loginStatus = el('login-status');
+
     const deviceSection = el('devices');
     const accountBtn = el('account');
     const accountPhone = el('account-phone');
@@ -192,7 +201,50 @@
         statusEl.className = 'status ' + cls;
     }
 
-    // ---------- pairing ----------
+    // ---------- pairing & login ----------
+    authTabLogin.addEventListener('click', () => {
+        authTabLogin.classList.add('active');
+        authTabPair.classList.remove('active');
+        loginContainer.hidden = false;
+        pairContainer.hidden = true;
+    });
+
+    authTabPair.addEventListener('click', () => {
+        authTabPair.classList.add('active');
+        authTabLogin.classList.remove('active');
+        loginContainer.hidden = true;
+        pairContainer.hidden = false;
+        startPairing();
+    });
+
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const phone = loginPhone.value.trim();
+        const password = loginPassword.value;
+        if (!phone || !password) return;
+        loginStatus.hidden = false;
+        loginStatus.textContent = 'signing in…';
+        try {
+            const res = await postJson(AUTH + '/login', {
+                phone,
+                password,
+                deviceName: describeBrowser(),
+                deviceType: 'WEB'
+            });
+            if (res.ok) {
+                const session = await res.json();
+                token.set(session.token);
+                loginStatus.hidden = true;
+                loginPhone.value = '';
+                loginPassword.value = '';
+                showFeed();
+            } else {
+                loginStatus.textContent = await why(res);
+            }
+        } catch (err) {
+            loginStatus.textContent = err.message;
+        }
+    });
 
     function showPairing() {
         pairSection.hidden = false;
@@ -203,7 +255,10 @@
         stopSocket();
         stopPolling();
         stopLan();
-        startPairing();
+        authTabLogin.classList.add('active');
+        authTabPair.classList.remove('active');
+        loginContainer.hidden = false;
+        pairContainer.hidden = true;
     }
 
     function showFeed() {

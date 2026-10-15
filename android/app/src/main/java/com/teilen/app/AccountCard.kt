@@ -7,24 +7,21 @@ import android.widget.EditText
 import android.widget.TextView
 
 /**
- * The account card on the main screen, and the only thing that changes what the rest of the app can
- * do: without a token, sending is hidden outright rather than left to fail.
- *
- * Three shapes, one card:
- *
- *  - **signed out** — type a number and claim it, or pair this phone from a device you already have
- *  - **waiting** — a code to type into another device, while this one polls for its token
- *  - **paired** — which account this is, and a way out
+ * The account management component: supports logging in with phone & password,
+ * creating an account, pairing via code, and managing active session.
  */
 class AccountCard(
     private val activity: Activity,
     private val onPaired: () -> Unit
 ) {
 
+    enum class AuthMode { LOGIN, REGISTER }
+
     private val createBox: View = activity.findViewById(R.id.account_create)
     private val pairBox: View = activity.findViewById(R.id.account_pair)
     private val who: TextView = activity.findViewById(R.id.account_who)
     private val phone: EditText = activity.findViewById(R.id.phone)
+    private val password: EditText = activity.findViewById(R.id.password)
     private val displayName: EditText = activity.findViewById(R.id.display_name)
     private val createButton: Button = activity.findViewById(R.id.create_account)
     private val pairStart: Button = activity.findViewById(R.id.account_pair_start)
@@ -34,6 +31,12 @@ class AccountCard(
     private val pairCancel: Button = activity.findViewById(R.id.pair_cancel)
     private val status: TextView = activity.findViewById(R.id.account_status)
 
+    private val authSwitchLogin: Button = activity.findViewById(R.id.auth_switch_login)
+    private val authSwitchRegister: Button = activity.findViewById(R.id.auth_switch_register)
+    private val authIntro: TextView = activity.findViewById(R.id.auth_intro)
+
+    private var mode = AuthMode.LOGIN
+
     /** the name the backend will list this device under in the account's device list */
     private val deviceName: String =
         listOf(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
@@ -41,15 +44,48 @@ class AccountCard(
             .joinToString(" ")
             .ifBlank { "this phone" }
 
-    /** set while a create request is in flight, so the button cannot be pressed twice */
     private var busy = false
     private var pairing = false
 
     init {
-        createButton.setOnClickListener { createAccount() }
+        authSwitchLogin.setOnClickListener { setAuthMode(AuthMode.LOGIN) }
+        authSwitchRegister.setOnClickListener { setAuthMode(AuthMode.REGISTER) }
+        createButton.setOnClickListener { submitAuth() }
         pairStart.setOnClickListener { startPairing() }
         pairCancel.setOnClickListener { pairing = false; render() }
         signOut.setOnClickListener { signOut() }
+        updateModeUI()
+    }
+
+    private fun setAuthMode(newMode: AuthMode) {
+        mode = newMode
+        updateModeUI()
+        status.visibility = View.GONE
+    }
+
+    private fun updateModeUI() {
+        val isLogin = mode == AuthMode.LOGIN
+        authSwitchLogin.setBackgroundResource(
+            if (isLogin) R.drawable.bg_segmented_selected else android.R.color.transparent
+        )
+        authSwitchLogin.setTextColor(
+            activity.getColor(if (isLogin) R.color.accent else R.color.text_secondary)
+        )
+
+        authSwitchRegister.setBackgroundResource(
+            if (!isLogin) R.drawable.bg_segmented_selected else android.R.color.transparent
+        )
+        authSwitchRegister.setTextColor(
+            activity.getColor(if (!isLogin) R.color.accent else R.color.text_secondary)
+        )
+
+        authIntro.text = activity.getString(
+            if (isLogin) R.string.account_mode_login_hint else R.string.account_mode_register_hint
+        )
+        displayName.visibility = if (isLogin) View.GONE else View.VISIBLE
+        createButton.text = activity.getString(
+            if (isLogin) R.string.login_button else R.string.create_account
+        )
     }
 
     /** shows whichever shape matches the session, and re-enables the rest of the app to match */
@@ -72,24 +108,76 @@ class AccountCard(
         pairStart.visibility = View.VISIBLE
         signOut.visibility = View.GONE
 
-        // the last number used is a good guess for this one; it is never sent without a tap
+        // the last number used is a good guess for this one
         val remembered = Session.phone(activity)
         if (remembered != null && phone.text.isNullOrBlank()) {
             phone.setText(remembered)
         }
     }
 
-    private fun createAccount() {
-        if (busy) {
-            return
-        }
+    private fun submitAuth() {
+        if (busy) return
         val number = phone.text.toString().trim()
+        val pass = password.text.toString()
+
         if (number.isBlank()) {
             say(activity.getString(R.string.phone_needed), isError = true)
             return
         }
-        val url = saveServerUrl()
+        if (pass.isBlank()) {
+            say(activity.getString(R.string.password_needed), isError = true)
+            return
+        }
+        if (pass.length < 6) {
+            say(activity.getString(R.string.password_short), isError = true)
+            return
+        }
 
+        if (mode == AuthMode.LOGIN) {
+            login(number, pass)
+        } else {
+            createAccount(number, pass)
+        }
+    }
+
+    private fun login(number: String, pass: String) {
+        val url = saveServerUrl()
+        busy = true
+        createButton.isEnabled = false
+        say(activity.getString(R.string.logging_in), isError = false)
+
+        TeilenApi.login(
+            baseUrl = url,
+            phone = number,
+            password = pass,
+            deviceName = deviceName
+        ) { result ->
+            busy = false
+            createButton.isEnabled = true
+            when (result) {
+                is TeilenApi.LoginResult.Success -> {
+                    Session.save(
+                        activity,
+                        result.signedIn.token,
+                        result.signedIn.phone,
+                        result.signedIn.deviceName
+                    )
+                    status.visibility = View.GONE
+                    password.text.clear()
+                    render()
+                }
+                is TeilenApi.LoginResult.InvalidCredentials -> {
+                    say(activity.getString(R.string.login_failed, result.message), isError = true)
+                }
+                is TeilenApi.LoginResult.Failed -> {
+                    say(result.message, isError = true)
+                }
+            }
+        }
+    }
+
+    private fun createAccount(number: String, pass: String) {
+        val url = saveServerUrl()
         busy = true
         createButton.isEnabled = false
         say(activity.getString(R.string.account_creating), isError = false)
@@ -97,6 +185,7 @@ class AccountCard(
         TeilenApi.createAccount(
             baseUrl = url,
             phone = number,
+            password = pass,
             displayName = displayName.text.toString().trim(),
             deviceName = deviceName
         ) { result ->
@@ -104,17 +193,20 @@ class AccountCard(
             createButton.isEnabled = true
             when (result) {
                 is TeilenApi.CreateResult.Created -> {
-                    Session.save(activity, result.signedIn.token, result.signedIn.phone,
-                        result.signedIn.deviceName)
+                    Session.save(
+                        activity,
+                        result.signedIn.token,
+                        result.signedIn.phone,
+                        result.signedIn.deviceName
+                    )
                     status.visibility = View.GONE
-                    phone.text.clear()
+                    password.text.clear()
                     displayName.text.clear()
                     render()
                 }
-                // somebody already owns this number: the way in from here is an approval, not a claim
                 is TeilenApi.CreateResult.Taken -> {
-                    say(result.message, isError = true)
-                    startPairing()
+                    setAuthMode(AuthMode.LOGIN)
+                    say(result.message + " — Enter your password to sign in.", isError = true)
                 }
                 is TeilenApi.CreateResult.Failed -> say(result.message, isError = true)
             }
@@ -128,7 +220,6 @@ class AccountCard(
         render()
         val url = saveServerUrl()
 
-        // offer a throwaway key so the approving device can hand back the account key sealed to it
         val pairingKey = PairingCrypto.newPairingKey()
         var shownCode: String? = null
 
@@ -137,9 +228,7 @@ class AccountCard(
             deviceName,
             PairingCrypto.b64(pairingKey.publicKey),
             onOffer = { offer ->
-                if (!pairing) {
-                    return@pairThisDevice
-                }
+                if (!pairing) return@pairThisDevice
                 if (offer == null) {
                     pairing = false
                     say(activity.getString(R.string.pair_failed), isError = true)
@@ -151,14 +240,11 @@ class AccountCard(
                 pairStatus.text = activity.getString(R.string.pair_waiting)
             },
             onPolled = { poll ->
-                if (!pairing) {
-                    return@pairThisDevice
-                }
+                if (!pairing) return@pairThisDevice
                 when (poll) {
-                    is TeilenApi.PairingPoll.Waiting -> Unit // nothing to say; the code is still up
+                    is TeilenApi.PairingPoll.Waiting -> Unit
                     is TeilenApi.PairingPoll.Paired -> {
                         pairing = false
-                        // open the approver's sealed account key; pairing stands even if this fails
                         val packageJson = poll.keyPackage
                         val code = shownCode
                         if (packageJson != null && code != null) {
@@ -167,7 +253,7 @@ class AccountCard(
                                     activity, packageJson, pairingKey.secretKey, code
                                 )
                             } catch (e: Exception) {
-                                // paired, but with no account key to seal content under yet
+                                // paired without key package
                             }
                         }
                         Session.save(
@@ -176,7 +262,6 @@ class AccountCard(
                         )
                         render()
                     }
-                    // expired, denied, or a code the server has never heard of: the loop has stopped
                     is TeilenApi.PairingPoll.Failed -> {
                         pairing = false
                         say(poll.message, isError = true)
@@ -210,13 +295,13 @@ class AccountCard(
 
     private fun signOut() {
         Session.clear(activity)
+        password.text.clear()
         status.visibility = View.GONE
         render()
     }
 
     // ----------------------------------------------------------------- shared
 
-    /** the server card sits lower down the screen; whatever it says counts as the answer here too */
     private fun saveServerUrl(): String {
         val field: EditText = activity.findViewById(R.id.server)
         val url = Server.normalize(field.text.toString())
