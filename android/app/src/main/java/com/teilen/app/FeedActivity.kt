@@ -17,6 +17,10 @@ import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 
 /**
  * Everything this account has shared, from every device, newest first.
@@ -54,11 +58,44 @@ class FeedActivity : Activity() {
             return
         }
 
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_feed)
+
+        val rootView = findViewById<View>(R.id.feed_root)
+        val headerView = findViewById<View>(R.id.feed_header)
         list = findViewById(R.id.feed_list)
         empty = findViewById(R.id.feed_empty)
         spinner = findViewById(R.id.feed_spinner)
         subtitle = findViewById(R.id.feed_subtitle)
+
+        val initialHeaderTop = headerView.paddingTop
+        val initialHeaderBottom = headerView.paddingBottom
+        val initialHeaderLeft = headerView.paddingLeft
+        val initialHeaderRight = headerView.paddingRight
+
+        val initialListBottom = list.paddingBottom
+        val initialListLeft = list.paddingLeft
+        val initialListRight = list.paddingRight
+        val initialListTop = list.paddingTop
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, windowInsets ->
+            val systemBars = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            headerView.updatePadding(
+                top = initialHeaderTop + systemBars.top,
+                left = initialHeaderLeft + systemBars.left,
+                right = initialHeaderRight + systemBars.right,
+                bottom = initialHeaderBottom
+            )
+            list.updatePadding(
+                bottom = initialListBottom + systemBars.bottom,
+                left = initialListLeft + systemBars.left,
+                right = initialListRight + systemBars.right,
+                top = initialListTop
+            )
+            windowInsets
+        }
 
         adapter = Rows()
         list.adapter = adapter

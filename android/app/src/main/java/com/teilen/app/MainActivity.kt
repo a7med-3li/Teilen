@@ -36,6 +36,10 @@ import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 
 /**
  * Modern non-scrollable 4-tab interface: Send, Files, Feed, and Account.
@@ -143,8 +147,10 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
 
+        setupWindowInsets()
         bindViews()
         setupTtlPills()
         setupNavigation()
@@ -159,6 +165,62 @@ class MainActivity : Activity() {
         account.render()
 
         takeHandedOverText(intent)
+    }
+
+    private fun setupWindowInsets() {
+        val rootView = findViewById<View>(R.id.main_root)
+        val topBarView = findViewById<View>(R.id.header_bar)
+        val contentContainer = findViewById<View>(R.id.page_container)
+        val bottomTabContainer = findViewById<View>(R.id.nav_bar)
+
+        val initialTopBarTop = topBarView.paddingTop
+        val initialTopBarBottom = topBarView.paddingBottom
+        val initialTopBarLeft = topBarView.paddingLeft
+        val initialTopBarRight = topBarView.paddingRight
+
+        val initialBottomTabTop = bottomTabContainer.paddingTop
+        val initialBottomTabBottom = bottomTabContainer.paddingBottom
+        val initialBottomTabLeft = bottomTabContainer.paddingLeft
+        val initialBottomTabRight = bottomTabContainer.paddingRight
+
+        val initialContentBottom = contentContainer.paddingBottom
+        val initialContentLeft = contentContainer.paddingLeft
+        val initialContentRight = contentContainer.paddingRight
+        val initialContentTop = contentContainer.paddingTop
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, windowInsets ->
+            val systemBars = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val imeInsets = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
+
+            // 1. Pad the top header/toolbar by the status bar height
+            topBarView.updatePadding(
+                top = initialTopBarTop + systemBars.top,
+                left = initialTopBarLeft + systemBars.left,
+                right = initialTopBarRight + systemBars.right,
+                bottom = initialTopBarBottom
+            )
+
+            // 2. Dynamically pad the bottom tab bar so 3-button nav never covers it
+            bottomTabContainer.updatePadding(
+                bottom = initialBottomTabBottom + systemBars.bottom,
+                left = initialBottomTabLeft + systemBars.left,
+                right = initialBottomTabRight + systemBars.right,
+                top = initialBottomTabTop
+            )
+
+            // 3. Ensure scrollable content or the Send composer adjusts smoothly when the keyboard (IME) opens
+            val imeOffset = maxOf(0, imeInsets.bottom - systemBars.bottom)
+            contentContainer.updatePadding(
+                bottom = initialContentBottom + imeOffset,
+                left = initialContentLeft + systemBars.left,
+                right = initialContentRight + systemBars.right,
+                top = initialContentTop
+            )
+
+            windowInsets
+        }
     }
 
     override fun onResume() {

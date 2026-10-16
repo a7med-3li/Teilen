@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg"
@@ -7,6 +8,7 @@
 
     <!-- Top Header Bar -->
     <LinearLayout
+        android:id="@+id/header_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_header"
@@ -83,11 +85,18 @@
         android:paddingBottom="8dp">
 
         <!-- ==================== TAB 1: SEND ==================== -->
-        <LinearLayout
+        <ScrollView
             android:id="@+id/page_send"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical">
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
             <!-- Card when Paired -->
             <LinearLayout
@@ -273,16 +282,24 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:text="@string/go_to_account" />
+                </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
+        </ScrollView>
 
         <!-- ==================== TAB 2: FILES ==================== -->
-        <LinearLayout
+        <ScrollView
             android:id="@+id/page_files"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:scrollbars="none"
             android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
             <LinearLayout
                 android:id="@+id/card_files"
@@ -424,6 +441,7 @@
                     android:text="@string/go_to_account" />
             </LinearLayout>
         </LinearLayout>
+    </ScrollView>
 
         <!-- ==================== TAB 3: FEED ==================== -->
         <LinearLayout
@@ -594,6 +612,7 @@
             android:id="@+id/page_account"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:clipToPadding="false"
             android:fillViewport="true"
             android:scrollbars="none"
             android:visibility="gone">
@@ -907,14 +926,15 @@
     <LinearLayout
         android:id="@+id/nav_bar"
         android:layout_width="match_parent"
-        android:layout_height="60dp"
+        android:layout_height="wrap_content"
+        android:minHeight="60dp"
         android:background="@drawable/bg_nav_bar"
         android:orientation="horizontal">
 
         <LinearLayout
             android:id="@+id/nav_tab_send"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="60dp"
             android:layout_weight="1"
             android:background="?android:attr/selectableItemBackground"
             android:clickable="true"
@@ -942,7 +962,7 @@
         <LinearLayout
             android:id="@+id/nav_tab_files"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="60dp"
             android:layout_weight="1"
             android:background="?android:attr/selectableItemBackground"
             android:clickable="true"
@@ -969,7 +989,7 @@
         <LinearLayout
             android:id="@+id/nav_tab_feed"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="60dp"
             android:layout_weight="1"
             android:background="?android:attr/selectableItemBackground"
             android:clickable="true"
@@ -996,7 +1016,7 @@
         <LinearLayout
             android:id="@+id/nav_tab_account"
             android:layout_width="0dp"
-            android:layout_height="match_parent"
+            android:layout_height="60dp"
             android:layout_weight="1"
             android:background="?android:attr/selectableItemBackground"
             android:clickable="true"

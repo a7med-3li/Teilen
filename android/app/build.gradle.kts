@@ -74,6 +74,7 @@ kotlin {
 // on Android. Everything else is still the platform: EditText and HttpURLConnection — plus the
 // libwebrtc stack and an OkHttp WebSocket for the direct LAN fast-path (Phase 4).
 dependencies {
+    implementation("androidx.core:core-ktx:1.15.0")
     implementation("com.goterl:lazysodium-android:5.1.0@aar")
     implementation("net.java.dev.jna:jna:5.13.0@aar")
     // official libwebrtc Android build (the org.webrtc:google-webrtc artifact died with JCenter):

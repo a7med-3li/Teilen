@@ -780,9 +780,13 @@
     }
 
     function refresh() {
-        countEl.textContent = cards.size === 1 ? '1 item' : cards.size + ' items';
-        empty.hidden = cards.size > 0;
-        clearBtn.hidden = cards.size === 0;
+        const count = cards.size;
+        countEl.textContent = count === 1 ? '1 active item' : count + ' active items';
+        empty.hidden = count > 0;
+        clearBtn.hidden = count === 0;
+        if (count === 0 && typeof resetClearBtn === 'function') {
+            resetClearBtn();
+        }
     }
 
     function remaining(item) {
@@ -1109,21 +1113,48 @@
         }
     });
 
-    // ---------- delete all button ----------
+    // ---------- delete all button with two-step inline confirmation ----------
+
+    let clearConfirming = false;
+    let clearTimer = null;
+
+    function resetClearBtn() {
+        clearConfirming = false;
+        clearTimeout(clearTimer);
+        clearBtn.classList.remove('confirming');
+        clearBtn.innerHTML = '<span class="btn-icon">🗑️</span> Delete All';
+    }
 
     clearBtn.addEventListener('click', async () => {
         if (cards.size === 0) return;
-        if (!confirm(`Delete all ${cards.size} items?`)) return;
+
+        // Step 1: Prompt confirmation
+        if (!clearConfirming) {
+            clearConfirming = true;
+            clearBtn.classList.add('confirming');
+            clearBtn.textContent = 'Confirm Delete All?';
+            clearTimer = setTimeout(resetClearBtn, 3000);
+            return;
+        }
+
+        // Step 2: Confirmed - execute batch deletion
+        clearTimeout(clearTimer);
+        resetClearBtn();
+        clearBtn.disabled = true;
+
         const toDelete = [...cards.keys()];
-        toast(`Deleting all ${toDelete.length} items…`, 'info');
+        // Animate all cards out simultaneously
+        toDelete.forEach((id) => remove(id));
+
+        toast('All ephemeral items purged', 'info');
+
         await Promise.all(toDelete.map((id) => {
             if (id.startsWith('lan-')) {
-                remove(id);
                 return Promise.resolve();
             }
-            return api(API + '/' + id, {method: 'DELETE'}).then(() => remove(id)).catch(() => {});
+            return api(API + '/' + id, {method: 'DELETE'}).catch(() => {});
         }));
-        toast('All items cleared', 'success');
+        clearBtn.disabled = false;
     });
 
     // ---------- start ----------
