@@ -1,12 +1,16 @@
-/* Teilen feed: pair this browser with the phone app, then load once and stay live over a websocket. */
+/* ==========================================================================
+   Teilen Web Client: Vanilla ES6+ SPA
+   Zero-knowledge, dual-path (Direct LAN WebRTC + Ephemeral Cloud Relay)
+   ========================================================================== */
 (() => {
     'use strict';
 
     const API = '/api/items';
     const AUTH = '/api/auth';
     const SVG_NS = 'http://www.w3.org/2000/svg';
+    const MAX_BYTES = 30 * 1024 * 1024; // 30 MB ceiling
 
-    // ---------- the token ----------
+    // ---------- the token & storage ----------
 
     /** localStorage throws in a private window; the feed must not care */
     function read(key) {
@@ -21,7 +25,7 @@
         try {
             localStorage.setItem(key, value);
         } catch (e) {
-            /* the session lasts until this tab closes, then */
+            /* the session lasts until this tab closes */
         }
     }
 
@@ -83,24 +87,45 @@
 
     const app = el('app');
     const foot = el('foot');
+    const dropVeil = el('drop-veil');
 
-    /** id -> {item, element} */
+    const upload = el('upload');
+    const uploadInput = el('upload-input');
+    const uploadLabel = el('upload-label');
+    const uploadTtl = el('upload-ttl');
+    const uploadSend = el('upload-send');
+    const uploadStatus = el('upload-status');
+
+    /** id -> {item, element, ttl, ring} */
     const cards = new Map();
     let socket = null;
     let retryDelay = 1000;
     let pollTimer = null;
     let pairTimer = null;
-    // the current pairing attempt's throwaway key and the code shown, both needed to receive the
-    // account key the approving device seals for this browser
+
+    // the current pairing attempt's throwaway key and the code shown
     let pairKey = null;
     let pairUserCode = null;
 
+    // ---------- toast notifications ----------
+
+    function toast(message, type = 'info', duration = 3500) {
+        const container = el('toast-container');
+        if (!container) return;
+        const t = document.createElement('div');
+        t.className = 'toast ' + type;
+        t.textContent = message;
+        container.appendChild(t);
+        requestAnimationFrame(() => t.classList.add('show'));
+        setTimeout(() => {
+            t.classList.remove('show');
+            t.addEventListener('transitionend', () => t.remove(), {once: true});
+            setTimeout(() => t.remove(), 400);
+        }, duration);
+    }
+
     // ---------- transport ----------
 
-    /**
-     * Every call goes through here: the token is the credential, so no request may skip it.
-     * A refusal means the token is spent, so it is thrown away and pairing starts over.
-     */
     async function api(path, options) {
         const settings = Object.assign({}, options);
         const headers = Object.assign({}, settings.headers);
@@ -118,7 +143,6 @@
         return response;
     }
 
-    /** the server's own wording for a failure, which is always more useful than a status code */
     async function why(response) {
         const body = await response.json().catch(() => ({}));
         return body.message || 'HTTP ' + response.status;
@@ -132,14 +156,8 @@
         });
     }
 
-    // ---------- the arrival signal ----------
+    // ---------- push notifications ----------
 
-    /**
-     * Ask the browser to wake this account when something lands, even with the tab closed. The
-     * server only ever sends a content-free "something arrived" signal, so subscribing gives away
-     * nothing. Best effort throughout: a browser without push, or a server without VAPID keys,
-     * should change nothing else.
-     */
     async function enablePush() {
         if (!('serviceWorker' in navigator) || !('PushManager' in window) || !token.get()) {
             return;
@@ -147,13 +165,9 @@
         try {
             const registration = await navigator.serviceWorker.register('/sw.js');
             const response = await api('/api/push/public-key');
-            if (!response.ok) {
-                return;
-            }
+            if (!response.ok) return;
             const {publicKey} = await response.json();
-            if (!publicKey) {
-                return;
-            }
+            if (!publicKey) return;
             const existing = await registration.pushManager.getSubscription();
             const subscription = existing || await registration.pushManager.subscribe({
                 userVisibleOnly: true,
@@ -169,7 +183,6 @@
         }
     }
 
-    /** the standard base64url → Uint8Array, which is what applicationServerKey wants */
     function urlBase64ToUint8Array(base64String) {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
         const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -181,12 +194,15 @@
         return bytes;
     }
 
-    // ---------- the direct LAN fast-path ----------
+    // ---------- direct LAN fast-path ----------
 
-    /** listen for a paired phone offering a file straight over WebRTC */
     function startLan() {
         if (window.TeilenLan && token.get()) {
-            TeilenLan.start(token.get(), upsert);
+            TeilenLan.start(token.get(), (item, isNew) => {
+                item.isLan = true;
+                upsert(item, isNew);
+                toast('⚡ Received file via Direct LAN', 'success');
+            });
         }
     }
 
@@ -197,11 +213,17 @@
     }
 
     function setStatus(text, cls) {
-        statusEl.textContent = text;
+        const textEl = el('status-text');
+        if (textEl) {
+            textEl.textContent = text;
+        } else {
+            statusEl.textContent = text;
+        }
         statusEl.className = 'status ' + cls;
     }
 
-    // ---------- pairing & login ----------
+    // ---------- pairing & login (zero page reloads) ----------
+
     authTabLogin.addEventListener('click', () => {
         authTabLogin.classList.add('active');
         authTabPair.classList.remove('active');
@@ -237,6 +259,7 @@
                 loginStatus.hidden = true;
                 loginPhone.value = '';
                 loginPassword.value = '';
+                toast('✓ Signed in successfully', 'success');
                 showFeed();
             } else {
                 loginStatus.textContent = await why(res);
@@ -266,6 +289,7 @@
         app.hidden = false;
         foot.hidden = false;
         accountBtn.hidden = false;
+        deviceSection.hidden = true;
         setStatus('connecting…', 'offline');
         load().then(connect);
         loadAccount();
@@ -280,8 +304,6 @@
         pairState.textContent = 'asking for a code…';
         qr.removeAttribute('src');
 
-        // offer a throwaway key so the approving device can hand back the account key sealed to it;
-        // if the crypto layer is unavailable pairing still works, this browser just stays keyless
         pairKey = null;
         pairUserCode = null;
         let publicKey = null;
@@ -331,8 +353,7 @@
             }
             const claim = await response.json();
             token.set(claim.token);
-            // the approving device may have sealed the account key for the key we offered; keep it
-            // before showing the feed. A failure here must not cost the user their pairing.
+
             if (claim.keyPackage && pairKey && pairUserCode) {
                 try {
                     await TeilenCrypto.openFromApprover(claim.keyPackage, pairKey.privateKey, pairUserCode);
@@ -343,6 +364,7 @@
             pairKey = null;
             pairUserCode = null;
             pairState.textContent = 'paired as ' + claim.deviceName;
+            toast('✓ Paired as ' + claim.deviceName, 'success');
             showFeed();
             enablePush();
         } catch (e) {
@@ -353,7 +375,7 @@
 
     pairRetry.addEventListener('click', startPairing);
 
-    // ---------- account ----------
+    // ---------- account devices ----------
 
     async function loadAccount() {
         try {
@@ -361,12 +383,12 @@
             accountBtn.textContent = me.displayName || me.phone;
             accountPhone.textContent = 'Signed in as ' + me.phone
                 + (me.displayName ? ' (' + me.displayName + ')' : '')
-                + '. Anything else that pairs with this account can read the same feed.';
+                + '. Devices on this account share the same ephemeral feed.';
 
             const devices = await (await api('/api/devices')).json();
             renderDevices(devices);
         } catch (e) {
-            /* the feed matters more than the device list */
+            /* feed is primary */
         }
     }
 
@@ -402,6 +424,7 @@
                     deviceStatus.hidden = false;
                     if (response.ok) {
                         deviceStatus.textContent = device.name + ' was unpaired.';
+                        toast(device.name + ' unpaired', 'info');
                         loadAccount();
                     } else {
                         deviceStatus.textContent = await why(response);
@@ -422,12 +445,8 @@
     function when_(iso) {
         const then = new Date(iso);
         const minutes = Math.round((Date.now() - then.getTime()) / 60000);
-        if (minutes < 1) {
-            return 'just now';
-        }
-        if (minutes < 60) {
-            return minutes + ' min ago';
-        }
+        if (minutes < 1) return 'just now';
+        if (minutes < 60) return minutes + ' min ago';
         const hours = Math.round(minutes / 60);
         return hours < 24 ? hours + ' h ago' : then.toLocaleDateString();
     }
@@ -441,19 +460,14 @@
         }
     });
 
-    /** the other way to pair: a phone shows its code and it is typed in here */
     approveForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const userCode = approveCode.value.trim();
-        if (!userCode) {
-            return;
-        }
+        if (!userCode) return;
         approveCode.value = '';
         deviceStatus.hidden = false;
         deviceStatus.textContent = 'pairing…';
 
-        // seal this browser's account key to the newcomer's key, if it offered one. Without that the
-        // pair still works, the newcomer just has no way to read anything sealed later.
         let keyPackage = null;
         try {
             await TeilenCrypto.ready;
@@ -468,7 +482,9 @@
         const response = await postJson(AUTH + '/device/approve', {userCode, keyPackage});
         if (response.ok) {
             const approved = await response.json();
-            deviceStatus.textContent = approved.deviceName + ' is paired. It picks its token up on its own.';
+            deviceStatus.textContent = approved.deviceName + ' is paired successfully.';
+            toast('✓ ' + approved.deviceName + ' paired', 'success');
+            loadAccount();
         } else {
             deviceStatus.textContent = await why(response);
         }
@@ -477,26 +493,20 @@
     signOutBtn.addEventListener('click', async () => {
         deviceStatus.hidden = false;
         deviceStatus.textContent = 'signing out…';
-        // unpair this browser for real; the server refuses only if it is the last way into the
-        // account, in which case forgetting the token here is all that can be done anyway
         try {
             const devices = await (await api('/api/devices')).json();
             const mine = devices.find((d) => d.current);
             if (mine) {
-                const response = await api('/api/devices/' + mine.id, {method: 'DELETE'});
-                if (!response.ok) {
-                    deviceStatus.textContent = 'signed out of this browser, but it stays paired: '
-                        + await why(response);
-                }
+                await api('/api/devices/' + mine.id, {method: 'DELETE'});
             }
         } catch (e) {
-            /* forgetting locally is the part that matters */
+            /* locally clearing token is essential */
         }
         token.set(null);
+        toast('Signed out', 'info');
         showPairing();
     });
 
-    /** enough for the approval prompt to name the newcomer without a library */
     function describeBrowser() {
         const ua = navigator.userAgent;
         const browser = /Firefox\//.test(ua) ? 'Firefox'
@@ -510,24 +520,18 @@
                 : /\bWindows\b/.test(ua) ? 'Windows'
                     : /\bMac OS X\b/.test(ua) ? 'macOS'
                         : /\bLinux\b/.test(ua) ? 'Linux'
-                            : 'something';
+                            : 'Desktop';
         return browser + ' on ' + os;
     }
 
-    // ---------- rendering ----------
+    // ---------- rendering & cards ----------
 
     const BLOB_TYPES = new Set(['IMAGE', 'PDF', 'FILE']);
 
     function formatSize(bytes) {
-        if (!bytes && bytes !== 0) {
-            return '';
-        }
-        if (bytes < 1024) {
-            return bytes + ' B';
-        }
-        if (bytes < 1024 * 1024) {
-            return (bytes / 1024).toFixed(0) + ' KB';
-        }
+        if (!bytes && bytes !== 0) return '';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
@@ -539,20 +543,38 @@
         li.className = 'card' + (isNew ? ' new' : '');
         li.dataset.id = item.id;
 
+        // Card Header
         const head = document.createElement('div');
         head.className = 'card-head';
+
+        const headLeft = document.createElement('div');
+        headLeft.className = 'card-head-left';
+
         const badge = document.createElement('span');
         badge.className = 'badge ' + item.type.toLowerCase();
         badge.textContent = badgeLabel(item);
+
+        const isLan = !!(item.isLan || String(item.id).startsWith('lan-'));
+        const routePill = document.createElement('span');
+        routePill.className = 'route-pill ' + (isLan ? 'lan' : 'relay');
+        routePill.textContent = isLan ? '⚡ Direct LAN' : '☁️ Encrypted Relay';
+
         const at = document.createElement('span');
-        at.textContent = new Date(item.createdAt).toLocaleTimeString();
+        at.className = 'card-time';
+        at.textContent = new Date(item.createdAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+        headLeft.append(badge, routePill, at);
+
+        const headRight = document.createElement('div');
+        headRight.className = 'card-head-right';
+
         const clock = document.createElement('span');
         clock.className = 'ttl';
         const ring = document.createElementNS(SVG_NS, 'svg');
         ring.setAttribute('class', 'ring');
         ring.setAttribute('viewBox', '0 0 36 36');
-        ring.setAttribute('width', '30');
-        ring.setAttribute('height', '30');
+        ring.setAttribute('width', '26');
+        ring.setAttribute('height', '26');
         const track = document.createElementNS(SVG_NS, 'circle');
         track.setAttribute('class', 'ring-track');
         track.setAttribute('cx', '18');
@@ -567,29 +589,113 @@
         const ttlText = document.createElement('span');
         ttlText.className = 'ttl-text';
         clock.append(ring, ttlText);
+
         const extendBtn = document.createElement('button');
         extendBtn.type = 'button';
-        extendBtn.className = 'extend';
-        extendBtn.title = 'keep it longer';
-        extendBtn.textContent = 'extend';
-        // a LAN-received item only exists in this tab, so there is nothing on the server to extend
-        extendBtn.hidden = String(item.id).startsWith('lan-');
+        extendBtn.className = 'btn-extend';
+        extendBtn.title = 'Extend lifespan (+1 hour)';
+        extendBtn.textContent = '+1h';
+        extendBtn.hidden = isLan;
         extendBtn.addEventListener('click', () => extendItem(item.id));
-        head.append(badge, at, clock, extendBtn);
 
+        // Delete button for EACH card alone
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'btn-card-delete';
+        deleteBtn.title = 'Delete this item';
+        deleteBtn.textContent = '✕';
+        deleteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            deleteBtn.disabled = true;
+            if (isLan) {
+                remove(item.id);
+                toast('Item deleted', 'info');
+                return;
+            }
+            try {
+                const response = await api(API + '/' + item.id, {method: 'DELETE'});
+                if (response.ok || response.status === 204) {
+                    remove(item.id);
+                    toast('Item deleted', 'info');
+                } else {
+                    deleteBtn.disabled = false;
+                    toast('Could not delete: ' + (await why(response)), 'error');
+                }
+            } catch (err) {
+                deleteBtn.disabled = false;
+                toast('Network error deleting item', 'error');
+            }
+        });
+
+        headRight.append(clock, extendBtn, deleteBtn);
+        head.append(headLeft, headRight);
+
+        // Card Body
         const body = document.createElement('div');
         body.className = 'card-body';
-        if (item.type === 'LINK') {
+
+        if (item.isDecrypting) {
+            // Skeleton shimmer state while decrypt.worker.js reassembles payloads
+            const shimmer = document.createElement('div');
+            shimmer.className = 'skeleton-shimmer';
+            const b1 = document.createElement('div');
+            b1.className = 'skeleton-bone short';
+            const b2 = document.createElement('div');
+            b2.className = 'skeleton-bone box';
+            shimmer.append(b1, b2);
+            body.append(shimmer);
+            li.classList.add('skeleton');
+        } else if (item.type === 'LINK') {
             const a = document.createElement('a');
             a.href = item.content;
             a.target = '_blank';
             a.rel = 'noopener noreferrer';
             a.textContent = item.content;
             body.append(a);
+
+            const actions = document.createElement('div');
+            actions.className = 'card-actions-bar';
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'btn-card-copy';
+            copyBtn.textContent = 'Copy Link';
+            copyBtn.addEventListener('click', async () => {
+                await navigator.clipboard.writeText(item.content);
+                copyBtn.textContent = '✓ Copied';
+                copyBtn.classList.add('copied');
+                toast('✓ Copied URL to clipboard', 'success');
+                setTimeout(() => {
+                    copyBtn.textContent = 'Copy Link';
+                    copyBtn.classList.remove('copied');
+                }, 1500);
+            });
+            actions.append(copyBtn);
+            body.append(actions);
         } else if (BLOB_TYPES.has(item.type)) {
             body.append(fileBody(item));
         } else {
-            body.textContent = item.content;
+            const pre = document.createElement('div');
+            pre.textContent = item.content;
+            body.append(pre);
+
+            const actions = document.createElement('div');
+            actions.className = 'card-actions-bar';
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'btn-card-copy';
+            copyBtn.textContent = 'Copy';
+            copyBtn.addEventListener('click', async () => {
+                await navigator.clipboard.writeText(item.content);
+                copyBtn.textContent = '✓ Copied';
+                copyBtn.classList.add('copied');
+                toast('✓ Copied to clipboard', 'success');
+                setTimeout(() => {
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.classList.remove('copied');
+                }, 1500);
+            });
+            actions.append(copyBtn);
+            body.append(actions);
         }
 
         li.append(head, body);
@@ -607,10 +713,6 @@
         return 'text';
     }
 
-    /**
-     * Images preview inline, everything else opens in a new tab — neither can carry a bearer
-     * token, which is what the signed link in every item is for.
-     */
     function fileBody(item) {
         const wrap = document.createElement('div');
         wrap.className = 'file';
@@ -650,20 +752,31 @@
             open.href = href;
             open.target = '_blank';
             open.rel = 'noopener noreferrer';
-            open.textContent = item.type === 'PDF' ? 'Open PDF' : 'Open';
+            open.textContent = item.type === 'PDF' ? '📄 Open PDF' : '📎 Open / Download';
             wrap.append(open);
         }
         return wrap;
     }
 
+    /** Smooth collapse & fade-out animation when item expires or is removed */
     function remove(id) {
         const entry = cards.get(id);
-        if (!entry) {
-            return;
-        }
-        entry.element.remove();
+        if (!entry) return;
         cards.delete(id);
-        refresh();
+        const element = entry.element;
+        element.classList.add('leaving');
+
+        const onEnd = () => {
+            element.remove();
+            refresh();
+        };
+        element.addEventListener('transitionend', onEnd, {once: true});
+        setTimeout(() => {
+            if (element.parentNode) {
+                element.remove();
+                refresh();
+            }
+        }, 300);
     }
 
     function refresh() {
@@ -677,9 +790,7 @@
     }
 
     function formatLeft(seconds) {
-        if (seconds <= 0) {
-            return 'expired';
-        }
+        if (seconds <= 0) return 'expired';
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         const s = seconds % 60;
@@ -689,7 +800,7 @@
         return m > 0 ? m + 'm ' + String(s).padStart(2, '0') + 's left' : s + 's left';
     }
 
-    // one timer for every card: tick the countdown ring and drop anything that ran out
+    // Tick the countdown ring and drop anything that ran out
     setInterval(() => {
         for (const [id, entry] of cards) {
             const left = remaining(entry.item);
@@ -697,10 +808,12 @@
             if (entry.ring) {
                 const total = totalSeconds(entry.item);
                 const fraction = total > 0 ? Math.max(0, Math.min(1, left / total)) : 0;
-                const circumference = 2 * Math.PI * 15.5;
+                const circumference = 2 * Math.PI * 15.5; // ~97.389
                 entry.ring.style.strokeDasharray = circumference.toFixed(1);
                 entry.ring.style.strokeDashoffset = (circumference * (1 - fraction)).toFixed(1);
-                entry.ring.classList.toggle('low', fraction <= 0.2);
+                // Dynamic color shift: #38BDF8 -> #F59E0B (<20%) -> #EF4444 (<5%)
+                entry.ring.classList.toggle('warn', fraction <= 0.20 && fraction > 0.05);
+                entry.ring.classList.toggle('danger', fraction <= 0.05);
             }
             if (left <= 0) {
                 remove(id);
@@ -713,25 +826,23 @@
             - new Date(item.createdAt).getTime()) / 1000));
     }
 
-    /** one tap of "extend": ask the server to push the deadline out, then follow its answer */
     async function extendItem(id) {
         try {
             const response = await api('/api/v1/items/' + id + '/extend', {method: 'POST'});
             if (!response.ok) {
+                toast('Could not extend: ' + (await why(response)), 'error');
                 return;
             }
             applyExtended(await response.json());
+            toast('✓ Extended +1 hour', 'success');
         } catch (e) {
-            /* the old deadline still stands */
+            toast('Failed to extend lifespan', 'error');
         }
     }
 
-    /** the same update whether it came from this tap or another device over the socket */
     function applyExtended(item) {
         const entry = cards.get(item.id);
-        if (!entry) {
-            return;
-        }
+        if (!entry) return;
         entry.item = item;
         entry.ttl.textContent = formatLeft(remaining(item));
         refresh();
@@ -744,7 +855,6 @@
                 throw new Error(await why(response));
             }
             const items = await response.json();
-            // newest first
             items.reverse().forEach((item) => upsert(item, false));
         } catch (e) {
             console.warn('load failed', e);
@@ -754,7 +864,6 @@
     function connect() {
         stopSocket();
         const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-        // a browser cannot set a header on a websocket, so the handshake passes the token along
         const live = new WebSocket(scheme + '://' + location.host + '/ws?token='
             + encodeURIComponent(token.get() || ''));
         socket = live;
@@ -782,10 +891,7 @@
         });
 
         live.addEventListener('close', () => {
-            // a socket we have already replaced or thrown away has nothing to reconnect
-            if (socket !== live) {
-                return;
-            }
+            if (socket !== live) return;
             socket = null;
             setStatus('reconnecting…', 'offline');
             startPolling();
@@ -804,11 +910,8 @@
         }
     }
 
-    // if the socket is down, the feed still updates by polling
     function startPolling() {
-        if (pollTimer) {
-            return;
-        }
+        if (pollTimer) return;
         pollTimer = setInterval(async () => {
             const ids = new Set();
             try {
@@ -834,32 +937,23 @@
         pollTimer = null;
     }
 
-    // ---------- actions ----------
+    // ---------- actions & sending ----------
 
     compose.addEventListener('submit', async (e) => {
         e.preventDefault();
         const content = composeInput.value.trim();
-        if (!content) {
-            return;
-        }
+        if (!content) return;
         composeInput.value = '';
+        toast('Encrypting & sending…', 'info');
         const response = await postJson(API, {content});
-        if (!response.ok) {
+        if (response.ok) {
+            toast('✓ Sent', 'success');
+        } else {
             const message = await why(response);
-            alert('could not send: ' + message);
+            toast('Could not send: ' + message, 'error');
             composeInput.value = content;
         }
     });
-
-    // ---------- files ----------
-
-    const upload = el('upload');
-    const uploadInput = el('upload-input');
-    const uploadLabel = el('upload-label');
-    const uploadTtl = el('upload-ttl');
-    const uploadSend = el('upload-send');
-    const uploadStatus = el('upload-status');
-    const MAX_BYTES = 30 * 1024 * 1024;
 
     function showUploadStatus(text, isError) {
         uploadStatus.textContent = text;
@@ -871,15 +965,15 @@
         const files = [...uploadInput.files];
         uploadSend.hidden = files.length === 0;
         if (files.length === 0) {
-            uploadLabel.textContent = 'Attach files…';
+            uploadLabel.textContent = 'Attach files… (Max 30 MB)';
             return;
         }
         const names = files.map((f) => f.name).join(', ');
         uploadLabel.textContent = files.length === 1 ? names : files.length + ' files selected';
-        // check up front so an oversized file never leaves the browser
         const tooBig = files.filter((f) => f.size > MAX_BYTES).map((f) => f.name);
         if (tooBig.length) {
-            showUploadStatus('over the 30 MB limit: ' + tooBig.join(', '), true);
+            showUploadStatus('Over the 30 MB limit: ' + tooBig.join(', '), true);
+            toast('✕ ' + tooBig.join(', ') + ' exceeds 30 MB limit', 'error');
         } else {
             showUploadStatus('');
         }
@@ -888,130 +982,148 @@
     upload.addEventListener('submit', async (e) => {
         e.preventDefault();
         const files = [...uploadInput.files];
-        if (files.length === 0) {
-            return;
-        }
+        if (files.length === 0) return;
         uploadSend.disabled = true;
         await sendFiles(files);
         uploadInput.value = '';
-        uploadLabel.textContent = 'Attach files…';
+        uploadLabel.textContent = 'Attach files… (Max 30 MB)';
         uploadSend.hidden = true;
         uploadSend.disabled = false;
     });
 
-    /** the one upload loop: the picker, a paste and a drop all end up here */
     async function sendFiles(files) {
         const usable = files.filter((f) => f.size <= MAX_BYTES);
         const tooBig = files.filter((f) => f.size > MAX_BYTES).map((f) => f.name);
         if (tooBig.length) {
-            showUploadStatus('over the 30 MB limit: ' + tooBig.join(', '), true);
+            showUploadStatus('Over the 30 MB limit: ' + tooBig.join(', '), true);
+            toast('✕ Over 30 MB limit: ' + tooBig.join(', '), 'error');
         }
-        if (usable.length === 0) {
-            return;
-        }
+        if (usable.length === 0) return;
+
         const ttl = uploadTtl.value;
         let sent = 0;
         for (const file of usable) {
-            showUploadStatus('sending ' + file.name + ' (' + sent + '/' + usable.length + ')…', false);
+            showUploadStatus('Sending ' + file.name + ' (' + (sent + 1) + '/' + usable.length + ')…', false);
             const body = new FormData();
             body.append('file', file);
             body.append('ttlSeconds', ttl);
             const response = await api(API, {method: 'POST', body});
             if (!response.ok) {
-                showUploadStatus(file.name + ': ' + (await why(response)), true);
+                const err = await why(response);
+                showUploadStatus(file.name + ': ' + err, true);
+                toast(file.name + ': ' + err, 'error');
                 return;
             }
             sent++;
         }
-        showUploadStatus(sent === 1 ? '1 file sent' : sent + ' files sent', false);
+        const msg = sent === 1 ? '1 file sent' : sent + ' files sent';
+        showUploadStatus(msg, false);
+        toast('✓ ' + msg, 'success');
         setTimeout(() => showUploadStatus(''), 4000);
     }
 
-    // ---------- paste & drop: the desktop sending the other way ----------
-
     async function sendText(text) {
         const content = (text || '').trim();
-        if (!content) {
-            return;
-        }
+        if (!content) return;
         const response = await postJson(API, {content: content.slice(0, 20000)});
-        if (!response.ok) {
-            showUploadStatus(await why(response), true);
+        if (response.ok) {
+            toast('✓ Sent', 'success');
+        } else {
+            const err = await why(response);
+            showUploadStatus(err, true);
+            toast('Could not send: ' + err, 'error');
         }
     }
 
-    // a paste anywhere but a text field becomes a transfer; in the compose box it stays a paste
+    // ---------- global paste (Ctrl+V / Cmd+V) ----------
+
     window.addEventListener('paste', (event) => {
-        if (!token.get()) {
-            return;
-        }
+        if (!token.get()) return;
         const target = event.target;
-        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
             return;
         }
         const items = event.clipboardData && event.clipboardData.items;
-        if (!items) {
-            return;
-        }
+        if (!items) return;
+
         const files = [];
         for (const item of items) {
             if (item.kind === 'file') {
                 const file = item.getAsFile();
-                if (file) {
-                    files.push(file);
-                }
+                if (file) files.push(file);
             } else if (item.kind === 'string' && item.type === 'text/plain') {
-                item.getAsString((value) => sendText(value));
+                item.getAsString((value) => {
+                    const text = (value || '').trim();
+                    if (text) {
+                        toast('Pasted text — encrypting & sending…', 'info');
+                        sendText(text);
+                    }
+                });
             }
         }
         if (files.length) {
             event.preventDefault();
+            toast(`Pasted ${files.length === 1 ? files[0].name || 'file' : files.length + ' files'} — sending…`, 'info');
             sendFiles(files);
         }
     });
 
-    // drag a file (or a selection) anywhere onto the page
-    const dropVeil = el('drop-veil');
+    // ---------- whole-window drop veil ----------
+
     let dragDepth = 0;
     window.addEventListener('dragenter', (event) => {
-        if (!token.get() || !event.dataTransfer || !app.hidden) {
-            return;
-        }
+        if (!token.get()) return;
         dragDepth++;
         dropVeil.hidden = false;
     });
+
     window.addEventListener('dragover', (event) => {
-        if (!app.hidden) {
+        if (token.get()) {
             event.preventDefault();
         }
     });
+
     window.addEventListener('dragleave', () => {
         dragDepth = Math.max(0, dragDepth - 1);
         if (dragDepth === 0) {
             dropVeil.hidden = true;
         }
     });
+
     window.addEventListener('drop', (event) => {
-        if (!event.dataTransfer) {
-            return;
-        }
-        event.preventDefault();
         dragDepth = 0;
         dropVeil.hidden = true;
-        if (!token.get()) {
-            return;
-        }
+        if (!event.dataTransfer || !token.get()) return;
+        event.preventDefault();
+
         const files = [...event.dataTransfer.files];
         if (files.length) {
+            toast(`Dropped ${files.length === 1 ? files[0].name : files.length + ' files'} — encrypting & sending…`, 'info');
             sendFiles(files);
         } else {
-            sendText(event.dataTransfer.getData('text/plain'));
+            const text = event.dataTransfer.getData('text/plain');
+            if (text) {
+                toast('Dropped text — encrypting & sending…', 'info');
+                sendText(text);
+            }
         }
     });
 
+    // ---------- delete all button ----------
+
     clearBtn.addEventListener('click', async () => {
-        await Promise.all([...cards.keys()].map((id) =>
-            api(API + '/' + id, {method: 'DELETE'}).catch(() => {})));
+        if (cards.size === 0) return;
+        if (!confirm(`Delete all ${cards.size} items?`)) return;
+        const toDelete = [...cards.keys()];
+        toast(`Deleting all ${toDelete.length} items…`, 'info');
+        await Promise.all(toDelete.map((id) => {
+            if (id.startsWith('lan-')) {
+                remove(id);
+                return Promise.resolve();
+            }
+            return api(API + '/' + id, {method: 'DELETE'}).then(() => remove(id)).catch(() => {});
+        }));
+        toast('All items cleared', 'success');
     });
 
     // ---------- start ----------
