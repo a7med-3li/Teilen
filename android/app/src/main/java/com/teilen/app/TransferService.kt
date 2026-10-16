@@ -27,6 +27,8 @@ import java.io.FileInputStream
 class TransferService : Service() {
 
     private val main = Handler(Looper.getMainLooper())
+    @Volatile private var cancelled = false
+    @Volatile private var currentRoute: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -36,12 +38,18 @@ class TransferService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_CANCEL) {
+            cancelled = true
+            done(getString(R.string.share_cancelled), ok = false)
+            return START_NOT_STICKY
+        }
         if (intent?.action != ACTION_TRANSFER) {
             stopSelf(startId)
             return START_NOT_STICKY
         }
 
-        startInForeground(workingNotification(getString(R.string.sending)))
+        currentRoute = getString(R.string.upload_via_relay)
+        startInForeground(workingNotification(getString(R.string.sending), currentRoute))
 
         val text = intent.getStringExtra(EXTRA_TEXT)
         val fds = fdsOf(intent)
@@ -102,11 +110,18 @@ class TransferService : Service() {
             val name = names.getOrNull(0) ?: "file"
             val mime = mimes.getOrNull(0) ?: "application/octet-stream"
             val size = sizes.getOrNull(0) ?: -1L
+            currentRoute = getString(R.string.upload_via_lan)
+            manager().notify(
+                TeilenNotifications.TRANSFER_ID,
+                workingNotification(getString(R.string.share_uploading, name), currentRoute)
+            )
             val engine = LanTransferEngine(this)
             engine.attempt(LanTransferEngine.Payload(name, mime, size) { inputOf(fds[0]) }) { sent ->
+                if (cancelled) return@attempt
                 if (sent) {
                     done(getString(R.string.share_sent), ok = true)
                 } else {
+                    currentRoute = getString(R.string.upload_via_relay)
                     // the LAN read may have moved the descriptor; the server upload starts at zero
                     rewind(fds)
                     uploadViaHttp(fds, names, mimes, sizes, ttl)
@@ -124,6 +139,7 @@ class TransferService : Service() {
         sizes: List<Long?>,
         ttl: Long
     ) {
+        currentRoute = getString(R.string.upload_via_relay)
         val count = fds.size
         TeilenApi.uploadAllFds(
             baseUrl = Server.get(this),
@@ -133,8 +149,11 @@ class TransferService : Service() {
             mimes = mimes,
             sizes = sizes,
             ttlSeconds = ttl,
-            onProgress = { index, _, written, total -> onProgress(index, count, written, total) },
+            onProgress = { index, _, written, total ->
+                if (!cancelled) onProgress(index, count, written, total)
+            },
             onDone = { outcome ->
+                if (cancelled) return@uploadAllFds
                 val message = when {
                     outcome.failed == 0 && outcome.sent == 1 -> getString(R.string.share_sent)
                     outcome.failed == 0 -> getString(R.string.share_files_sent, outcome.sent)
@@ -166,20 +185,30 @@ class TransferService : Service() {
         }
     }
 
-    private fun workingNotification(text: String): Notification =
-        TeilenNotifications.transferBuilder(this)
+    private fun workingNotification(text: String, route: String? = currentRoute): Notification {
+        val builder = TeilenNotifications.transferBuilder(this)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setOngoing(true)
             .setProgress(0, 0, true)
             .setContentIntent(openApp())
-            .build()
+            .addAction(R.drawable.ic_notification, getString(R.string.cancel), cancelIntent())
+        if (!route.isNullOrBlank()) {
+            builder.setSubText(route)
+        }
+        return builder.build()
+    }
 
     private fun onProgress(index: Int, count: Int, written: Long, total: Long?) {
+        if (cancelled) return
         val builder = TeilenNotifications.transferBuilder(this)
             .setContentTitle(getString(R.string.app_name))
             .setOngoing(true)
             .setContentIntent(openApp())
+            .addAction(R.drawable.ic_notification, getString(R.string.cancel), cancelIntent())
+        if (!currentRoute.isNullOrBlank()) {
+            builder.setSubText(currentRoute)
+        }
         if (total != null && total > 0) {
             val percent = ((written * 100) / total).toInt().coerceIn(0, 100)
             builder
@@ -200,6 +229,13 @@ class TransferService : Service() {
         }
         manager().notify(TeilenNotifications.TRANSFER_ID, builder.build())
     }
+
+    private fun cancelIntent(): PendingIntent = PendingIntent.getService(
+        this,
+        10,
+        Intent(this, TransferService::class.java).setAction(ACTION_CANCEL),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     /** the last word: detach the ongoing notice and let the outcome replace it, then stop */
     private fun done(message: String, ok: Boolean) {
@@ -244,6 +280,7 @@ class TransferService : Service() {
     }
 
     companion object {
+        const val ACTION_CANCEL = "com.teilen.app.action.CANCEL_TRANSFER"
         private const val ACTION_TRANSFER = "com.teilen.app.action.TRANSFER"
         private const val EXTRA_TEXT = "text"
         private const val EXTRA_FDS = "fds"

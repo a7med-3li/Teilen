@@ -46,3 +46,5 @@ teilen-debug.apk
 android/release-keystore.jks
 .env
 android/keystore.properties
+
+AGENT_UX_AND_RELEASE_INSTRUCTIONS.md

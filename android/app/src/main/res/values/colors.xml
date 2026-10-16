@@ -1,34 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    One palette, two moods. Every colour the UI uses is named here and re-declared in
-    values-night/colors.xml, so the layouts and drawables never mention a raw hex value.
-    The scheme is deliberately tiny: paper, ink, and one deep teal.
--->
 <resources>
-    <!-- surfaces -->
-    <color name="bg">#F1F3F5</color>
+    <!-- Light surfaces -->
+    <color name="bg">#F8FAFC</color>
     <color name="surface">#FFFFFF</color>
-    <color name="surface_alt">#E9EDF1</color>
+    <color name="surface_alt">#F1F5F9</color>
+    <color name="surface_border">#E2E8F0</color>
 
-    <!-- ink -->
-    <color name="text_primary">#11161C</color>
-    <color name="text_secondary">#63707E</color>
-    <color name="divider">#D9DFE6</color>
+    <!-- Text & Ink -->
+    <color name="text_primary">#0F172A</color>
+    <color name="text_secondary">#64748B</color>
+    <color name="text_muted">#94A3B8</color>
+    <color name="divider">#E2E8F0</color>
 
-    <!-- the one accent colour, and its readable pair -->
-    <color name="accent">#0F766E</color>
-    <color name="accent_text">#0F766E</color>
+    <!-- Brand & Accent -->
+    <color name="accent">#0284C7</color>
+    <color name="accent_text">#0284C7</color>
     <color name="on_accent">#FFFFFF</color>
-    <color name="brand_bar">#0F766E</color>
-    <color name="on_brand_dim">#D8EFEC</color>
+    <color name="brand_bar">#0284C7</color>
+    <color name="on_brand_dim">#BAE6FD</color>
 
-    <color name="danger">#B42318</color>
+    <!-- Fast-path & Status Indicators -->
+    <color name="lan_active">#10B981</color>
+    <color name="lan_active_bg">#1A10B981</color>
+    <color name="relay_active">#0284C7</color>
+    <color name="relay_active_bg">#1A0284C7</color>
+    <color name="warning">#F59E0B</color>
+    <color name="danger">#EF4444</color>
+    <color name="danger_soft">#1AEF4444</color>
     <color name="ripple">#1F000000</color>
-    <color name="ripple_soft">#1F0F766E</color>
+    <color name="ripple_soft">#1F0284C7</color>
 
-    <!-- navigation -->
+    <!-- Bottom Navigation -->
     <color name="nav_bg">#FFFFFF</color>
-    <color name="nav_item_selected">#0F766E</color>
-    <color name="nav_item_unselected">#63707E</color>
-    <color name="nav_indicator">#E6F4F2</color>
+    <color name="nav_item_selected">#0284C7</color>
+    <color name="nav_item_unselected">#64748B</color>
+    <color name="nav_indicator">#E0F2FE</color>
+
+    <!-- Segmented Control & Pills -->
+    <color name="pill_bg">#F1F5F9</color>
+    <color name="pill_selected_bg">#0284C7</color>
+    <color name="pill_selected_text">#FFFFFF</color>
+    <color name="pill_unselected_text">#64748B</color>
 </resources>

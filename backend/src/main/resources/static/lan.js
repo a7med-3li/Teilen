@@ -259,7 +259,8 @@ window.TeilenLan = (() => {
             sizeBytes: blob.size,
             createdAt: new Date(now).toISOString(),
             expiresAt: new Date(now + LOCAL_TTL_SECONDS * 1000).toISOString(),
-            blobUrl: URL.createObjectURL(blob)
+            blobUrl: URL.createObjectURL(blob),
+            isLan: true
         }, true);
     }
 

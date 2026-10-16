@@ -5,7 +5,7 @@
     android:background="@color/bg"
     android:orientation="vertical">
 
-    <!-- top brand bar -->
+    <!-- Top Header Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -15,7 +15,7 @@
         android:paddingStart="20dp"
         android:paddingTop="14dp"
         android:paddingEnd="20dp"
-        android:paddingBottom="16dp">
+        android:paddingBottom="14dp">
 
         <LinearLayout
             android:layout_width="0dp"
@@ -33,27 +33,45 @@
                 style="@style/Text.HeaderSub"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
+                android:layout_marginTop="2dp"
                 android:text="@string/header_subtitle" />
         </LinearLayout>
 
+        <!-- Live Route Indicator Pill -->
+        <TextView
+            android:id="@+id/header_route_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_status_lan"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
+            android:text="@string/status_direct_lan"
+            android:textColor="@color/lan_active"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <!-- Session Status Badge -->
         <TextView
             android:id="@+id/header_session_badge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_tab_indicator"
+            android:background="@drawable/bg_segmented_selected"
             android:paddingStart="10dp"
             android:paddingTop="4dp"
             android:paddingEnd="10dp"
             android:paddingBottom="4dp"
             android:text="@string/signed_in"
             android:textColor="@color/accent"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textStyle="bold"
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- non-scrollable page container -->
+    <!-- Page Container -->
     <FrameLayout
         android:id="@+id/page_container"
         android:layout_width="match_parent"
@@ -64,14 +82,14 @@
         android:paddingEnd="16dp"
         android:paddingBottom="8dp">
 
-        <!-- ==================== TAB 1: TEXT / SEND ==================== -->
+        <!-- ==================== TAB 1: SEND ==================== -->
         <LinearLayout
             android:id="@+id/page_send"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical">
 
-            <!-- Card when paired -->
+            <!-- Card when Paired -->
             <LinearLayout
                 android:id="@+id/card_text"
                 android:layout_width="match_parent"
@@ -80,11 +98,36 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <TextView
-                    style="@style/Text.Section"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/section_text" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/Text.Section"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/section_text" />
+
+                    <!-- Quick Paste Pill -->
+                    <TextView
+                        android:id="@+id/btn_paste_send"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_input"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingStart="10dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="10dp"
+                        android:paddingBottom="4dp"
+                        android:text="@string/paste_and_send"
+                        android:textColor="@color/accent"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <EditText
                     android:id="@+id/content"
@@ -95,14 +138,15 @@
                     android:gravity="top|start"
                     android:hint="@string/content_hint"
                     android:inputType="textMultiLine|textCapSentences"
-                    android:maxLength="20000"
                     android:lines="4"
+                    android:maxLength="20000"
                     android:maxLines="6" />
 
+                <!-- TTL Horizontal Segmented Pills -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
+                    android:layout_marginTop="14dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -112,14 +156,75 @@
                         android:layout_height="wrap_content"
                         android:text="@string/expires_in" />
 
-                    <Spinner
-                        android:id="@+id/ttl"
+                    <LinearLayout
+                        android:id="@+id/ttl_segmented_group"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
+                        android:layout_marginStart="10dp"
                         android:layout_weight="1"
-                        android:popupBackground="@color/surface"
-                        android:spinnerMode="dropdown" />
+                        android:background="@drawable/bg_segmented_container"
+                        android:orientation="horizontal"
+                        android:padding="2dp">
+
+                        <TextView
+                            android:id="@+id/ttl_pill_10m"
+                            android:layout_width="0dp"
+                            android:layout_height="28dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="@string/ttl_10m"
+                            android:textColor="@color/pill_unselected_text"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/ttl_pill_30m"
+                            android:layout_width="0dp"
+                            android:layout_height="28dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="@string/ttl_30m"
+                            android:textColor="@color/pill_unselected_text"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/ttl_pill_1h"
+                            android:layout_width="0dp"
+                            android:layout_height="28dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_segmented_selected"
+                            android:gravity="center"
+                            android:text="@string/ttl_1h"
+                            android:textColor="@color/accent"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/ttl_pill_4h"
+                            android:layout_width="0dp"
+                            android:layout_height="28dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="@string/ttl_4h"
+                            android:textColor="@color/pill_unselected_text"
+                            android:textSize="11sp" />
+
+                        <TextView
+                            android:id="@+id/ttl_pill_24h"
+                            android:layout_width="0dp"
+                            android:layout_height="28dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:text="@string/ttl_24h"
+                            android:textColor="@color/pill_unselected_text"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <!-- Hidden legacy spinner for backwards compatibility -->
+                    <Spinner
+                        android:id="@+id/ttl"
+                        android:layout_width="1dp"
+                        android:layout_height="1dp"
+                        android:visibility="gone" />
                 </LinearLayout>
 
                 <Button
@@ -127,18 +232,18 @@
                     style="@style/Button.Primary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/send" />
+                    android:layout_marginTop="16dp"
+                    android:text="@string/encrypt_and_send" />
 
                 <TextView
                     android:id="@+id/status"
-                    style="@style/Text.Caption"
+                    style="@style/Text.Tabular"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp" />
             </LinearLayout>
 
-            <!-- Banner when not paired -->
+            <!-- Gated Banner when Not Paired -->
             <LinearLayout
                 android:id="@+id/gate_banner_text"
                 android:layout_width="match_parent"
@@ -197,16 +302,76 @@
                     style="@style/Text.Caption"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/files_hint" />
+                    android:layout_marginTop="6dp"
+                    android:text="@string/files_drop_hint" />
+
+                <!-- Quick Filter Chips -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btn_chip_photos"
+                        style="@style/Button.Outline"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:minHeight="40dp"
+                        android:text="@string/chip_photos"
+                        android:textSize="12sp" />
+
+                    <Button
+                        android:id="@+id/btn_chip_documents"
+                        style="@style/Button.Outline"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:minHeight="40dp"
+                        android:text="@string/chip_documents"
+                        android:textSize="12sp" />
+
+                    <Button
+                        android:id="@+id/btn_chip_any_file"
+                        style="@style/Button.Outline"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:minHeight="40dp"
+                        android:text="@string/chip_any_file"
+                        android:textSize="12sp" />
+                </LinearLayout>
 
                 <Button
                     android:id="@+id/pick_file"
                     style="@style/Button.Primary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="14dp"
                     android:text="@string/pick_file" />
+
+                <!-- Pre-flight Size Error Warning Box -->
+                <LinearLayout
+                    android:id="@+id/file_error_box"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/bg_input"
+                    android:orientation="horizontal"
+                    android:padding="10dp"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/file_error_text"
+                        style="@style/Text.Caption"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/danger"
+                        android:textSize="12sp" />
+                </LinearLayout>
 
                 <ProgressBar
                     android:id="@+id/file_progress"
@@ -215,17 +380,19 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
                     android:max="100"
+                    android:progressTint="@color/accent"
                     android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/file_status"
-                    style="@style/Text.Caption"
+                    style="@style/Text.Tabular"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
                     android:visibility="gone" />
             </LinearLayout>
 
+            <!-- Gated Banner when Not Paired -->
             <LinearLayout
                 android:id="@+id/gate_banner_files"
                 android:layout_width="match_parent"
@@ -269,33 +436,127 @@
             <LinearLayout
                 android:id="@+id/card_feed"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:background="@drawable/bg_card"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="14dp">
 
-                <TextView
-                    style="@style/Text.Section"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/section_feed" />
-
-                <TextView
-                    style="@style/Text.Caption"
+                <!-- Live Feed Header -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/feed_intro" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <Button
-                    android:id="@+id/open_feed"
-                    style="@style/Button.Primary"
+                    <TextView
+                        style="@style/Text.Section"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/feed_title" />
+
+                    <TextView
+                        android:id="@+id/feed_tab_count"
+                        style="@style/Text.Tabular"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_badge"
+                        android:paddingStart="6dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="2dp"
+                        android:textColor="@color/accent"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/feed_tab_refresh"
+                        style="@style/Text.Caption"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="?android:attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:padding="6dp"
+                        android:text="@string/refresh"
+                        android:textColor="@color/accent"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <!-- Keep hidden legacy button to prevent crash -->
+                    <Button
+                        android:id="@+id/open_feed"
+                        android:layout_width="1dp"
+                        android:layout_height="1dp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="@string/open_feed" />
+                    android:layout_height="0dp"
+                    android:layout_marginTop="10dp"
+                    android:layout_weight="1">
+
+                    <ListView
+                        android:id="@+id/feed_tab_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:clipToPadding="false"
+                        android:divider="@android:color/transparent"
+                        android:dividerHeight="8dp"
+                        android:scrollbarStyle="outsideOverlay" />
+
+                    <!-- Empty Feed State -->
+                    <LinearLayout
+                        android:id="@+id/feed_tab_empty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:padding="24dp"
+                        android:visibility="gone">
+
+                        <TextView
+                            style="@style/Text.Header"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="📥"
+                            android:textSize="32sp" />
+
+                        <TextView
+                            style="@style/Text.Body"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/feed_empty"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            style="@style/Text.Caption"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:gravity="center"
+                            android:text="@string/feed_empty_hint" />
+                    </LinearLayout>
+
+                    <ProgressBar
+                        android:id="@+id/feed_tab_spinner"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:indeterminateTint="@color/accent"
+                        android:visibility="gone" />
+                </FrameLayout>
             </LinearLayout>
 
+            <!-- Gated Banner when Not Paired -->
             <LinearLayout
                 android:id="@+id/gate_banner_feed"
                 android:layout_width="match_parent"
@@ -328,61 +589,43 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ==================== TAB 4: ACCOUNT & SETTINGS ==================== -->
-        <LinearLayout
+        <!-- ==================== TAB 4: ACCOUNT ==================== -->
+        <ScrollView
             android:id="@+id/page_account"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
+            android:fillViewport="true"
+            android:scrollbars="none"
             android:visibility="gone">
 
-            <!-- Account Box -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_card"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:orientation="vertical">
 
-                <TextView
-                    style="@style/Text.Section"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/section_account" />
-
-                <!-- Signed In View -->
-                <TextView
-                    android:id="@+id/account_who"
-                    style="@style/Text.Body"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:visibility="gone" />
-
-                <Button
-                    android:id="@+id/sign_out"
-                    style="@style/Button.Outline"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/sign_out"
-                    android:visibility="gone" />
-
-                <!-- Signed Out: Login & Register Form -->
+                <!-- Account Box -->
                 <LinearLayout
-                    android:id="@+id/account_create"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:background="@drawable/bg_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
-                    <!-- Segmented tab toggle: Sign in / Register -->
+                    <TextView
+                        style="@style/Text.Section"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/section_account" />
+
+                    <!-- Mode Toggle: Login vs Register -->
                     <LinearLayout
+                        android:id="@+id/auth_mode_selector"
                         android:layout_width="match_parent"
-                        android:layout_height="42dp"
-                        android:layout_marginTop="10dp"
+                        android:layout_height="40dp"
+                        android:layout_marginTop="12dp"
                         android:background="@drawable/bg_segmented_container"
                         android:orientation="horizontal"
-                        android:padding="3dp">
+                        android:padding="2dp">
 
                         <Button
                             android:id="@+id/auth_switch_login"
@@ -416,233 +659,274 @@
                         android:layout_marginTop="8dp"
                         android:text="@string/account_mode_login_hint" />
 
-                    <EditText
-                        android:id="@+id/phone"
-                        style="@style/Input.Field"
+                    <TextView
+                        android:id="@+id/account_who"
+                        style="@style/Text.Body"
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:layout_marginTop="8dp"
-                        android:hint="@string/phone_hint"
-                        android:imeOptions="actionNext"
-                        android:inputType="phone"
-                        android:maxLength="24"
-                        android:padding="10dp"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/password"
-                        style="@style/Input.Field"
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:layout_marginTop="8dp"
-                        android:hint="@string/password_hint"
-                        android:imeOptions="actionDone"
-                        android:inputType="textPassword"
-                        android:maxLength="128"
-                        android:padding="10dp"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/display_name"
-                        style="@style/Input.Field"
-                        android:layout_width="match_parent"
-                        android:layout_height="48dp"
-                        android:layout_marginTop="8dp"
-                        android:hint="@string/name_hint"
-                        android:imeOptions="actionDone"
-                        android:inputType="textPersonName"
-                        android:maxLength="80"
-                        android:padding="10dp"
-                        android:textSize="14sp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:textStyle="bold"
                         android:visibility="gone" />
 
-                    <Button
-                        android:id="@+id/create_account"
-                        style="@style/Button.Primary"
+                    <!-- Inputs when Signed Out -->
+                    <LinearLayout
+                        android:id="@+id/account_create"
                         android:layout_width="match_parent"
-                        android:layout_height="48dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="vertical">
+
+                        <EditText
+                            android:id="@+id/phone"
+                            style="@style/Input.Field"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:hint="@string/phone_hint"
+                            android:inputType="phone"
+                            android:singleLine="true" />
+
+                        <EditText
+                            android:id="@+id/password"
+                            style="@style/Input.Field"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:hint="@string/password_hint"
+                            android:inputType="textPassword"
+                            android:singleLine="true" />
+
+                        <EditText
+                            android:id="@+id/display_name"
+                            style="@style/Input.Field"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:hint="@string/name_hint"
+                            android:inputType="textPersonName|textCapWords"
+                            android:singleLine="true"
+                            android:visibility="gone" />
+
+                        <Button
+                            android:id="@+id/create_account"
+                            style="@style/Button.Primary"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="@string/login_button" />
+
+                        <Button
+                            android:id="@+id/account_pair_start"
+                            style="@style/Button.Outline"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/pair_this_phone" />
+                    </LinearLayout>
+
+                    <!-- Pairing View -->
+                    <LinearLayout
+                        android:id="@+id/account_pair"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            style="@style/Text.Caption"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/pair_intro" />
+
+                        <TextView
+                            android:id="@+id/pair_code"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:background="@drawable/bg_input"
+                            android:fontFamily="monospace"
+                            android:gravity="center"
+                            android:letterSpacing="0.2"
+                            android:padding="16dp"
+                            android:textColor="@color/accent"
+                            android:textSize="26sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/pair_status"
+                            style="@style/Text.Caption"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/pair_waiting" />
+
+                        <Button
+                            android:id="@+id/pair_cancel"
+                            style="@style/Button.Outline"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="@string/pair_cancel" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/sign_out"
+                        style="@style/Button.Outline"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="@string/login_button" />
+                        android:text="@string/sign_out"
+                        android:textColor="@color/danger"
+                        android:visibility="gone" />
 
-                    <Button
-                        android:id="@+id/account_pair_start"
-                        style="@style/Button.Outline"
+                    <TextView
+                        android:id="@+id/account_status"
+                        style="@style/Text.Caption"
                         android:layout_width="match_parent"
-                        android:layout_height="44dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="@string/pair_this_phone" />
+                        android:visibility="gone" />
                 </LinearLayout>
 
-                <!-- Pairing in flight -->
+                <!-- Clipboard Watcher Card -->
                 <LinearLayout
-                    android:id="@+id/account_pair"
+                    android:id="@+id/card_clipboard"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_card"
                     android:orientation="vertical"
-                    android:visibility="gone">
+                    android:padding="16dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            style="@style/Text.Section"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/watch_title" />
+
+                        <Switch
+                            android:id="@+id/switch_clipboard"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:thumbTint="@color/accent" />
+                    </LinearLayout>
 
                     <TextView
                         style="@style/Text.Caption"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:text="@string/pair_intro" />
+                        android:layout_marginTop="6dp"
+                        android:text="@string/watch_hint" />
+                </LinearLayout>
+
+                <!-- Backend Configuration Card -->
+                <LinearLayout
+                    android:id="@+id/card_server"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_card"
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
                     <TextView
-                        android:id="@+id/pair_code"
-                        android:layout_width="match_parent"
+                        style="@style/Text.Section"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:fontFamily="monospace"
-                        android:letterSpacing="0.12"
-                        android:textColor="@color/text_primary"
-                        android:textSize="26sp"
-                        android:textStyle="bold" />
+                        android:text="@string/section_backend" />
 
                     <TextView
-                        android:id="@+id/pair_status"
                         style="@style/Text.Caption"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp" />
-
-                    <Button
-                        android:id="@+id/pair_cancel"
-                        style="@style/Button.Outline"
-                        android:layout_width="wrap_content"
-                        android:layout_height="44dp"
-                        android:layout_marginTop="10dp"
-                        android:text="@string/pair_cancel" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/account_status"
-                    style="@style/Text.Caption"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:visibility="gone" />
-            </LinearLayout>
-
-            <!-- Settings: Clipboard & Server -->
-            <LinearLayout
-                android:id="@+id/card_clipboard"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_card"
-                android:orientation="vertical"
-                android:padding="14dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        style="@style/Text.Body"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/watch_title"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <Switch
-                        android:id="@+id/watch"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp" />
-                </LinearLayout>
-
-                <Button
-                    android:id="@+id/try_clipboard"
-                    style="@style/Button.Outline"
-                    android:layout_width="wrap_content"
-                    android:layout_height="38dp"
-                    android:layout_marginTop="8dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:text="@string/try_clipboard"
-                    android:textSize="13sp" />
-            </LinearLayout>
-
-            <!-- Server URL card -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:background="@drawable/bg_card"
-                android:orientation="vertical"
-                android:padding="14dp">
-
-                <TextView
-                    style="@style/Text.Section"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/section_backend" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                        android:layout_marginTop="6dp"
+                        android:text="@string/server_hint" />
 
                     <EditText
                         android:id="@+id/server"
                         style="@style/Input.Field"
-                        android:layout_width="0dp"
-                        android:layout_height="44dp"
-                        android:layout_weight="1"
-                        android:hint="@string/server_hint"
-                        android:imeOptions="actionDone"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
                         android:inputType="textUri"
-                        android:padding="8dp"
-                        android:textSize="13sp" />
+                        android:singleLine="true" />
 
                     <Button
                         android:id="@+id/save_server"
                         style="@style/Button.Outline"
-                        android:layout_width="wrap_content"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="8dp"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
                         android:text="@string/save" />
                 </LinearLayout>
+
+                <!-- Privacy Policy & Account Deletion Links -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="16dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btn_privacy_policy"
+                        style="@style/Button.Outline"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:minHeight="40dp"
+                        android:text="@string/privacy_policy"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/btn_account_delete"
+                        style="@style/Button.Outline"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:minHeight="40dp"
+                        android:text="@string/account_delete"
+                        android:textColor="@color/danger"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
             </LinearLayout>
-        </LinearLayout>
+        </ScrollView>
     </FrameLayout>
 
-    <!-- ==================== BOTTOM NAVIGATION BAR ==================== -->
+    <!-- Bottom Navigation Bar -->
     <LinearLayout
-        android:id="@+id/bottom_nav_bar"
+        android:id="@+id/nav_bar"
         android:layout_width="match_parent"
         android:layout_height="60dp"
         android:background="@drawable/bg_nav_bar"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:orientation="horizontal">
 
-        <!-- Tab 1: Text -->
         <LinearLayout
             android:id="@+id/nav_tab_send"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="?android:attr/selectableItemBackground"
-            android:gravity="center"
-            android:orientation="vertical"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
 
-            <TextView
+            <ImageView
                 android:id="@+id/nav_icon_send"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="💬"
-                android:textSize="16sp" />
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_tab_send" />
 
             <TextView
                 android:id="@+id/nav_label_send"
@@ -651,28 +935,26 @@
                 android:layout_marginTop="2dp"
                 android:text="@string/nav_send"
                 android:textColor="@color/nav_item_selected"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Tab 2: Files -->
         <LinearLayout
             android:id="@+id/nav_tab_files"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="?android:attr/selectableItemBackground"
-            android:gravity="center"
-            android:orientation="vertical"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
 
-            <TextView
+            <ImageView
                 android:id="@+id/nav_icon_files"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📁"
-                android:textSize="16sp" />
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_tab_files" />
 
             <TextView
                 android:id="@+id/nav_label_files"
@@ -681,27 +963,25 @@
                 android:layout_marginTop="2dp"
                 android:text="@string/nav_files"
                 android:textColor="@color/nav_item_unselected"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Tab 3: Feed -->
         <LinearLayout
             android:id="@+id/nav_tab_feed"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="?android:attr/selectableItemBackground"
-            android:gravity="center"
-            android:orientation="vertical"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
 
-            <TextView
+            <ImageView
                 android:id="@+id/nav_icon_feed"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📥"
-                android:textSize="16sp" />
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_tab_feed" />
 
             <TextView
                 android:id="@+id/nav_label_feed"
@@ -710,27 +990,25 @@
                 android:layout_marginTop="2dp"
                 android:text="@string/nav_feed"
                 android:textColor="@color/nav_item_unselected"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Tab 4: Account -->
         <LinearLayout
             android:id="@+id/nav_tab_account"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="?android:attr/selectableItemBackground"
-            android:gravity="center"
-            android:orientation="vertical"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
 
-            <TextView
+            <ImageView
                 android:id="@+id/nav_icon_account"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="👤"
-                android:textSize="16sp" />
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_tab_account" />
 
             <TextView
                 android:id="@+id/nav_label_account"
@@ -739,7 +1017,8 @@
                 android:layout_marginTop="2dp"
                 android:text="@string/nav_account"
                 android:textColor="@color/nav_item_unselected"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
+
 </LinearLayout>

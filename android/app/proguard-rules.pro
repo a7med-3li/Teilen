@@ -1,5 +1,4 @@
-
-# 1. Keep JNA core classes, methods, and fields (Fixes the Pointer peer crash)
+# 1. Keep JNA core classes, methods, and fields (Prevents UnsatisfiedLinkError on Pointer.peer)
 -dontwarn java.awt.**
 -keep class com.sun.jna.** { *; }
 -keepclassmembers class * extends com.sun.jna.** { public *; }
@@ -14,17 +13,21 @@
     <init>(...);
 }
 
-# 3. If using Rust UniFFI (common with JNA on Android), keep generated bindings
+# 3. Keep LazySodium & Native JNI Bridges
+-keep class com.goterl.lazysodium.** { *; }
+-keep interface com.goterl.lazysodium.** { *; }
 -keep class uniffi.** { *; }
 -keep interface uniffi.** { *; }
-
-# 4. Keep any custom JNA bridge classes inside your own package
 -keepclasseswithmembernames class com.teilen.app.** {
     native <methods>;
 }
 
-# 5. Keep Kotlin Metadata & Data Serialization (if using JSON/Retrofit/Coroutines)
+# 4. Keep WebRTC Native & Java Classes
+-keep class org.webrtc.** { *; }
+
+# 5. Keep Kotlin Metadata & Serialization Models
 -keepattributes *Annotation*,InnerClasses,Signature,Exceptions
 -keepclassmembers class kotlin.Metadata {
     public <methods>;
 }
+-keep class com.teilen.app.** { *; }

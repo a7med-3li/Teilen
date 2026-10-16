@@ -3,7 +3,7 @@
     <string name="app_name">Teilen</string>
     <string name="share_label">Teilen</string>
     <string name="process_text_label">Copy to Teilen</string>
-    <string name="header_subtitle">straight to your own inbox</string>
+    <string name="header_subtitle">zero-knowledge ephemeral transfer</string>
 
     <string name="section_account">Account</string>
     <string name="section_feed">Feed</string>
@@ -25,6 +25,7 @@
     <string name="pair_cancel">Cancel</string>
     <string name="signed_in">Paired</string>
     <string name="signed_in_as">Paired as %1$s</string>
+    <string name="account_paired_e2ee">⚡ Paired &amp; E2EE Verified</string>
     <string name="sign_out">Sign out</string>
     <string name="pair_before_sharing">Pair this phone first — open Teilen to set up your account.</string>
     <string name="pair_before_files">Pair this phone first — files cannot be sent yet.</string>
@@ -52,34 +53,46 @@
     <!-- the feed: everything the account has shared, from any device -->
     <string name="feed_intro">Everything you share with Teilen, from the phone and from the web. Newest first.</string>
     <string name="open_feed">Open feed</string>
-    <string name="feed_title">Feed</string>
-    <string name="feed_subtitle">from all your devices</string>
-    <string name="feed_count">%1$d shared · newest first</string>
-    <string name="feed_empty">Nothing here yet. Share something from the phone or from the web app and it turns up here.</string>
+    <string name="feed_title">Live Feed</string>
+    <string name="feed_subtitle">from all your paired devices</string>
+    <string name="feed_count">%1$d active</string>
+    <string name="feed_empty">Your feed is empty.</string>
+    <string name="feed_empty_hint">Items you share will appear here with an automatic countdown and vanish when expired.</string>
     <string name="feed_thumb">Shared image</string>
     <string name="feed_open_link">Open</string>
     <string name="feed_no_viewer">No app on this phone can open %1$s.</string>
     <string name="image_failed">This image is gone — it may have expired, or the link is no longer signed.</string>
     <string name="feed_need_pair">Pair this phone first — the feed belongs to one account.</string>
     <string name="refresh">Refresh</string>
+    <string name="extend_ttl">+1h</string>
+    <string name="extend_ttl_success">Extended by 1 hour</string>
+    <string name="delete_item">Delete</string>
 
-    <string name="content_hint">paste text or a link</string>
+    <string name="content_hint">Paste text, note, or URL link…</string>
     <string name="expires_in">Disappears after</string>
     <string name="send">Send</string>
-    <string name="sending">Sending…</string>
+    <string name="encrypt_and_send">🔒 Encrypt &amp; Send</string>
+    <string name="paste_and_send">📋 Paste from clipboard</string>
+    <string name="sending">Encrypting &amp; sending…</string>
     <string name="ready">Ready · %1$s</string>
     <string name="nothing_to_send">Nothing to send — paste something first.</string>
     <string name="sent">Sent · %1$s</string>
     <string name="sent_toast">Sent to Teilen</string>
     <string name="copied_toast">Copied to Teilen</string>
-    <string name="server_hint">Already set to the built-in server — only change this to run your own.</string>
+    <string name="copied_to_clipboard">✓ Copied</string>
+    <string name="server_hint">Backend URL (defaults to built-in local/remote server):</string>
     <string name="server_blank">Enter a URL first.</string>
     <string name="server_saved">Saved: %1$s</string>
     <string name="save">Save</string>
 
     <!-- files, up to the server-side cap -->
-    <string name="pick_file">Pick a file…</string>
-    <string name="files_hint">Up to 30 MB per file. Images, PDFs, anything — one item each.</string>
+    <string name="pick_file">Choose Files</string>
+    <string name="files_hint">Up to 30 MB · Encrypted with XChaCha20-Poly1305</string>
+    <string name="files_drop_hint">Up to 30 MB · Encrypted with XChaCha20</string>
+    <string name="chip_photos">📷 Photos</string>
+    <string name="chip_documents">📄 Documents</string>
+    <string name="chip_any_file">📁 Any File</string>
+    <string name="file_too_large_error">Selected file (%1$s) exceeds the 30 MB limit.</string>
     <string name="uploading">Uploading %1$s…</string>
     <string name="uploading_n">Uploading %1$d files… (%2$d of %3$d)</string>
     <string name="uploading_bytes">%1$s sent so far · limit 30 MB</string>
@@ -88,20 +101,26 @@
     <string name="file_failed">%1$s could not be sent</string>
 
     <string name="share_sending">Sending “%1$s”…</string>
-    <string name="share_sent">Sent</string>
+    <string name="share_sent">Sent ✓</string>
     <string name="share_empty">Nothing to share</string>
-    <string name="share_uploading">Sending %1$s</string>
-    <string name="share_uploading_n">Sending %1$d files</string>
+    <string name="share_uploading">Encrypting &amp; sending %1$s</string>
+    <string name="share_uploading_n">Encrypting &amp; sending %1$d files</string>
     <string name="share_uploading_progress">%1$s of %2$s</string>
     <string name="share_files_sent">%1$d files sent</string>
 
+    <!-- notifications & foreground service compliance -->
+    <string name="cancel">Cancel</string>
+    <string name="transfer_cancelling">Cancelling transfer…</string>
+    <string name="share_cancelled">Transfer cancelled</string>
+    <string name="upload_via_lan">⚡ Via Direct LAN</string>
+    <string name="upload_via_relay">☁️ Via Encrypted Relay</string>
     <string name="watch_title">Send what I copy</string>
-    <string name="watch_hint">Copy anything — a Teilen notification appears with a “Send” button. Nothing is ever sent until you tap it.</string>
+    <string name="watch_hint">Copy anything — a notification offers a one-tap “Send” button. Nothing is sent until you explicitly tap it.</string>
     <string name="watch_idle_title">Teilen is watching</string>
-    <string name="watch_idle_text">Copy something, then tap to send it</string>
+    <string name="watch_idle_text">Copy text or link, then tap Send to transfer</string>
     <string name="watch_offer_title">Copied — send to Teilen?</string>
-    <string name="watch_offer_text">Tap to send the clipboard</string>
-    <string name="stop_watching">Stop</string>
+    <string name="watch_offer_text">Tap Send to encrypt and transfer clipboard</string>
+    <string name="stop_watching">Stop Watching</string>
     <string name="try_clipboard">Try it now</string>
     <string name="notifications_needed">Allow notifications, otherwise there is nothing to tap.</string>
     <string name="watching_on">Watching the clipboard</string>
@@ -125,11 +144,27 @@
     <string name="account_mode_register_hint">Create an account with your phone number and password.</string>
     <string name="account_mode_login_hint">Sign in to your account with your phone number and password.</string>
 
+    <!-- privacy & compliance -->
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="account_delete">Delete Account &amp; Data</string>
+
+    <!-- status badges -->
+    <string name="status_direct_lan">⚡ Direct LAN</string>
+    <string name="status_encrypted_relay">☁️ Encrypted Relay</string>
+    <string name="status_lan_ready">⚡ Direct LAN Fast-Path</string>
+
+    <!-- TTL segmented pills -->
+    <string name="ttl_10m">10m</string>
+    <string name="ttl_30m">30m</string>
+    <string name="ttl_1h">1h</string>
+    <string name="ttl_4h">4h</string>
+    <string name="ttl_24h">24h</string>
+
     <!-- bottom navigation tabs -->
-    <string name="nav_send">Text</string>
+    <string name="nav_send">Send</string>
     <string name="nav_files">Files</string>
     <string name="nav_feed">Feed</string>
     <string name="nav_account">Account</string>
-    <string name="sign_in_required_banner">Sign in or register an account in the Account tab to start sharing.</string>
+    <string name="sign_in_required_banner">Sign in or register in the Account tab to start sharing securely.</string>
     <string name="go_to_account">Go to Account</string>
 </resources>

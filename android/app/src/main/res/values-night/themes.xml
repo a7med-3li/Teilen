@@ -1,11 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    Dark theme: same structure as res/values/themes.xml, different platform parent and the one
-    navigation-bar flag. Everything else resolves through values-night/colors.xml.
--->
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- windowLightNavigationBar is API 27+; older platforms simply ignore the attribute -->
     <style name="Theme.Teilen" parent="@android:style/Theme.Material.NoActionBar"
         tools:targetApi="o_mr1">
         <item name="android:windowBackground">@color/bg</item>
@@ -13,9 +8,10 @@
         <item name="android:colorControlActivated">@color/accent</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
         <item name="android:textColorSecondary">@color/text_secondary</item>
-        <item name="android:textColorHint">@color/text_secondary</item>
-        <item name="android:statusBarColor">@color/brand_bar</item>
-        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:textColorHint">@color/text_muted</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/nav_bg</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>
 

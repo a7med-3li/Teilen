@@ -37,6 +37,11 @@ class ClipboardWatchService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            setWatching(this, false)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_RESET) {
             publish(State.Idle)
             return START_STICKY
@@ -103,7 +108,7 @@ class ClipboardWatchService : Service() {
                 .setContentTitle(getString(R.string.watch_idle_title))
                 .setContentText(getString(R.string.watch_idle_text))
                 .setContentIntent(openApp())
-                .addAction(R.drawable.ic_notification, getString(R.string.stop_watching), openApp(stop = true))
+                .addAction(R.drawable.ic_notification, getString(R.string.stop_watching), stopAction())
                 .build()
 
             is State.Offer -> builder
@@ -111,10 +116,17 @@ class ClipboardWatchService : Service() {
                 .setContentText(state.preview?.take(80) ?: getString(R.string.watch_offer_text))
                 .setContentIntent(send())
                 .addAction(R.drawable.ic_notification, getString(R.string.send), send())
-                .addAction(R.drawable.ic_notification, getString(R.string.stop_watching), openApp(stop = true))
+                .addAction(R.drawable.ic_notification, getString(R.string.stop_watching), stopAction())
                 .build()
         }
     }
+
+    private fun stopAction(): PendingIntent = PendingIntent.getService(
+        this,
+        3,
+        Intent(this, ClipboardWatchService::class.java).setAction(ACTION_STOP),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     private fun send(): PendingIntent = PendingIntent.getActivity(
         this,
@@ -133,6 +145,7 @@ class ClipboardWatchService : Service() {
     )
 
     companion object {
+        const val ACTION_STOP = "com.teilen.app.STOP_WATCHING"
         const val ACTION_RESET = "com.teilen.app.RESET_WATCHING"
 
         /**

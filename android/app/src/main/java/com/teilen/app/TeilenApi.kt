@@ -366,6 +366,60 @@ object TeilenApi {
         }
     }
 
+    /**
+     * Deletes a feed item by ID.
+     */
+    fun deleteItem(baseUrl: String, token: String?, id: String, onDone: (ok: Boolean, message: String) -> Unit) {
+        Thread {
+            val result = try {
+                val connection = open(baseUrl, "/api/items/$id", token, "DELETE")
+                try {
+                    val status = connection.responseCode
+                    if (status in 200..299 || status == 204) {
+                        true to "deleted"
+                    } else if (status == 401) {
+                        false to UNPAIRED_MESSAGE
+                    } else {
+                        false to "server said $status"
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (e: Exception) {
+                false to (e.message ?: "network error")
+            }
+            main.post { onDone(result.first, result.second) }
+        }.apply { name = "teilen-delete" }.start()
+    }
+
+    /**
+     * Extends a feed item's TTL (+1 hour) via POST /api/v1/items/:id/extend.
+     */
+    fun extendItem(baseUrl: String, token: String?, id: String, onDone: (ok: Boolean, message: String) -> Unit) {
+        Thread {
+            val result = try {
+                val connection = open(baseUrl, "/api/v1/items/$id/extend", token, "POST")
+                try {
+                    connection.doOutput = true
+                    connection.outputStream.close()
+                    val status = connection.responseCode
+                    if (status in 200..299) {
+                        true to "extended"
+                    } else if (status == 401) {
+                        false to UNPAIRED_MESSAGE
+                    } else {
+                        false to "server said $status"
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (e: Exception) {
+                false to (e.message ?: "network error")
+            }
+            main.post { onDone(result.first, result.second) }
+        }.apply { name = "teilen-extend" }.start()
+    }
+
     /** @param onResult (ok, message), always on the main thread */
     fun send(
         baseUrl: String,

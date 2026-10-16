@@ -1,52 +1,144 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    One shared item. The thumbnail is only inflated into view for images, so a list of text and
-    links is not paying for 56dp of image on every row.
--->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_card"
     android:baselineAligned="false"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:padding="14dp">
 
-    <ImageView
-        android:id="@+id/feed_thumb"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:background="@drawable/bg_input"
-        android:contentDescription="@string/feed_thumb"
-        android:scaleType="centerCrop"
-        android:visibility="gone" />
-
+    <!-- Card Header: Type Badge, Title, Countdown Ring, and Expiry Text -->
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
         <TextView
             android:id="@+id/feed_kind"
             style="@style/Text.Section"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge"
+            android:paddingStart="8dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="3dp"
+            android:textColor="@color/accent"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/feed_meta"
+            style="@style/Text.Tabular"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <com.teilen.app.CountdownRingView
+            android:id="@+id/feed_ring"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginStart="6dp" />
+    </LinearLayout>
+
+    <!-- Content Row: optional thumbnail + body text -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/feed_thumb"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/bg_input"
+            android:contentDescription="@string/feed_thumb"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/feed_title"
             style="@style/Text.Body"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_weight="1"
             android:ellipsize="end"
-            android:maxLines="2" />
-
-        <TextView
-            android:id="@+id/feed_meta"
-            style="@style/Text.Caption"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp" />
+            android:lineSpacingMultiplier="1.15"
+            android:maxLines="3"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
     </LinearLayout>
+
+    <!-- Card Action Footer: Copy, Open, +1h Extend, Delete -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/feed_action_copy"
+            style="@style/Button.Outline"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:minHeight="32dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="Copy"
+            android:textColor="@color/accent"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/feed_action_open"
+            style="@style/Button.Outline"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
+            android:minHeight="32dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="@string/feed_open_link"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/feed_action_extend"
+            style="@style/Button.Outline"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
+            android:minHeight="32dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="@string/extend_ttl"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <Button
+            android:id="@+id/feed_action_delete"
+            style="@style/Button.Outline"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:minHeight="32dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="✕"
+            android:textColor="@color/danger"
+            android:textSize="12sp" />
+    </LinearLayout>
+
 </LinearLayout>

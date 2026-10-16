@@ -189,9 +189,20 @@ class FeedActivity : Activity() {
             val view = convertView ?: LayoutInflater.from(this@FeedActivity)
                 .inflate(R.layout.item_feed, parent, false)
             val item = rows[position]
-            view.findViewById<TextView>(R.id.feed_kind).text = item.kind
+            view.findViewById<TextView>(R.id.feed_kind).text = item.kind.uppercase()
             view.findViewById<TextView>(R.id.feed_title).text = item.title
             view.findViewById<TextView>(R.id.feed_meta).text = item.meta()
+
+            val ring = view.findViewById<CountdownRingView?>(R.id.feed_ring)
+            if (ring != null) {
+                val now = System.currentTimeMillis()
+                val created = item.createdAt?.toEpochMilli() ?: (now - 3600_000L)
+                val expires = item.expiresAt?.toEpochMilli() ?: (created + 3600_000L)
+                val totalSpan = (expires - created).coerceAtLeast(1L)
+                val remaining = (expires - now).coerceAtLeast(0L)
+                val ratio = (remaining.toFloat() / totalSpan.toFloat()).coerceIn(0f, 1f)
+                ring.progress = ratio
+            }
 
             val thumb = view.findViewById<ImageView>(R.id.feed_thumb)
             val url = item.blobUrl(Server.get(this@FeedActivity))
