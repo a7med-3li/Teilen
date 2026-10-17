@@ -482,7 +482,7 @@ object TeilenApi {
         onDone: (BatchOutcome) -> Unit
     ) {
         if (uris.isEmpty()) {
-            onDone(BatchOutcome(0, 0, null))
+            main.post { onDone(BatchOutcome(0, 0, null)) }
             return
         }
         var sent = 0
@@ -490,7 +490,7 @@ object TeilenApi {
 
         fun next(index: Int) {
             if (index >= uris.size) {
-                onDone(BatchOutcome(sent, uris.size, lastError))
+                main.post { onDone(BatchOutcome(sent, uris.size, lastError)) }
                 return
             }
             val uri = uris[index]
@@ -533,7 +533,9 @@ object TeilenApi {
     ) {
         Thread {
             val result = try {
-                uploadBlocking(baseUrl, token, sourceOf(context, uri, displayName), ttlSeconds, onProgress)
+                uploadBlocking(baseUrl, token, sourceOf(context, uri, displayName), ttlSeconds) { written, total ->
+                    main.post { onProgress(written, total) }
+                }
             } catch (e: TooLargeException) {
                 false to e.message!!
             } catch (e: FileNotFoundException) {
@@ -567,7 +569,7 @@ object TeilenApi {
         onDone: (BatchOutcome) -> Unit
     ) {
         if (fds.isEmpty()) {
-            onDone(BatchOutcome(0, 0, null))
+            main.post { onDone(BatchOutcome(0, 0, null)) }
             return
         }
         var sent = 0
@@ -575,7 +577,7 @@ object TeilenApi {
 
         fun next(index: Int) {
             if (index >= fds.size) {
-                onDone(BatchOutcome(sent, fds.size, lastError))
+                main.post { onDone(BatchOutcome(sent, fds.size, lastError)) }
                 return
             }
             val name = names.getOrElse(index) { "shared-file" }
@@ -622,7 +624,9 @@ object TeilenApi {
                         ParcelFileDescriptor.AutoCloseInputStream(fd)
                     },
                     ttlSeconds = ttlSeconds,
-                    onProgress = onProgress
+                    onProgress = { written, total ->
+                        main.post { onProgress(written, total) }
+                    }
                 )
             } catch (e: TooLargeException) {
                 false to e.message!!

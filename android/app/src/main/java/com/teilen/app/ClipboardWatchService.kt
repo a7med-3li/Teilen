@@ -108,6 +108,7 @@ class ClipboardWatchService : Service() {
                 .setContentTitle(getString(R.string.watch_idle_title))
                 .setContentText(getString(R.string.watch_idle_text))
                 .setContentIntent(openApp())
+                .addAction(R.drawable.ic_notification, getString(R.string.send_current_clipboard), send())
                 .addAction(R.drawable.ic_notification, getString(R.string.stop_watching), stopAction())
                 .build()
 
@@ -115,7 +116,7 @@ class ClipboardWatchService : Service() {
                 .setContentTitle(getString(R.string.watch_offer_title))
                 .setContentText(state.preview?.take(80) ?: getString(R.string.watch_offer_text))
                 .setContentIntent(send())
-                .addAction(R.drawable.ic_notification, getString(R.string.send), send())
+                .addAction(R.drawable.ic_notification, getString(R.string.send_current_clipboard), send())
                 .addAction(R.drawable.ic_notification, getString(R.string.stop_watching), stopAction())
                 .build()
         }
@@ -131,7 +132,7 @@ class ClipboardWatchService : Service() {
     private fun send(): PendingIntent = PendingIntent.getActivity(
         this,
         1,
-        Intent(this, SendClipboardActivity::class.java),
+        Intent(this, ClipboardCaptureActivity::class.java),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 

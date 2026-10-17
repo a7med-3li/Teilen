@@ -133,6 +133,16 @@
             android:taskAffinity=""
             android:theme="@style/Theme.Teilen.Invisible" />
 
+        <!-- 1-tap trampoline capture for Android 10+ clipboard access -->
+        <activity
+            android:name=".ClipboardCaptureActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Teilen.Invisible" />
+
         <!-- watches the clipboard so a copy can be offered to Teilen; it never sends by itself -->
         <service
             android:name=".ClipboardWatchService"

@@ -1157,8 +1157,36 @@
         clearBtn.disabled = false;
     });
 
+    // ---------- brand launch animation (1.4s) ----------
+
+    function initLaunchScreen() {
+        const veil = el('launch-veil');
+        const launchStatus = el('launch-status');
+        if (!veil) return;
+
+        // Phase 3 (650ms): micro-status transition to Feed Sync
+        setTimeout(() => {
+            if (launchStatus) {
+                launchStatus.style.opacity = '0';
+                setTimeout(() => {
+                    launchStatus.textContent = '⚡ Syncing Ephemeral Feed…';
+                    launchStatus.style.opacity = '1';
+                }, 120);
+            }
+        }, 650);
+
+        // Phase 4 (1200ms - 1400ms): cross-fade to dashboard
+        setTimeout(() => {
+            veil.classList.add('dismissed');
+            setTimeout(() => {
+                veil.remove();
+            }, 300);
+        }, 1200);
+    }
+
     // ---------- start ----------
 
+    initLaunchScreen();
     refresh();
     if (token.get()) {
         showFeed();

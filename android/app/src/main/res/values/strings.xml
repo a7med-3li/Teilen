@@ -167,4 +167,23 @@
     <string name="nav_account">Account</string>
     <string name="sign_in_required_banner">Sign in or register in the Account tab to start sharing securely.</string>
     <string name="go_to_account">Go to Account</string>
+
+    <!-- Send mode selector & file preview -->
+    <string name="mode_text">✍️ Text / Link</string>
+    <string name="mode_media">🖼️ Photo / Media</string>
+    <string name="mode_file">📄 Document / File</string>
+    <string name="selected_file">Selected File</string>
+    <string name="change_file">Change</string>
+    <string name="remove_file">Remove</string>
+    <string name="no_file_chosen">No file selected yet</string>
+    <string name="choose_file_prompt">Select a file to encrypt &amp; transfer</string>
+    <string name="select_file_first">Please select a file to send.</string>
+
+    <!-- Clipboard & Trampoline strings -->
+    <string name="send_current_clipboard">⚡ Send Current Clipboard</string>
+    <string name="quick_paste_with_preview">📋 Paste: %1$s</string>
+
+    <!-- Brand Launch Screen -->
+    <string name="launch_status_vault">🔒 Initializing Zero-Knowledge Vault…</string>
+    <string name="launch_status_feed">⚡ Syncing Ephemeral Feed…</string>
 </resources>

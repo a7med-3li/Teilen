@@ -42,13 +42,15 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 
 /**
- * Modern non-scrollable 4-tab interface: Send, Files, Feed, and Account.
- * Obsidian/Slate dark-first palette with tactile haptics, tabular counters,
- * pre-flight size checks, live route badges, and inline feed management.
+ * Modern 3-tab interface: Send, Feed, and Account.
+ * Features an integrated multimodal composer (Text, Photo/Media, Document/File),
+ * tactile haptics, tabular counters, pre-flight size checks, live route badges,
+ * Android 10+ clipboard watcher support, and a sleek 1,400 ms brand launch screen.
  */
 class MainActivity : Activity() {
 
-    enum class Tab { SEND, FILES, FEED, ACCOUNT }
+    enum class Tab { SEND, FEED, ACCOUNT }
+    enum class SendMode { TEXT, MEDIA, FILE }
 
     // TTL values in seconds
     private val ttls = listOf(600L, 1800L, 3600L, 14400L, 86400L)
@@ -56,14 +58,49 @@ class MainActivity : Activity() {
 
     private val main = Handler(Looper.getMainLooper())
     private var currentTab = Tab.SEND
+    private var currentSendMode = SendMode.TEXT
+
+    // Selected files for upload
+    private val selectedFiles = ArrayList<Uri>()
+
+    // Splash overlay
+    private lateinit var splashOverlay: View
+    private lateinit var splashLogo: ImageView
+    private lateinit var splashTitle: TextView
+    private lateinit var splashStatus: TextView
 
     // Header & Route Badges
     private lateinit var headerRouteBadge: TextView
     private lateinit var headerSessionBadge: TextView
 
-    // Tab 1: Send
+    // Tab 1: Unified Send Composer
+    private lateinit var modePillText: TextView
+    private lateinit var modePillMedia: TextView
+    private lateinit var modePillFile: TextView
+
+    private lateinit var composerTextLayout: View
     private lateinit var content: EditText
     private lateinit var btnPasteSend: TextView
+
+    private lateinit var composerFileLayout: View
+    private lateinit var filePickerPrompt: View
+    private lateinit var btnChipPhotos: Button
+    private lateinit var btnChipDocuments: Button
+    private lateinit var btnChipAnyFile: Button
+    private lateinit var pickFile: Button
+
+    private lateinit var fileSelectedCard: View
+    private lateinit var filePreviewIcon: ImageView
+    private lateinit var filePreviewName: TextView
+    private lateinit var filePreviewSize: TextView
+    private lateinit var btnChangeFile: Button
+    private lateinit var btnRemoveFile: Button
+
+    private lateinit var fileErrorBox: LinearLayout
+    private lateinit var fileErrorText: TextView
+    private lateinit var fileProgress: ProgressBar
+    private lateinit var fileStatus: TextView
+
     private lateinit var ttlPill10m: TextView
     private lateinit var ttlPill30m: TextView
     private lateinit var ttlPill1h: TextView
@@ -73,17 +110,7 @@ class MainActivity : Activity() {
     private lateinit var send: Button
     private lateinit var status: TextView
 
-    // Tab 2: Files
-    private lateinit var btnChipPhotos: Button
-    private lateinit var btnChipDocuments: Button
-    private lateinit var btnChipAnyFile: Button
-    private lateinit var pickFile: Button
-    private lateinit var fileErrorBox: LinearLayout
-    private lateinit var fileErrorText: TextView
-    private lateinit var fileProgress: ProgressBar
-    private lateinit var fileStatus: TextView
-
-    // Tab 3: Feed
+    // Tab 2: Feed
     private lateinit var feedList: ListView
     private lateinit var feedEmpty: View
     private lateinit var feedSpinner: ProgressBar
@@ -92,7 +119,7 @@ class MainActivity : Activity() {
     private lateinit var feedAdapter: InlineFeedAdapter
     private var feedLoading = false
 
-    // Tab 4: Account
+    // Tab 3: Account
     private lateinit var account: AccountCard
     private lateinit var switchClipboard: Switch
     private lateinit var server: EditText
@@ -102,32 +129,26 @@ class MainActivity : Activity() {
 
     // Containers & Gating Banners
     private lateinit var pageSend: View
-    private lateinit var pageFiles: View
     private lateinit var pageFeed: View
     private lateinit var pageAccount: View
 
     private lateinit var cardText: View
-    private lateinit var cardFiles: View
     private lateinit var cardFeed: View
     private lateinit var cardClipboard: View
 
     private lateinit var gateBannerText: View
-    private lateinit var gateBannerFiles: View
     private lateinit var gateBannerFeed: View
 
     // Bottom Navigation Bar
     private lateinit var navTabSend: LinearLayout
-    private lateinit var navTabFiles: LinearLayout
     private lateinit var navTabFeed: LinearLayout
     private lateinit var navTabAccount: LinearLayout
 
     private lateinit var navIconSend: ImageView
-    private lateinit var navIconFiles: ImageView
     private lateinit var navIconFeed: ImageView
     private lateinit var navIconAccount: ImageView
 
     private lateinit var navLabelSend: TextView
-    private lateinit var navLabelFiles: TextView
     private lateinit var navLabelFeed: TextView
     private lateinit var navLabelAccount: TextView
 
@@ -155,7 +176,6 @@ class MainActivity : Activity() {
         setupTtlPills()
         setupNavigation()
         setupSendTab()
-        setupFilesTab()
         setupFeedTab()
         setupAccountTab()
 
@@ -165,6 +185,42 @@ class MainActivity : Activity() {
         account.render()
 
         takeHandedOverText(intent)
+
+        if (savedInstanceState == null) {
+            startLaunchAnimation()
+        } else {
+            splashOverlay.visibility = View.GONE
+        }
+    }
+
+    private fun startLaunchAnimation() {
+        splashOverlay.visibility = View.VISIBLE
+        splashLogo.alpha = 0f
+        splashLogo.scaleX = 0.85f
+        splashLogo.scaleY = 0.85f
+        splashTitle.alpha = 0f
+        splashStatus.alpha = 0f
+        splashStatus.text = getString(R.string.launch_status_vault)
+
+        // Phase 1 (0-500ms): Entrance scale and fade-in
+        splashLogo.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(450).start()
+        splashTitle.animate().alpha(1f).setDuration(450).start()
+        splashStatus.animate().alpha(1f).setDuration(450).start()
+
+        // Phase 3 (650ms): Micro-status transition to Feed Sync
+        main.postDelayed({
+            splashStatus.animate().alpha(0f).setDuration(120).withEndAction {
+                splashStatus.text = getString(R.string.launch_status_feed)
+                splashStatus.animate().alpha(1f).setDuration(120).start()
+            }.start()
+        }, 650)
+
+        // Phase 4 (1200ms - 1400ms): Cross-fade to main dashboard
+        main.postDelayed({
+            splashOverlay.animate().alpha(0f).setDuration(200).withEndAction {
+                splashOverlay.visibility = View.GONE
+            }.start()
+        }, 1200)
     }
 
     private fun setupWindowInsets() {
@@ -194,7 +250,7 @@ class MainActivity : Activity() {
             )
             val imeInsets = windowInsets.getInsets(WindowInsetsCompat.Type.ime())
 
-            // 1. Pad the top header/toolbar by the status bar height
+            // 1. Pad top header by status bar
             topBarView.updatePadding(
                 top = initialTopBarTop + systemBars.top,
                 left = initialTopBarLeft + systemBars.left,
@@ -202,7 +258,7 @@ class MainActivity : Activity() {
                 bottom = initialTopBarBottom
             )
 
-            // 2. Dynamically pad the bottom tab bar so 3-button nav never covers it
+            // 2. Dynamically pad bottom tabs so 3-button nav never covers them
             bottomTabContainer.updatePadding(
                 bottom = initialBottomTabBottom + systemBars.bottom,
                 left = initialBottomTabLeft + systemBars.left,
@@ -210,7 +266,7 @@ class MainActivity : Activity() {
                 top = initialBottomTabTop
             )
 
-            // 3. Ensure scrollable content or the Send composer adjusts smoothly when the keyboard (IME) opens
+            // 3. Scrollable content adjustments for IME keyboard
             val imeOffset = maxOf(0, imeInsets.bottom - systemBars.bottom)
             contentContainer.updatePadding(
                 bottom = initialContentBottom + imeOffset,
@@ -227,6 +283,7 @@ class MainActivity : Activity() {
         super.onResume()
         updateRouteBadge()
         registerNetworkCallback()
+        updatePasteButtonPreview()
         if (currentTab == Tab.FEED && Session.isPaired(this)) {
             refreshFeed(silent = true)
         }
@@ -244,12 +301,64 @@ class MainActivity : Activity() {
         main.removeCallbacks(feedTicker)
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            updatePasteButtonPreview()
+        }
+    }
+
+    private fun updatePasteButtonPreview() {
+        val cm = getSystemService(ClipboardManager::class.java) ?: return
+        val clip = runCatching { cm.primaryClip }.getOrNull()
+        val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()?.trim()
+        if (!text.isNullOrBlank()) {
+            val preview = text.replace('\n', ' ').replace('\r', ' ').take(16)
+            btnPasteSend.text = getString(
+                R.string.quick_paste_with_preview,
+                preview + (if (text.length > 16) "…" else "")
+            )
+        } else {
+            btnPasteSend.text = getString(R.string.paste_and_send)
+        }
+    }
+
     private fun bindViews() {
+        splashOverlay = findViewById(R.id.splash_overlay)
+        splashLogo = findViewById(R.id.splash_logo)
+        splashTitle = findViewById(R.id.splash_title)
+        splashStatus = findViewById(R.id.splash_status)
+
         headerRouteBadge = findViewById(R.id.header_route_badge)
         headerSessionBadge = findViewById(R.id.header_session_badge)
 
+        modePillText = findViewById(R.id.mode_pill_text)
+        modePillMedia = findViewById(R.id.mode_pill_media)
+        modePillFile = findViewById(R.id.mode_pill_file)
+
+        composerTextLayout = findViewById(R.id.composer_text_layout)
         content = findViewById(R.id.content)
         btnPasteSend = findViewById(R.id.btn_paste_send)
+
+        composerFileLayout = findViewById(R.id.composer_file_layout)
+        filePickerPrompt = findViewById(R.id.file_picker_prompt)
+        btnChipPhotos = findViewById(R.id.btn_chip_photos)
+        btnChipDocuments = findViewById(R.id.btn_chip_documents)
+        btnChipAnyFile = findViewById(R.id.btn_chip_any_file)
+        pickFile = findViewById(R.id.pick_file)
+
+        fileSelectedCard = findViewById(R.id.file_selected_card)
+        filePreviewIcon = findViewById(R.id.file_preview_icon)
+        filePreviewName = findViewById(R.id.file_preview_name)
+        filePreviewSize = findViewById(R.id.file_preview_size)
+        btnChangeFile = findViewById(R.id.btn_change_file)
+        btnRemoveFile = findViewById(R.id.btn_remove_file)
+
+        fileErrorBox = findViewById(R.id.file_error_box)
+        fileErrorText = findViewById(R.id.file_error_text)
+        fileProgress = findViewById(R.id.file_progress)
+        fileStatus = findViewById(R.id.file_status)
+
         ttlPill10m = findViewById(R.id.ttl_pill_10m)
         ttlPill30m = findViewById(R.id.ttl_pill_30m)
         ttlPill1h = findViewById(R.id.ttl_pill_1h)
@@ -258,15 +367,6 @@ class MainActivity : Activity() {
         spinner = findViewById(R.id.ttl)
         send = findViewById(R.id.send)
         status = findViewById(R.id.status)
-
-        btnChipPhotos = findViewById(R.id.btn_chip_photos)
-        btnChipDocuments = findViewById(R.id.btn_chip_documents)
-        btnChipAnyFile = findViewById(R.id.btn_chip_any_file)
-        pickFile = findViewById(R.id.pick_file)
-        fileErrorBox = findViewById(R.id.file_error_box)
-        fileErrorText = findViewById(R.id.file_error_text)
-        fileProgress = findViewById(R.id.file_progress)
-        fileStatus = findViewById(R.id.file_status)
 
         feedList = findViewById(R.id.feed_tab_list)
         feedEmpty = findViewById(R.id.feed_tab_empty)
@@ -281,31 +381,25 @@ class MainActivity : Activity() {
         btnAccountDelete = findViewById(R.id.btn_account_delete)
 
         pageSend = findViewById(R.id.page_send)
-        pageFiles = findViewById(R.id.page_files)
         pageFeed = findViewById(R.id.page_feed)
         pageAccount = findViewById(R.id.page_account)
 
         cardText = findViewById(R.id.card_text)
-        cardFiles = findViewById(R.id.card_files)
         cardFeed = findViewById(R.id.card_feed)
         cardClipboard = findViewById(R.id.card_clipboard)
 
         gateBannerText = findViewById(R.id.gate_banner_text)
-        gateBannerFiles = findViewById(R.id.gate_banner_files)
         gateBannerFeed = findViewById(R.id.gate_banner_feed)
 
         navTabSend = findViewById(R.id.nav_tab_send)
-        navTabFiles = findViewById(R.id.nav_tab_files)
         navTabFeed = findViewById(R.id.nav_tab_feed)
         navTabAccount = findViewById(R.id.nav_tab_account)
 
         navIconSend = findViewById(R.id.nav_icon_send)
-        navIconFiles = findViewById(R.id.nav_icon_files)
         navIconFeed = findViewById(R.id.nav_icon_feed)
         navIconAccount = findViewById(R.id.nav_icon_account)
 
         navLabelSend = findViewById(R.id.nav_label_send)
-        navLabelFiles = findViewById(R.id.nav_label_files)
         navLabelFeed = findViewById(R.id.nav_label_feed)
         navLabelAccount = findViewById(R.id.nav_label_account)
     }
@@ -317,10 +411,6 @@ class MainActivity : Activity() {
             performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
             selectTab(Tab.SEND)
         }
-        navTabFiles.setOnClickListener {
-            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
-            selectTab(Tab.FILES)
-        }
         navTabFeed.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
             selectTab(Tab.FEED)
@@ -331,10 +421,8 @@ class MainActivity : Activity() {
         }
 
         findViewById<Button>(R.id.go_to_account_text).setOnClickListener { selectTab(Tab.ACCOUNT) }
-        findViewById<Button>(R.id.go_to_account_files).setOnClickListener { selectTab(Tab.ACCOUNT) }
         findViewById<Button>(R.id.go_to_account_feed).setOnClickListener { selectTab(Tab.ACCOUNT) }
 
-        // Hidden legacy button to launch FeedActivity if requested
         findViewById<Button>(R.id.open_feed).setOnClickListener {
             startActivity(Intent(this, FeedActivity::class.java))
         }
@@ -345,12 +433,10 @@ class MainActivity : Activity() {
     fun selectTab(tab: Tab) {
         currentTab = tab
         pageSend.visibility = if (tab == Tab.SEND) View.VISIBLE else View.GONE
-        pageFiles.visibility = if (tab == Tab.FILES) View.VISIBLE else View.GONE
         pageFeed.visibility = if (tab == Tab.FEED) View.VISIBLE else View.GONE
         pageAccount.visibility = if (tab == Tab.ACCOUNT) View.VISIBLE else View.GONE
 
         updateTabItem(navTabSend, navIconSend, navLabelSend, tab == Tab.SEND)
-        updateTabItem(navTabFiles, navIconFiles, navLabelFiles, tab == Tab.FILES)
         updateTabItem(navTabFeed, navIconFeed, navLabelFeed, tab == Tab.FEED)
         updateTabItem(navTabAccount, navIconAccount, navLabelAccount, tab == Tab.ACCOUNT)
 
@@ -409,7 +495,6 @@ class MainActivity : Activity() {
     // ------------------------------------------------------------- TTL Segmented Selector
 
     private fun setupTtlPills() {
-        // Fallback adapter for hidden legacy spinner
         spinner.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_dropdown_item,
@@ -447,13 +532,27 @@ class MainActivity : Activity() {
         }
     }
 
-    // ------------------------------------------------------------- Tab 1: Send
+    // ------------------------------------------------------------- Tab 1: Send Composer
 
     private fun setupSendTab() {
+        modePillText.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            setSendMode(SendMode.TEXT)
+        }
+        modePillMedia.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            setSendMode(SendMode.MEDIA)
+        }
+        modePillFile.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            setSendMode(SendMode.FILE)
+        }
+
         btnPasteSend.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
+            setSendMode(SendMode.TEXT)
             val cm = getSystemService(ClipboardManager::class.java)
-            val clip = cm.primaryClip
+            val clip = cm?.primaryClip
             val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
             if (!text.isNullOrBlank()) {
                 content.setText(text)
@@ -465,13 +564,159 @@ class MainActivity : Activity() {
             }
         }
 
+        btnChipPhotos.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            launchPicker("image/*")
+        }
+        btnChipDocuments.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            launchPicker("application/pdf")
+        }
+        btnChipAnyFile.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            launchPicker("*/*")
+        }
+        pickFile.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            launchPicker(if (currentSendMode == SendMode.MEDIA) "image/*" else "*/*")
+        }
+
+        btnChangeFile.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            launchPicker(if (currentSendMode == SendMode.MEDIA) "image/*" else "*/*")
+        }
+
+        btnRemoveFile.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            clearSelectedFiles()
+        }
+
         send.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            submit()
+            if (currentSendMode == SendMode.TEXT) {
+                submitText()
+            } else {
+                submitFiles()
+            }
+        }
+
+        setSendMode(SendMode.TEXT)
+    }
+
+    private fun setSendMode(mode: SendMode) {
+        currentSendMode = mode
+        val modes = listOf(
+            modePillText to SendMode.TEXT,
+            modePillMedia to SendMode.MEDIA,
+            modePillFile to SendMode.FILE
+        )
+        for ((pill, m) in modes) {
+            val selected = m == mode
+            pill.setBackgroundResource(
+                if (selected) R.drawable.bg_segmented_selected else android.R.color.transparent
+            )
+            pill.setTextColor(
+                getColor(if (selected) R.color.accent else R.color.pill_unselected_text)
+            )
+            pill.setTypeface(null, if (selected) Typeface.BOLD else Typeface.NORMAL)
+        }
+
+        if (mode == SendMode.TEXT) {
+            composerTextLayout.visibility = View.VISIBLE
+            composerFileLayout.visibility = View.GONE
+        } else {
+            composerTextLayout.visibility = View.GONE
+            composerFileLayout.visibility = View.VISIBLE
         }
     }
 
-    private fun submit() {
+    private fun launchPicker(mimeType: String) {
+        val open = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        }
+        startActivityForResult(open, REQ_OPEN_DOCUMENT)
+    }
+
+    @Deprecated("platform activities only; there is no AndroidX result API here")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_OPEN_DOCUMENT || resultCode != RESULT_OK || data == null) {
+            return
+        }
+        val picked = pickedUris(data)
+        if (picked.isEmpty()) return
+
+        // Pre-flight Size Check (> 30 MB)
+        val oversized = picked.mapNotNull { uri ->
+            val size = TeilenApi.declaredSize(this, uri)
+            val name = TeilenApi.displayName(this, uri)
+            if (size != null && size > TeilenApi.MAX_UPLOAD_BYTES) {
+                name to size
+            } else null
+        }
+
+        if (oversized.isNotEmpty()) {
+            val (name, size) = oversized.first()
+            fileErrorBox.visibility = View.VISIBLE
+            fileErrorText.text = getString(
+                R.string.file_too_large_error,
+                "$name (${TeilenApi.humanSize(size)})"
+            )
+            performErrorHaptic(fileErrorBox)
+            return
+        } else {
+            fileErrorBox.visibility = View.GONE
+        }
+
+        picked.forEach { uri ->
+            runCatching {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+
+        selectedFiles.clear()
+        selectedFiles.addAll(picked)
+
+        // Show file selected card
+        filePickerPrompt.visibility = View.GONE
+        fileSelectedCard.visibility = View.VISIBLE
+
+        val firstUri = picked.first()
+        val firstName = TeilenApi.displayName(this, firstUri)
+        val totalSize = picked.sumOf { TeilenApi.declaredSize(this, it) ?: 0L }
+        filePreviewName.text = if (picked.size > 1) {
+            getString(R.string.share_files_sent, picked.size) + " · $firstName"
+        } else {
+            firstName
+        }
+        filePreviewSize.text = if (totalSize > 0) TeilenApi.humanSize(totalSize) else "Ready"
+        fileStatus.visibility = View.GONE
+        fileProgress.visibility = View.GONE
+    }
+
+    private fun clearSelectedFiles() {
+        selectedFiles.clear()
+        fileSelectedCard.visibility = View.GONE
+        filePickerPrompt.visibility = View.VISIBLE
+        fileErrorBox.visibility = View.GONE
+        fileProgress.visibility = View.GONE
+        fileStatus.visibility = View.GONE
+    }
+
+    private fun pickedUris(data: Intent): List<Uri> {
+        val single = data.data
+        val many = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            data.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            data.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+        }
+        return many?.filterNotNull() ?: listOfNotNull(single)
+    }
+
+    private fun submitText() {
         val text = content.text.toString().trim()
         if (text.isEmpty()) {
             status.text = getString(R.string.nothing_to_send)
@@ -505,93 +750,17 @@ class MainActivity : Activity() {
         }
     }
 
-    // ------------------------------------------------------------- Tab 2: Files
-
-    private fun setupFilesTab() {
-        btnChipPhotos.setOnClickListener {
-            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            launchPicker("image/*")
-        }
-        btnChipDocuments.setOnClickListener {
-            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            launchPicker("application/pdf")
-        }
-        btnChipAnyFile.setOnClickListener {
-            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            launchPicker("*/*")
-        }
-        pickFile.setOnClickListener {
-            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            launchPicker("*/*")
-        }
-    }
-
-    private fun launchPicker(mimeType: String) {
-        val open = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = mimeType
-            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-        }
-        startActivityForResult(open, REQ_OPEN_DOCUMENT)
-    }
-
-    @Deprecated("platform activities only; there is no AndroidX result API here")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQ_OPEN_DOCUMENT || resultCode != RESULT_OK || data == null) {
-            return
-        }
-        val picked = pickedUris(data)
-        if (picked.isEmpty()) {
+    private fun submitFiles() {
+        if (selectedFiles.isEmpty()) {
+            Toast.makeText(this, R.string.select_file_first, Toast.LENGTH_SHORT).show()
+            launchPicker(if (currentSendMode == SendMode.MEDIA) "image/*" else "*/*")
             return
         }
 
-        // Pre-flight Size Check (> 30 MB)
-        val oversized = picked.mapNotNull { uri ->
-            val size = TeilenApi.declaredSize(this, uri)
-            val name = TeilenApi.displayName(this, uri)
-            if (size != null && size > TeilenApi.MAX_UPLOAD_BYTES) {
-                name to size
-            } else null
-        }
-
-        if (oversized.isNotEmpty()) {
-            val (name, size) = oversized.first()
-            fileErrorBox.visibility = View.VISIBLE
-            fileErrorText.text = getString(
-                R.string.file_too_large_error,
-                "$name (${TeilenApi.humanSize(size)})"
-            )
-            performErrorHaptic(fileErrorBox)
-            return
-        } else {
-            fileErrorBox.visibility = View.GONE
-        }
-
-        picked.forEach { uri ->
-            runCatching {
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-        }
-        uploadFiles(picked)
-    }
-
-    private fun pickedUris(data: Intent): List<Uri> {
-        val single = data.data
-        val many = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            data.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            data.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-        }
-        return many?.filterNotNull() ?: listOfNotNull(single)
-    }
-
-    private fun uploadFiles(uris: List<Uri>) {
         val url = Server.normalize(server.text.toString())
         Server.set(this, url)
         setBusy(true)
-        showFileStatus(getString(R.string.uploading, TeilenApi.displayName(this, uris.first())), false)
+        showFileStatus(getString(R.string.uploading, TeilenApi.displayName(this, selectedFiles.first())), false)
         fileProgress.visibility = View.VISIBLE
         fileProgress.progress = 0
 
@@ -599,7 +768,7 @@ class MainActivity : Activity() {
             context = this,
             baseUrl = url,
             token = Session.token(this),
-            uris = uris,
+            uris = ArrayList(selectedFiles),
             ttlSeconds = selectedTtlSeconds,
             onProgress = { index, count, written, total ->
                 if (total != null && total > 0) {
@@ -633,12 +802,13 @@ class MainActivity : Activity() {
                 }
                 if (outcome.failed == 0) {
                     val message = if (outcome.sent == 1) {
-                        getString(R.string.file_sent, uris.first().let { TeilenApi.displayName(this, it) })
+                        getString(R.string.file_sent, selectedFiles.first().let { TeilenApi.displayName(this, it) })
                     } else {
                         getString(R.string.files_sent, outcome.sent)
                     }
                     showFileStatus(message, false)
                     Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
+                    clearSelectedFiles()
                     if (currentTab == Tab.FEED) refreshFeed()
                 } else {
                     showFileStatus(getString(R.string.file_failed, outcome.lastError ?: ""), true)
@@ -656,7 +826,7 @@ class MainActivity : Activity() {
         )
     }
 
-    // ------------------------------------------------------------- Tab 3: Feed
+    // ------------------------------------------------------------- Tab 2: Feed
 
     private fun setupFeedTab() {
         feedAdapter = InlineFeedAdapter()
@@ -745,7 +915,7 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
-    // ------------------------------------------------------------- Tab 4: Account & Compliance
+    // ------------------------------------------------------------- Tab 3: Account & Compliance
 
     private fun setupAccountTab() {
         server.setText(Server.get(this))
@@ -766,12 +936,18 @@ class MainActivity : Activity() {
         switchClipboard.setOnCheckedChangeListener { button, checked ->
             if (!button.isPressed) return@setOnCheckedChangeListener
             performHaptic(button, HapticFeedbackConstants.CLOCK_TICK)
-            setWatching(checked)
             if (checked) {
-                askForNotificationPermission()
-                ClipboardWatchService.start(this)
-                Toast.makeText(this, R.string.watching_on, Toast.LENGTH_SHORT).show()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATIONS)
+                } else {
+                    setWatching(true)
+                    ClipboardWatchService.start(this)
+                    Toast.makeText(this, R.string.watching_on, Toast.LENGTH_SHORT).show()
+                }
             } else {
+                setWatching(false)
                 ClipboardWatchService.stop(this)
                 Toast.makeText(this, R.string.watching_off, Toast.LENGTH_SHORT).show()
             }
@@ -816,18 +992,18 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun askForNotificationPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATIONS)
-        }
-    }
-
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_NOTIFICATIONS && grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
-            setWatching(false)
-            Toast.makeText(this, R.string.notifications_needed, Toast.LENGTH_LONG).show()
+        if (requestCode == REQ_NOTIFICATIONS) {
+            val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+            if (granted) {
+                setWatching(true)
+                ClipboardWatchService.start(this)
+                Toast.makeText(this, R.string.watching_on, Toast.LENGTH_SHORT).show()
+            } else {
+                setWatching(false)
+                Toast.makeText(this, R.string.notifications_needed, Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -843,6 +1019,7 @@ class MainActivity : Activity() {
     private fun takeHandedOverText(intent: Intent?) {
         val handedOver = intent?.getStringExtra(EXTRA_TEXT) ?: return
         intent.removeExtra(EXTRA_TEXT)
+        setSendMode(SendMode.TEXT)
         content.setText(handedOver)
         selectTab(Tab.SEND)
         if (!Session.isPaired(this)) {
@@ -857,6 +1034,8 @@ class MainActivity : Activity() {
         btnChipPhotos.isEnabled = !busy
         btnChipDocuments.isEnabled = !busy
         btnChipAnyFile.isEnabled = !busy
+        btnChangeFile.isEnabled = !busy
+        btnRemoveFile.isEnabled = !busy
     }
 
     private fun applyGating() {
@@ -864,9 +1043,6 @@ class MainActivity : Activity() {
 
         cardText.visibility = if (paired) View.VISIBLE else View.GONE
         gateBannerText.visibility = if (paired) View.GONE else View.VISIBLE
-
-        cardFiles.visibility = if (paired) View.VISIBLE else View.GONE
-        gateBannerFiles.visibility = if (paired) View.GONE else View.VISIBLE
 
         cardFeed.visibility = if (paired) View.VISIBLE else View.GONE
         gateBannerFeed.visibility = if (paired) View.GONE else View.VISIBLE
@@ -960,7 +1136,7 @@ class MainActivity : Activity() {
             btnCopy.setOnClickListener {
                 performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
                 val cm = getSystemService(ClipboardManager::class.java)
-                cm.setPrimaryClip(ClipData.newPlainText("Teilen", item.content))
+                cm?.setPrimaryClip(ClipData.newPlainText("Teilen", item.content))
                 Toast.makeText(this@MainActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
             }
 
