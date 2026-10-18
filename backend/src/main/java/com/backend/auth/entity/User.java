@@ -10,8 +10,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * A person. Identity is a phone number and nothing else yet: there is no OTP, so creating an
- * account proves no ownership of the number — see {@link AuthService#createAccount}.
+ * A user. Identity is an alphanumeric username.
  */
 @Entity
 @Table(name = "users")
@@ -20,14 +19,13 @@ public class User {
     @Id
     private UUID id;
 
-    /** normalised: an optional leading '+' and digits only */
     @Column(nullable = false, unique = true, length = 32)
-    private String phone;
+    private String username;
 
     @Column(name = "display_name", length = 80)
     private String displayName;
 
-    @Column(name = "password_hash", length = 255)
+    @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
     @Column(name = "created_at", nullable = false)
@@ -37,24 +35,29 @@ public class User {
         // for JPA
     }
 
-    public User(UUID id, String phone, String displayName, String passwordHash, Instant createdAt) {
+    public User(UUID id, String username, String displayName, String passwordHash, Instant createdAt) {
         this.id = id;
-        this.phone = phone;
+        this.username = username;
         this.displayName = displayName;
         this.passwordHash = passwordHash;
         this.createdAt = createdAt;
     }
 
-    public User(UUID id, String phone, String displayName, Instant createdAt) {
-        this(id, phone, displayName, null, createdAt);
+    public User(UUID id, String username, String displayName, Instant createdAt) {
+        this(id, username, displayName, null, createdAt);
     }
 
     public UUID getId() {
         return id;
     }
 
+    public String getUsername() {
+        return username;
+    }
+
+    /** Legacy alias for backward compatibility */
     public String getPhone() {
-        return phone;
+        return username;
     }
 
     public String getDisplayName() {
@@ -73,8 +76,8 @@ public class User {
         return createdAt;
     }
 
-    /** "Ahmed" if they gave a name, otherwise the number itself */
+    /** "Ahmed" if they gave a name, otherwise the username itself */
     public String label() {
-        return displayName == null || displayName.isBlank() ? phone : displayName;
+        return displayName == null || displayName.isBlank() ? username : displayName;
     }
 }

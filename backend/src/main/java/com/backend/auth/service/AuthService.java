@@ -79,51 +79,54 @@ public class AuthService {
      * @throws ResponseStatusException 409 if the number is already taken
      */
     @Transactional
-    public SessionResponse createAccount(String rawPhone, String password, String displayName,
+    public SessionResponse createAccount(String rawUsername, String password, String displayName,
                                          String rawDeviceName, String requestedType) {
-        String phone = requirePhone(rawPhone);
+        String username = requireUsername(rawUsername);
         if (password == null || password.isBlank() || password.length() < 6) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "password must be at least 6 characters");
         }
-        if (users.findByPhone(phone).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "account_exists: this number already has an account, log in or pair this device instead");
+        if (users.existsByUsernameIgnoreCase(username)) {
+            throw new com.backend.auth.exception.UsernameTakenException();
         }
 
         Instant now = Instant.now();
         String passwordHash = passwordEncoder.encode(password);
-        User user = new User(UUID.randomUUID(), phone, clean(displayName, 80), passwordHash, now);
-        users.save(user);
+        User user = new User(UUID.randomUUID(), username, clean(displayName, 80), passwordHash, now);
+        try {
+            users.save(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new com.backend.auth.exception.UsernameTakenException();
+        }
         DeviceType type = requestedType != null ? DeviceType.parse(requestedType) : DeviceType.PHONE;
         SessionResponse session = pairDevice(user, type, rawDeviceName, now);
-        log.info("created account {} and paired device {}", phone, session.deviceName());
+        log.info("created account {} and paired device {}", username, session.deviceName());
         return session;
     }
 
     /**
-     * Logs in using phone number and password, and mints a new device session.
+     * Logs in using username and password, and mints a new device session.
      *
      * @throws ResponseStatusException 401 on incorrect credentials
      */
     @Transactional
-    public SessionResponse login(String rawPhone, String password, String rawDeviceName, String requestedType) {
-        String phone = requirePhone(rawPhone);
+    public SessionResponse login(String rawUsername, String password, String rawDeviceName, String requestedType) {
+        String username = requireUsername(rawUsername);
         if (password == null || password.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "password must not be blank");
         }
-        User user = users.findByPhone(phone)
+        User user = users.findByUsernameIgnoreCase(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
-                        "invalid_credentials: phone number or password incorrect"));
+                        "invalid_credentials: username or password incorrect"));
         if (user.getPasswordHash() == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
-                    "invalid_credentials: phone number or password incorrect");
+                    "invalid_credentials: username or password incorrect");
         }
 
         Instant now = Instant.now();
         DeviceType type = requestedType != null ? DeviceType.parse(requestedType) : DeviceType.PHONE;
         SessionResponse session = pairDevice(user, type, rawDeviceName, now);
-        log.info("logged in account {} on device {}", phone, session.deviceName());
+        log.info("logged in account {} on device {}", username, session.deviceName());
         return session;
     }
 
@@ -334,7 +337,7 @@ public class AuthService {
         if (user == null) {
             return null;
         }
-        return new AuthenticatedUser(user.getId(), device.getId(), user.getPhone());
+        return new AuthenticatedUser(user.getId(), device.getId(), user.getUsername());
     }
 
     private SessionResponse pairDevice(User user, DeviceType type, String rawDeviceName, Instant now) {
@@ -362,14 +365,17 @@ public class AuthService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "no such account"));
     }
 
-    private String requirePhone(String raw) {
-        String phone = Tokens.normalizePhone(raw);
-        int digits = phone.startsWith("+") ? phone.length() - 1 : phone.length();
-        if (digits < 6 || digits > 20) {
+    private String requireUsername(String raw) {
+        if (raw == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "that does not look like a phone number — 6 to 20 digits, an optional leading +");
+                    "Username must be 3–32 characters and contain only letters and numbers (no spaces or special characters).");
         }
-        return phone;
+        String username = raw.strip();
+        if (!username.matches("^[a-zA-Z0-9]{3,32}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Username must be 3–32 characters and contain only letters and numbers (no spaces or special characters).");
+        }
+        return username;
     }
 
     /** one line, no control characters, no longer than asked: these are shown in a device list */

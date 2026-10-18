@@ -105,6 +105,7 @@ object TeilenApi {
                     "/api/auth/account",
                     token = null,
                     JSONObject()
+                        .put("username", phone)
                         .put("phone", phone)
                         .put("password", password)
                         .put("displayName", displayName)
@@ -152,6 +153,7 @@ object TeilenApi {
                     "/api/auth/login",
                     token = null,
                     JSONObject()
+                        .put("username", phone)
                         .put("phone", phone)
                         .put("password", password)
                         .put("deviceName", deviceName)
@@ -426,6 +428,7 @@ object TeilenApi {
         token: String?,
         content: String,
         ttlSeconds: Long,
+        type: String? = null,
         onResult: (ok: Boolean, message: String) -> Unit
     ) {
         Thread {
@@ -444,8 +447,10 @@ object TeilenApi {
                     val body = JSONObject()
                         .put("content", content)
                         .put("ttlSeconds", ttlSeconds)
-                        .toString()
-                    connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                    if (type != null) {
+                        body.put("type", type)
+                    }
+                    connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
                     finish(connection, "sent")
                 } finally {
                     connection.disconnect()
@@ -836,9 +841,11 @@ object TeilenApi {
     /** every credential comes back in the same shape, whether it was minted or claimed */
     private fun signedInFrom(reply: Reply): SignedIn {
         val user = reply.body?.optJSONObject("user")
+        val username = user?.optString("username")?.takeIf { it.isNotBlank() }
+            ?: user?.optString("phone")?.takeIf { it.isNotBlank() }
         return SignedIn(
             token = reply.str("token").orEmpty(),
-            phone = user?.optString("phone")?.takeIf { it.isNotBlank() },
+            phone = username,
             deviceName = reply.str("deviceName"),
             deviceId = reply.str("deviceId")
         )
@@ -870,6 +877,28 @@ object TeilenApi {
         JSONObject(body).optString("message").ifBlank { body.take(160) }
     } catch (e: Exception) {
         body.take(160)
+    }
+
+    data class VersionInfo(
+        val minAndroidVersionCode: Int,
+        val latestAndroidVersionCode: Int
+    )
+
+    fun fetchVersion(baseUrl: String, onResult: (VersionInfo?) -> Unit) {
+        Thread {
+            val info = try {
+                val reply = getBlocking(baseUrl, "/api/version")
+                if (reply.ok && reply.body != null) {
+                    VersionInfo(
+                        minAndroidVersionCode = reply.body.optInt("minAndroidVersionCode", 0),
+                        latestAndroidVersionCode = reply.body.optInt("latestAndroidVersionCode", 0)
+                    )
+                } else null
+            } catch (_: Exception) {
+                null
+            }
+            main.post { onResult(info) }
+        }.apply { name = "teilen-version" }.start()
     }
 
     private class TooLargeException(message: String) : IOException(message)

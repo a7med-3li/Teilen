@@ -1,17 +1,28 @@
 package com.teilen.app
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
+import com.google.zxing.BarcodeFormat
+import com.journeyapps.barcodescanner.BarcodeEncoder
 
 /**
- * The account management component: supports logging in with phone & password,
- * creating an account, pairing via code, and managing active session.
+ * The account management component: supports logging in with username & password,
+ * creating an account, newcomer pairing (QR display + 1-tap copy), approver pairing
+ * (manual code entry + in-app QR scanner trigger), and managing the active session.
  */
 class AccountCard(
     private val activity: Activity,
+    private val onScanQr: () -> Unit = {},
     private val onPaired: () -> Unit
 ) {
 
@@ -20,13 +31,16 @@ class AccountCard(
     private val createBox: View = activity.findViewById(R.id.account_create)
     private val pairBox: View = activity.findViewById(R.id.account_pair)
     private val who: TextView = activity.findViewById(R.id.account_who)
-    private val phone: EditText = activity.findViewById(R.id.phone)
+    private val phone: EditText = activity.findViewById(R.id.phone) // Username input field
     private val password: EditText = activity.findViewById(R.id.password)
     private val displayName: EditText = activity.findViewById(R.id.display_name)
     private val createButton: Button = activity.findViewById(R.id.create_account)
     private val pairStart: Button = activity.findViewById(R.id.account_pair_start)
     private val signOut: Button = activity.findViewById(R.id.sign_out)
     private val pairCode: TextView = activity.findViewById(R.id.pair_code)
+    private val pairQr: ImageView = activity.findViewById(R.id.pair_qr)
+    private val pairQrSpinner: ProgressBar = activity.findViewById(R.id.pair_qr_spinner)
+    private val btnCopyPairCode: Button = activity.findViewById(R.id.btn_copy_pair_code)
     private val pairStatus: TextView = activity.findViewById(R.id.pair_status)
     private val pairCancel: Button = activity.findViewById(R.id.pair_cancel)
     private val status: TextView = activity.findViewById(R.id.account_status)
@@ -34,6 +48,13 @@ class AccountCard(
     private val authSwitchLogin: Button = activity.findViewById(R.id.auth_switch_login)
     private val authSwitchRegister: Button = activity.findViewById(R.id.auth_switch_register)
     private val authIntro: TextView = activity.findViewById(R.id.auth_intro)
+
+    // Approver Mode Views
+    private val cardPairDevice: View = activity.findViewById(R.id.card_pair_device)
+    private val inputApproveCode: EditText = activity.findViewById(R.id.input_approve_code)
+    private val btnScanQr: Button = activity.findViewById(R.id.btn_scan_qr)
+    private val btnApproveCode: Button = activity.findViewById(R.id.btn_approve_code)
+    private val approvePairStatus: TextView = activity.findViewById(R.id.approve_pair_status)
 
     private var mode = AuthMode.LOGIN
 
@@ -54,6 +75,17 @@ class AccountCard(
         pairStart.setOnClickListener { startPairing() }
         pairCancel.setOnClickListener { pairing = false; render() }
         signOut.setOnClickListener { signOut() }
+
+        // Approver pairing listeners
+        btnScanQr.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            onScanQr()
+        }
+        btnApproveCode.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            handleApproveCode(inputApproveCode.text.toString())
+        }
+
         updateModeUI()
     }
 
@@ -107,8 +139,9 @@ class AccountCard(
         pairBox.visibility = View.GONE
         pairStart.visibility = View.VISIBLE
         signOut.visibility = View.GONE
+        cardPairDevice.visibility = View.GONE
 
-        // the last number used is a good guess for this one
+        // the last username used is a good guess for this one
         val remembered = Session.phone(activity)
         if (remembered != null && phone.text.isNullOrBlank()) {
             phone.setText(remembered)
@@ -117,11 +150,15 @@ class AccountCard(
 
     private fun submitAuth() {
         if (busy) return
-        val number = phone.text.toString().trim()
+        val username = phone.text.toString().trim()
         val pass = password.text.toString()
 
-        if (number.isBlank()) {
-            say(activity.getString(R.string.phone_needed), isError = true)
+        if (username.isBlank()) {
+            say(activity.getString(R.string.username_needed), isError = true)
+            return
+        }
+        if (!username.matches(Regex("^[a-zA-Z0-9]{3,32}$"))) {
+            say(activity.getString(R.string.username_invalid), isError = true)
             return
         }
         if (pass.isBlank()) {
@@ -134,13 +171,13 @@ class AccountCard(
         }
 
         if (mode == AuthMode.LOGIN) {
-            login(number, pass)
+            login(username, pass)
         } else {
-            createAccount(number, pass)
+            createAccount(username, pass)
         }
     }
 
-    private fun login(number: String, pass: String) {
+    private fun login(username: String, pass: String) {
         val url = saveServerUrl()
         busy = true
         createButton.isEnabled = false
@@ -148,7 +185,7 @@ class AccountCard(
 
         TeilenApi.login(
             baseUrl = url,
-            phone = number,
+            phone = username,
             password = pass,
             deviceName = deviceName
         ) { result ->
@@ -176,7 +213,7 @@ class AccountCard(
         }
     }
 
-    private fun createAccount(number: String, pass: String) {
+    private fun createAccount(username: String, pass: String) {
         val url = saveServerUrl()
         busy = true
         createButton.isEnabled = false
@@ -184,7 +221,7 @@ class AccountCard(
 
         TeilenApi.createAccount(
             baseUrl = url,
-            phone = number,
+            phone = username,
             password = pass,
             displayName = displayName.text.toString().trim(),
             deviceName = deviceName
@@ -206,14 +243,14 @@ class AccountCard(
                 }
                 is TeilenApi.CreateResult.Taken -> {
                     setAuthMode(AuthMode.LOGIN)
-                    say(result.message + " — Enter your password to sign in.", isError = true)
+                    say(activity.getString(R.string.username_taken) + " — Enter your password to sign in.", isError = true)
                 }
                 is TeilenApi.CreateResult.Failed -> say(result.message, isError = true)
             }
         }
     }
 
-    // --------------------------------------------------------------- pairing
+    // --------------------------------------------------------------- newcomer pairing
 
     private fun startPairing() {
         pairing = true
@@ -222,6 +259,10 @@ class AccountCard(
 
         val pairingKey = PairingCrypto.newPairingKey()
         var shownCode: String? = null
+
+        pairQrSpinner.visibility = View.VISIBLE
+        pairQr.setImageDrawable(null)
+        pairCode.text = ""
 
         TeilenApi.pairThisDevice(
             url,
@@ -235,9 +276,32 @@ class AccountCard(
                     render()
                     return@pairThisDevice
                 }
-                pairCode.text = offer.userCode
                 shownCode = offer.userCode
+                pairCode.text = offer.userCode
                 pairStatus.text = activity.getString(R.string.pair_waiting)
+
+                // Generate QR Code bitmap via ZXing
+                try {
+                    val barcodeEncoder = BarcodeEncoder()
+                    val bitmap = barcodeEncoder.encodeBitmap(
+                        "teilen://pair?code=${offer.userCode}",
+                        BarcodeFormat.QR_CODE,
+                        400,
+                        400
+                    )
+                    pairQr.setImageBitmap(bitmap)
+                    pairQrSpinner.visibility = View.GONE
+                } catch (e: Exception) {
+                    pairQrSpinner.visibility = View.GONE
+                }
+
+                // 1-Tap copy pairing code
+                btnCopyPairCode.setOnClickListener {
+                    val cm = activity.getSystemService(ClipboardManager::class.java)
+                    cm?.setPrimaryClip(ClipData.newPlainText("Teilen Pairing Code", offer.userCode))
+                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    Toast.makeText(activity, R.string.code_copied, Toast.LENGTH_SHORT).show()
+                }
             },
             onPolled = { poll ->
                 if (!pairing) return@pairThisDevice
@@ -278,6 +342,77 @@ class AccountCard(
         pairBox.visibility = View.VISIBLE
         pairStart.visibility = View.GONE
         signOut.visibility = View.GONE
+        cardPairDevice.visibility = View.GONE
+    }
+
+    // ---------------------------------------------------------------- approver pairing
+
+    fun handleApproveCode(rawCode: String) {
+        val code = PairActivity.cleanCode(rawCode)
+        if (code == null) {
+            sayApproveStatus(activity.getString(R.string.pair_no_code), isError = true)
+            return
+        }
+        val token = Session.token(activity) ?: return
+        val serverUrl = Server.get(activity)
+        sayApproveStatus(activity.getString(R.string.pair_approving), isError = false)
+
+        TeilenApi.describePairing(serverUrl, code) { preview ->
+            if (preview == null) {
+                sayApproveStatus(activity.getString(R.string.pair_code_stale, code), isError = true)
+                return@describePairing
+            }
+            val kind = if (preview.deviceType == "PHONE") {
+                activity.getString(R.string.pair_kind_phone)
+            } else {
+                activity.getString(R.string.pair_kind_web)
+            }
+            AlertDialog.Builder(activity)
+                .setTitle(R.string.pair_title)
+                .setMessage(activity.getString(R.string.pair_ask_named, preview.deviceName, kind))
+                .setPositiveButton(R.string.pair_allow) { _, _ ->
+                    executePairingDecision(code, token, allow = true, newcomerPublicKey = preview.publicKey)
+                }
+                .setNegativeButton(R.string.pair_deny) { _, _ ->
+                    executePairingDecision(code, token, allow = false, newcomerPublicKey = null)
+                }
+                .setOnCancelListener {
+                    approvePairStatus.visibility = View.GONE
+                }
+                .show()
+        }
+    }
+
+    private fun executePairingDecision(code: String, token: String, allow: Boolean, newcomerPublicKey: String?) {
+        sayApproveStatus(activity.getString(if (allow) R.string.pair_approving else R.string.pair_denying), isError = false)
+        val keyPackage = if (allow && newcomerPublicKey != null) {
+            try {
+                PairingCrypto.sealForNewcomer(activity, PairingCrypto.unb64(newcomerPublicKey), code)
+            } catch (e: Exception) {
+                null
+            }
+        } else null
+
+        TeilenApi.decidePairing(Server.get(activity), token, code, allow, keyPackage) { ok, message ->
+            if (ok) {
+                val said = activity.getString(if (allow) R.string.pair_allowed else R.string.pair_refused, message)
+                sayApproveStatus(said, isError = false)
+                inputApproveCode.text.clear()
+                Toast.makeText(activity, said, Toast.LENGTH_LONG).show()
+            } else {
+                val err = activity.getString(R.string.pair_failed_reason, message)
+                sayApproveStatus(err, isError = true)
+                Toast.makeText(activity, err, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun sayApproveStatus(text: String, isError: Boolean) {
+        approvePairStatus.visibility = View.VISIBLE
+        approvePairStatus.text = text
+        approvePairStatus.setTextColor(
+            activity.getColor(if (isError) R.color.danger else R.color.text_secondary)
+        )
     }
 
     // ---------------------------------------------------------------- paired
@@ -291,12 +426,16 @@ class AccountCard(
         pairBox.visibility = View.GONE
         pairStart.visibility = View.GONE
         signOut.visibility = View.VISIBLE
+        cardPairDevice.visibility = View.VISIBLE
+        approvePairStatus.visibility = View.GONE
     }
 
     private fun signOut() {
         Session.clear(activity)
         password.text.clear()
         status.visibility = View.GONE
+        approvePairStatus.visibility = View.GONE
+        inputApproveCode.text.clear()
         render()
     }
 

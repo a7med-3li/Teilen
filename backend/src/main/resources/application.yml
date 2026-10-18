@@ -76,3 +76,8 @@ teilen:
   storage-dir: ./data/blobs
   # 30 MB, counted while writing rather than trusted from a header
   max-blob-bytes: 31457280
+
+  version:
+    min-android-version-code: ${TEILEN_MIN_ANDROID_VERSION:3}
+    latest-android-version-code: ${TEILEN_LATEST_ANDROID_VERSION:4}
+

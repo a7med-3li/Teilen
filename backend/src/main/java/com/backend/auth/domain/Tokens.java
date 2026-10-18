@@ -82,4 +82,8 @@ public final class Tokens {
         String digits = trimmed.replaceAll("\\D", "");
         return international ? "+" + digits : digits;
     }
+
+    public static String normalizeUsername(String raw) {
+        return raw == null ? "" : raw.strip();
+    }
 }

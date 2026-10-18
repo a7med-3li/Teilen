@@ -33,14 +33,16 @@
         </div>
         <div class="auth-toggle">
             <button id="auth-tab-login" type="button" class="auth-btn active">Sign in</button>
-            <button id="auth-tab-pair" type="button" class="auth-btn">Pair via QR</button>
+            <button id="auth-tab-register" type="button" class="auth-btn">Create account</button>
+            <button id="auth-tab-pair" type="button" class="auth-btn">Pair with Code / QR</button>
         </div>
 
         <div id="login-container">
             <form id="login-form" autocomplete="on">
                 <div class="field">
-                    <label for="login-phone">Phone number</label>
-                    <input id="login-phone" type="tel" placeholder="+1234567890" required>
+                    <label for="login-username">Username</label>
+                    <input id="login-username" type="text" pattern="[a-zA-Z0-9]+" minlength="3" maxlength="32" placeholder="Username" required>
+                    <span id="login-username-helper" class="field-helper" hidden>Letters and numbers only, no special characters</span>
                 </div>
                 <div class="field">
                     <label for="login-password">Password</label>
@@ -51,6 +53,26 @@
             <p id="login-status" class="panel-status" hidden></p>
         </div>
 
+        <div id="register-container" hidden>
+            <form id="register-form" autocomplete="on">
+                <div class="field">
+                    <label for="register-username">Username</label>
+                    <input id="register-username" type="text" pattern="[a-zA-Z0-9]+" minlength="3" maxlength="32" placeholder="Letters and numbers only" required>
+                    <span id="register-username-helper" class="field-helper" hidden>Letters and numbers only, no special characters</span>
+                </div>
+                <div class="field">
+                    <label for="register-password">Password</label>
+                    <input id="register-password" type="password" placeholder="At least 6 characters" minlength="6" required>
+                </div>
+                <div class="field">
+                    <label for="register-display-name">Display name (optional)</label>
+                    <input id="register-display-name" type="text" placeholder="e.g. My Laptop" maxlength="50">
+                </div>
+                <button type="submit" class="submit-btn" id="register-submit">Create account</button>
+            </form>
+            <p id="register-status" class="panel-status" hidden></p>
+        </div>
+
         <div id="pair-container" hidden>
             <p class="panel-lead">Scan with Teilen on your phone, or enter this code:</p>
 
@@ -58,7 +80,15 @@
                 <img id="qr" class="qr" alt="Pairing code as a QR code" width="220" height="220">
             </div>
 
-            <p id="pair-code" class="pair-code">····-····</p>
+            <div class="pair-code-row">
+                <p id="pair-code" class="pair-code">····-····</p>
+                <button id="pair-code-copy" type="button" class="btn-copy-code" title="Copy code">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                </button>
+            </div>
             <div class="pair-state-wrap">
                 <span class="pulsing-dot"></span>
                 <p id="pair-state" class="panel-lead">waiting for approval on your phone…</p>
@@ -77,11 +107,11 @@
         <ul id="device-list" class="devices"></ul>
 
         <form id="approve-form" autocomplete="off">
-            <label for="approve-code">Pair another phone — enter the code it shows</label>
+            <label for="approve-code">Pair another device — enter 8-digit code (e.g. K7PM-3XQD)</label>
             <div class="row">
-                <input id="approve-code" type="text" placeholder="ABCD-EFGH" maxlength="9"
+                <input id="approve-code" type="text" placeholder="K7PM-3XQD" maxlength="9"
                        autocapitalize="characters" spellcheck="false">
-                <button type="submit">Pair</button>
+                <button type="submit">Pair Device</button>
             </div>
         </form>
         <p id="device-status" class="panel-status" hidden></p>
@@ -117,7 +147,12 @@
     <p id="upload-status" class="upload-status" hidden></p>
 
     <div id="empty" class="empty" hidden>
-        <div class="empty-icon">📥</div>
+        <div class="empty-icon">
+            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
+                <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
+            </svg>
+        </div>
         <p class="empty-title">Nothing here yet</p>
         <p class="empty-desc">Share a file or text from your phone, paste anywhere, or drop files onto the window.</p>
     </div>
@@ -128,7 +163,15 @@
 <footer id="foot" hidden>
     <span id="count">0 items</span>
     <button id="clear" class="btn-delete-all" type="button" hidden>
-        <span class="btn-icon">🗑️</span> Delete All
+        <span class="btn-icon">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+        </span>
+        Delete All
     </button>
 </footer>
 
@@ -161,7 +204,7 @@
             </div>
         </div>
         <h1 class="launch-title">Teilen</h1>
-        <p id="launch-status" class="launch-status">🔒 Initializing Zero-Knowledge Vault…</p>
+        <p id="launch-status" class="launch-status">Initializing Zero-Knowledge Vault…</p>
     </div>
 </div>
 

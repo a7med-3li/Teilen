@@ -82,6 +82,24 @@ public class BlobStore {
         }
     }
 
+    public void deleteOrphansExcept(java.util.Set<String> activeRefs) {
+        if (!Files.isDirectory(root)) {
+            return;
+        }
+        try (java.util.stream.Stream<Path> stream = Files.list(root)) {
+            stream.filter(Files::isRegularFile).forEach(path -> {
+                String name = path.getFileName().toString();
+                if (!activeRefs.contains(name)) {
+                    try {
+                        Files.deleteIfExists(path);
+                    } catch (IOException ignored) {
+                    }
+                }
+            });
+        } catch (IOException ignored) {
+        }
+    }
+
     public long maxBytes() {
         return maxBytes;
     }

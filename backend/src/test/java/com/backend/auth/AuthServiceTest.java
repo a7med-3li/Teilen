@@ -3,6 +3,7 @@ package com.backend.auth;
 import com.backend.auth.dto.SessionResponse;
 import com.backend.auth.entity.Device;
 import com.backend.auth.entity.User;
+import com.backend.auth.exception.UsernameTakenException;
 import com.backend.auth.repository.DeviceRepository;
 import com.backend.auth.repository.PairingRequestRepository;
 import com.backend.auth.repository.UserRepository;
@@ -46,10 +47,10 @@ class AuthServiceTest {
 
     @Test
     void createAccountHashesPasswordAndPairsDevice() {
-        when(users.findByPhone("+1234567890")).thenReturn(Optional.empty());
+        when(users.existsByUsernameIgnoreCase("ahmed123")).thenReturn(false);
 
         SessionResponse session = authService.createAccount(
-                "+1234567890", "securePassword123", "Ahmed", "My Phone", "PHONE");
+                "ahmed123", "securePassword123", "Ahmed", "My Phone", "PHONE");
 
         assertNotNull(session);
         assertNotNull(session.token());
@@ -58,7 +59,7 @@ class AuthServiceTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(users).save(userCaptor.capture());
         User savedUser = userCaptor.getValue();
-        assertEquals("+1234567890", savedUser.getPhone());
+        assertEquals("ahmed123", savedUser.getUsername());
         assertEquals("Ahmed", savedUser.getDisplayName());
         assertTrue(passwordEncoder.matches("securePassword123", savedUser.getPasswordHash()));
 
@@ -68,22 +69,45 @@ class AuthServiceTest {
     @Test
     void createAccountRejectsBlankOrShortPassword() {
         assertThrows(ResponseStatusException.class, () ->
-                authService.createAccount("+1234567890", "12345", "Ahmed", "My Phone", "PHONE"));
+                authService.createAccount("ahmed123", "12345", "Ahmed", "My Phone", "PHONE"));
 
         assertThrows(ResponseStatusException.class, () ->
-                authService.createAccount("+1234567890", "", "Ahmed", "My Phone", "PHONE"));
+                authService.createAccount("ahmed123", "", "Ahmed", "My Phone", "PHONE"));
+    }
+
+    @Test
+    void createAccountRejectsInvalidUsername() {
+        ResponseStatusException ex1 = assertThrows(ResponseStatusException.class, () ->
+                authService.createAccount("ah", "securePassword123", "Ahmed", "My Phone", "PHONE"));
+        assertEquals("Username must be 3–32 characters and contain only letters and numbers (no spaces or special characters).", ex1.getReason());
+
+        ResponseStatusException ex2 = assertThrows(ResponseStatusException.class, () ->
+                authService.createAccount("ahmed@123", "securePassword123", "Ahmed", "My Phone", "PHONE"));
+        assertEquals("Username must be 3–32 characters and contain only letters and numbers (no spaces or special characters).", ex2.getReason());
+
+        ResponseStatusException ex3 = assertThrows(ResponseStatusException.class, () ->
+                authService.createAccount("+1234567890", "securePassword123", "Ahmed", "My Phone", "PHONE"));
+        assertEquals("Username must be 3–32 characters and contain only letters and numbers (no spaces or special characters).", ex3.getReason());
+    }
+
+    @Test
+    void createAccountRejectsDuplicateUsername() {
+        when(users.existsByUsernameIgnoreCase("ahmed123")).thenReturn(true);
+
+        assertThrows(UsernameTakenException.class, () ->
+                authService.createAccount("ahmed123", "securePassword123", "Ahmed", "My Phone", "PHONE"));
     }
 
     @Test
     void loginSucceedsWithCorrectPassword() {
-        String phone = "+1234567890";
+        String username = "ahmed123";
         String rawPassword = "correctPassword";
         String encoded = passwordEncoder.encode(rawPassword);
-        User user = new User(UUID.randomUUID(), phone, "Ahmed", encoded, Instant.now());
+        User user = new User(UUID.randomUUID(), username, "Ahmed", encoded, Instant.now());
 
-        when(users.findByPhone(phone)).thenReturn(Optional.of(user));
+        when(users.findByUsernameIgnoreCase(username)).thenReturn(Optional.of(user));
 
-        SessionResponse session = authService.login(phone, rawPassword, "New Device", "PHONE");
+        SessionResponse session = authService.login(username, rawPassword, "New Device", "PHONE");
         assertNotNull(session);
         assertNotNull(session.token());
         verify(devices).save(any(Device.class));
@@ -91,21 +115,21 @@ class AuthServiceTest {
 
     @Test
     void loginFailsWithWrongPassword() {
-        String phone = "+1234567890";
+        String username = "ahmed123";
         String encoded = passwordEncoder.encode("correctPassword");
-        User user = new User(UUID.randomUUID(), phone, "Ahmed", encoded, Instant.now());
+        User user = new User(UUID.randomUUID(), username, "Ahmed", encoded, Instant.now());
 
-        when(users.findByPhone(phone)).thenReturn(Optional.of(user));
+        when(users.findByUsernameIgnoreCase(username)).thenReturn(Optional.of(user));
 
         assertThrows(ResponseStatusException.class, () ->
-                authService.login(phone, "wrongPassword", "New Device", "PHONE"));
+                authService.login(username, "wrongPassword", "New Device", "PHONE"));
     }
 
     @Test
     void loginFailsForUnknownUser() {
-        when(users.findByPhone("+19999999999")).thenReturn(Optional.empty());
+        when(users.findByUsernameIgnoreCase("unknownuser")).thenReturn(Optional.empty());
 
         assertThrows(ResponseStatusException.class, () ->
-                authService.login("+19999999999", "anyPassword", "New Device", "PHONE"));
+                authService.login("unknownuser", "anyPassword", "New Device", "PHONE"));
     }
 }

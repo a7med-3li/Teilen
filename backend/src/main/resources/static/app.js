@@ -68,13 +68,23 @@
     const pairRetry = el('pair-retry');
 
     const authTabLogin = el('auth-tab-login');
+    const authTabRegister = el('auth-tab-register');
     const authTabPair = el('auth-tab-pair');
     const loginContainer = el('login-container');
+    const registerContainer = el('register-container');
     const pairContainer = el('pair-container');
     const loginForm = el('login-form');
-    const loginPhone = el('login-phone');
+    const loginUsername = el('login-username');
+    const loginUsernameHelper = el('login-username-helper');
     const loginPassword = el('login-password');
     const loginStatus = el('login-status');
+    const registerForm = el('register-form');
+    const registerUsername = el('register-username');
+    const registerUsernameHelper = el('register-username-helper');
+    const registerPassword = el('register-password');
+    const registerDisplayName = el('register-display-name');
+    const registerStatus = el('register-status');
+    const pairCodeCopy = el('pair-code-copy');
 
     const deviceSection = el('devices');
     const accountBtn = el('account');
@@ -201,7 +211,7 @@
             TeilenLan.start(token.get(), (item, isNew) => {
                 item.isLan = true;
                 upsert(item, isNew);
-                toast('⚡ Received file via Direct LAN', 'success');
+                toast('Received file via Direct LAN', 'success');
             });
         }
     }
@@ -224,31 +234,83 @@
 
     // ---------- pairing & login (zero page reloads) ----------
 
+    function sanitizeUsername(input, helper) {
+        const raw = input.value;
+        const sanitized = raw.replace(/[^a-zA-Z0-9]/g, '');
+        if (raw !== sanitized) {
+            input.value = sanitized;
+            if (helper) {
+                helper.hidden = false;
+                clearTimeout(helper._t);
+                helper._t = setTimeout(() => { helper.hidden = true; }, 3000);
+            }
+        }
+    }
+
+    if (loginUsername) {
+        loginUsername.addEventListener('input', () => sanitizeUsername(loginUsername, loginUsernameHelper));
+    }
+    if (registerUsername) {
+        registerUsername.addEventListener('input', () => sanitizeUsername(registerUsername, registerUsernameHelper));
+    }
+
+    function stopPairing() {
+        clearTimeout(pairTimer);
+        pairTimer = null;
+        pairKey = null;
+        pairUserCode = null;
+    }
+
     authTabLogin.addEventListener('click', () => {
         authTabLogin.classList.add('active');
+        authTabRegister.classList.remove('active');
         authTabPair.classList.remove('active');
         loginContainer.hidden = false;
+        registerContainer.hidden = true;
         pairContainer.hidden = true;
+        stopPairing();
+    });
+
+    authTabRegister.addEventListener('click', () => {
+        authTabRegister.classList.add('active');
+        authTabLogin.classList.remove('active');
+        authTabPair.classList.remove('active');
+        registerContainer.hidden = false;
+        loginContainer.hidden = true;
+        pairContainer.hidden = true;
+        stopPairing();
     });
 
     authTabPair.addEventListener('click', () => {
         authTabPair.classList.add('active');
         authTabLogin.classList.remove('active');
-        loginContainer.hidden = true;
+        authTabRegister.classList.remove('active');
         pairContainer.hidden = false;
+        loginContainer.hidden = true;
+        registerContainer.hidden = true;
         startPairing();
     });
 
+    if (pairCodeCopy) {
+        pairCodeCopy.addEventListener('click', async () => {
+            const code = pairCode.textContent.trim();
+            if (code && code !== '····-····') {
+                await navigator.clipboard.writeText(code);
+                toast('Copied code to clipboard', 'success');
+            }
+        });
+    }
+
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const phone = loginPhone.value.trim();
+        const username = loginUsername.value.trim();
         const password = loginPassword.value;
-        if (!phone || !password) return;
+        if (!username || !password) return;
         loginStatus.hidden = false;
         loginStatus.textContent = 'signing in…';
         try {
             const res = await postJson(AUTH + '/login', {
-                phone,
+                username,
                 password,
                 deviceName: describeBrowser(),
                 deviceType: 'WEB'
@@ -257,15 +319,56 @@
                 const session = await res.json();
                 token.set(session.token);
                 loginStatus.hidden = true;
-                loginPhone.value = '';
+                loginUsername.value = '';
                 loginPassword.value = '';
-                toast('✓ Signed in successfully', 'success');
+                toast('Signed in successfully', 'success');
                 showFeed();
             } else {
                 loginStatus.textContent = await why(res);
             }
         } catch (err) {
             loginStatus.textContent = err.message;
+        }
+    });
+
+    registerForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = registerUsername.value.trim();
+        const password = registerPassword.value;
+        const displayName = registerDisplayName.value.trim();
+        if (!username || !password) return;
+        if (username.length < 3 || username.length > 32) {
+            registerStatus.hidden = false;
+            registerStatus.textContent = 'Username must be 3–32 characters.';
+            return;
+        }
+        registerStatus.hidden = false;
+        registerStatus.textContent = 'creating account…';
+        try {
+            const res = await postJson(AUTH + '/account', {
+                username,
+                password,
+                displayName: displayName || undefined,
+                deviceName: describeBrowser(),
+                deviceType: 'WEB'
+            });
+            if (res.ok) {
+                const session = await res.json();
+                token.set(session.token);
+                registerStatus.hidden = true;
+                registerUsername.value = '';
+                registerPassword.value = '';
+                registerDisplayName.value = '';
+                toast('Account created successfully', 'success');
+                showFeed();
+            } else if (res.status === 409) {
+                const err = await res.json().catch(() => ({}));
+                registerStatus.textContent = err.message || 'This username is already taken. Please choose another.';
+            } else {
+                registerStatus.textContent = await why(res);
+            }
+        } catch (err) {
+            registerStatus.textContent = err.message;
         }
     });
 
@@ -278,9 +381,12 @@
         stopSocket();
         stopPolling();
         stopLan();
+        stopPairing();
         authTabLogin.classList.add('active');
+        authTabRegister.classList.remove('active');
         authTabPair.classList.remove('active');
         loginContainer.hidden = false;
+        registerContainer.hidden = true;
         pairContainer.hidden = true;
     }
 
@@ -364,7 +470,7 @@
             pairKey = null;
             pairUserCode = null;
             pairState.textContent = 'paired as ' + claim.deviceName;
-            toast('✓ Paired as ' + claim.deviceName, 'success');
+            toast('Paired as ' + claim.deviceName, 'success');
             showFeed();
             enablePush();
         } catch (e) {
@@ -380,8 +486,9 @@
     async function loadAccount() {
         try {
             const me = await (await api('/api/me')).json();
-            accountBtn.textContent = me.displayName || me.phone;
-            accountPhone.textContent = 'Signed in as ' + me.phone
+            const username = me.username || me.phone;
+            accountBtn.textContent = me.displayName || username;
+            accountPhone.textContent = 'Signed in as ' + username
                 + (me.displayName ? ' (' + me.displayName + ')' : '')
                 + '. Devices on this account share the same ephemeral feed.';
 
@@ -483,7 +590,7 @@
         if (response.ok) {
             const approved = await response.json();
             deviceStatus.textContent = approved.deviceName + ' is paired successfully.';
-            toast('✓ ' + approved.deviceName + ' paired', 'success');
+            toast(approved.deviceName + ' paired', 'success');
             loadAccount();
         } else {
             deviceStatus.textContent = await why(response);
@@ -526,7 +633,7 @@
 
     // ---------- rendering & cards ----------
 
-    const BLOB_TYPES = new Set(['IMAGE', 'PDF', 'FILE']);
+    const BLOB_TYPES = new Set(['IMAGE', 'PDF', 'FILE', 'AUDIO']);
 
     function formatSize(bytes) {
         if (!bytes && bytes !== 0) return '';
@@ -557,7 +664,9 @@
         const isLan = !!(item.isLan || String(item.id).startsWith('lan-'));
         const routePill = document.createElement('span');
         routePill.className = 'route-pill ' + (isLan ? 'lan' : 'relay');
-        routePill.textContent = isLan ? '⚡ Direct LAN' : '☁️ Encrypted Relay';
+        routePill.innerHTML = isLan
+            ? `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Direct LAN`
+            : `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg> Encrypted Relay`;
 
         const at = document.createElement('span');
         at.className = 'card-time';
@@ -603,7 +712,7 @@
         deleteBtn.type = 'button';
         deleteBtn.className = 'btn-card-delete';
         deleteBtn.title = 'Delete this item';
-        deleteBtn.textContent = '✕';
+        deleteBtn.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#EF4444" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
         deleteBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             deleteBtn.disabled = true;
@@ -661,9 +770,9 @@
             copyBtn.textContent = 'Copy Link';
             copyBtn.addEventListener('click', async () => {
                 await navigator.clipboard.writeText(item.content);
-                copyBtn.textContent = '✓ Copied';
+                copyBtn.textContent = 'Copied';
                 copyBtn.classList.add('copied');
-                toast('✓ Copied URL to clipboard', 'success');
+                toast('Copied URL to clipboard', 'success');
                 setTimeout(() => {
                     copyBtn.textContent = 'Copy Link';
                     copyBtn.classList.remove('copied');
@@ -686,9 +795,9 @@
             copyBtn.textContent = 'Copy';
             copyBtn.addEventListener('click', async () => {
                 await navigator.clipboard.writeText(item.content);
-                copyBtn.textContent = '✓ Copied';
+                copyBtn.textContent = 'Copied';
                 copyBtn.classList.add('copied');
-                toast('✓ Copied to clipboard', 'success');
+                toast('Copied to clipboard', 'success');
                 setTimeout(() => {
                     copyBtn.textContent = 'Copy';
                     copyBtn.classList.remove('copied');
@@ -709,8 +818,35 @@
         if (item.type === 'LINK') return 'link';
         if (item.type === 'IMAGE') return 'image';
         if (item.type === 'PDF') return 'pdf';
+        if (item.type === 'AUDIO') return 'audio';
         if (item.type === 'FILE') return 'file';
         return 'text';
+    }
+
+    async function triggerBlobDownload(item, href) {
+        try {
+            toast('Downloading ' + (item.content || 'file') + '…', 'info');
+            const resp = await fetch(href);
+            if (!resp.ok) throw new Error('Download failed');
+            const blob = await resp.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = item.content || 'file';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+            toast('Downloaded ' + (item.content || 'file'), 'success');
+        } catch (err) {
+            const a = document.createElement('a');
+            a.href = href;
+            a.download = item.content || 'file';
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
     }
 
     function fileBody(item) {
@@ -746,15 +882,50 @@
             preview.loading = 'lazy';
             preview.addEventListener('error', () => preview.remove());
             wrap.append(preview);
-        } else {
-            const open = document.createElement('a');
-            open.className = 'file-open';
-            open.href = href;
-            open.target = '_blank';
-            open.rel = 'noopener noreferrer';
-            open.textContent = item.type === 'PDF' ? '📄 Open PDF' : '📎 Open / Download';
-            wrap.append(open);
+        } else if (item.type === 'AUDIO') {
+            const audio = document.createElement('audio');
+            audio.className = 'file-audio';
+            audio.controls = true;
+            audio.src = href;
+            wrap.append(audio);
         }
+
+        const actions = document.createElement('div');
+        actions.className = 'card-actions-bar';
+
+        const downloadBtn = document.createElement('button');
+        downloadBtn.type = 'button';
+        downloadBtn.className = 'btn-card-download';
+        downloadBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Download</span>
+        `;
+        downloadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            triggerBlobDownload(item, href);
+        });
+        actions.append(downloadBtn);
+
+        const open = document.createElement('a');
+        open.className = 'file-open';
+        open.href = href;
+        open.target = '_blank';
+        open.rel = 'noopener noreferrer';
+        open.innerHTML = `
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+            <span>${item.type === 'PDF' ? 'Open PDF' : 'Open'}</span>
+        `;
+        actions.append(open);
+
+        wrap.append(actions);
         return wrap;
     }
 
@@ -838,7 +1009,7 @@
                 return;
             }
             applyExtended(await response.json());
-            toast('✓ Extended +1 hour', 'success');
+            toast('Extended +1 hour', 'success');
         } catch (e) {
             toast('Failed to extend lifespan', 'error');
         }
@@ -951,7 +1122,7 @@
         toast('Encrypting & sending…', 'info');
         const response = await postJson(API, {content});
         if (response.ok) {
-            toast('✓ Sent', 'success');
+            toast('Sent', 'success');
         } else {
             const message = await why(response);
             toast('Could not send: ' + message, 'error');
@@ -977,7 +1148,7 @@
         const tooBig = files.filter((f) => f.size > MAX_BYTES).map((f) => f.name);
         if (tooBig.length) {
             showUploadStatus('Over the 30 MB limit: ' + tooBig.join(', '), true);
-            toast('✕ ' + tooBig.join(', ') + ' exceeds 30 MB limit', 'error');
+            toast(tooBig.join(', ') + ' exceeds 30 MB limit', 'error');
         } else {
             showUploadStatus('');
         }
@@ -1000,7 +1171,7 @@
         const tooBig = files.filter((f) => f.size > MAX_BYTES).map((f) => f.name);
         if (tooBig.length) {
             showUploadStatus('Over the 30 MB limit: ' + tooBig.join(', '), true);
-            toast('✕ Over 30 MB limit: ' + tooBig.join(', '), 'error');
+            toast('Over 30 MB limit: ' + tooBig.join(', '), 'error');
         }
         if (usable.length === 0) return;
 
@@ -1022,7 +1193,7 @@
         }
         const msg = sent === 1 ? '1 file sent' : sent + ' files sent';
         showUploadStatus(msg, false);
-        toast('✓ ' + msg, 'success');
+        toast(msg, 'success');
         setTimeout(() => showUploadStatus(''), 4000);
     }
 
@@ -1031,7 +1202,7 @@
         if (!content) return;
         const response = await postJson(API, {content: content.slice(0, 20000)});
         if (response.ok) {
-            toast('✓ Sent', 'success');
+            toast('Sent', 'success');
         } else {
             const err = await why(response);
             showUploadStatus(err, true);
@@ -1122,7 +1293,7 @@
         clearConfirming = false;
         clearTimeout(clearTimer);
         clearBtn.classList.remove('confirming');
-        clearBtn.innerHTML = '<span class="btn-icon">🗑️</span> Delete All';
+        clearBtn.innerHTML = '<span class="btn-icon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></span> Delete All';
     }
 
     clearBtn.addEventListener('click', async () => {
@@ -1169,7 +1340,7 @@
             if (launchStatus) {
                 launchStatus.style.opacity = '0';
                 setTimeout(() => {
-                    launchStatus.textContent = '⚡ Syncing Ephemeral Feed…';
+                    launchStatus.textContent = 'Syncing Ephemeral Feed…';
                     launchStatus.style.opacity = '1';
                 }, 120);
             }
@@ -1184,9 +1355,41 @@
         }, 1200);
     }
 
+    // ---------- auto-update service worker lifecycle ----------
+
+    function initServiceWorkerAutoUpdate() {
+        if (!('serviceWorker' in navigator)) return;
+
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            toast('New version available — Reloading…', 'info', 3000);
+            setTimeout(() => {
+                window.location.reload();
+            }, 1200);
+        });
+
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').then((registration) => {
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'visible') {
+                        registration.update().catch(() => {});
+                    }
+                });
+                setInterval(() => {
+                    registration.update().catch(() => {});
+                }, 15 * 60 * 1000);
+            }).catch((err) => {
+                console.debug('ServiceWorker registration error:', err);
+            });
+        });
+    }
+
     // ---------- start ----------
 
     initLaunchScreen();
+    initServiceWorkerAutoUpdate();
     refresh();
     if (token.get()) {
         showFeed();

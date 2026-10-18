@@ -1,15 +1,17 @@
 package com.backend.auth.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * Body of {@code POST /api/auth/login} — logging in with phone number and password.
+ * Body of {@code POST /api/auth/login} — logging in with username and password.
  */
 public record LoginRequest(
-        @NotBlank(message = "phone must not be blank")
-        @Size(max = 40, message = "phone must be at most 40 characters")
-        String phone,
+        @NotBlank(message = "username must not be blank")
+        @Size(max = 40, message = "username must be at most 40 characters")
+        @JsonAlias("phone")
+        String username,
 
         @NotBlank(message = "password must not be blank")
         String password,
@@ -20,4 +22,9 @@ public record LoginRequest(
 
         /** PHONE | WEB, optional (defaults to PHONE) */
         String deviceType) {
+
+    /** Legacy accessor for backward compatibility */
+    public String phone() {
+        return username;
+    }
 }

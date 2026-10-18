@@ -12,20 +12,24 @@
     <string name="section_backend">Backend</string>
 
     <!-- the account card: one of these three is on screen at any time -->
-    <string name="account_intro">Your phone number is the account. Nothing is sent to the server until you have one, and the feed below is yours alone.</string>
-    <string name="phone_hint">phone number, e.g. +49 151 2345678</string>
+    <string name="account_intro">Your username is the account. Nothing is sent to the server until you have one, and the feed below is yours alone.</string>
+    <string name="username_hint">username, e.g. ahmed99</string>
+    <string name="phone_hint">username, e.g. ahmed99</string>
     <string name="name_hint">your name (optional)</string>
     <string name="create_account">Create my account</string>
     <string name="account_creating">Creating the account…</string>
-    <string name="phone_needed">Enter your phone number first.</string>
-    <string name="pair_this_phone">Pair this phone instead</string>
-    <string name="pair_intro">Type this code into a device that is already paired with your account.</string>
+    <string name="username_needed">Enter your username first.</string>
+    <string name="phone_needed">Enter your username first.</string>
+    <string name="username_invalid">Username must be 3–32 characters and contain only letters and numbers.</string>
+    <string name="username_taken">This username is already taken. Please choose another.</string>
+    <string name="pair_this_phone">Pair with code / QR instead</string>
+    <string name="pair_intro">Type this code into a device that is already paired with your account, or scan the QR code.</string>
     <string name="pair_waiting">Waiting for approval. The code stops working in a few minutes.</string>
     <string name="pair_failed">Could not ask for a pairing code — check the backend address below.</string>
     <string name="pair_cancel">Cancel</string>
     <string name="signed_in">Paired</string>
     <string name="signed_in_as">Paired as %1$s</string>
-    <string name="account_paired_e2ee">⚡ Paired &amp; E2EE Verified</string>
+    <string name="account_paired_e2ee">Paired &amp; E2EE Verified</string>
     <string name="sign_out">Sign out</string>
     <string name="pair_before_sharing">Pair this phone first — open Teilen to set up your account.</string>
     <string name="pair_before_files">Pair this phone first — files cannot be sent yet.</string>
@@ -71,15 +75,15 @@
     <string name="content_hint">Paste text, note, or URL link…</string>
     <string name="expires_in">Disappears after</string>
     <string name="send">Send</string>
-    <string name="encrypt_and_send">🔒 Encrypt &amp; Send</string>
-    <string name="paste_and_send">📋 Paste from clipboard</string>
+    <string name="encrypt_and_send">Encrypt &amp; Send</string>
+    <string name="paste_and_send">Paste</string>
     <string name="sending">Encrypting &amp; sending…</string>
     <string name="ready">Ready · %1$s</string>
     <string name="nothing_to_send">Nothing to send — paste something first.</string>
     <string name="sent">Sent · %1$s</string>
     <string name="sent_toast">Sent to Teilen</string>
     <string name="copied_toast">Copied to Teilen</string>
-    <string name="copied_to_clipboard">✓ Copied</string>
+    <string name="copied_to_clipboard">Copied</string>
     <string name="server_hint">Backend URL (defaults to built-in local/remote server):</string>
     <string name="server_blank">Enter a URL first.</string>
     <string name="server_saved">Saved: %1$s</string>
@@ -89,9 +93,9 @@
     <string name="pick_file">Choose Files</string>
     <string name="files_hint">Up to 30 MB · Encrypted with XChaCha20-Poly1305</string>
     <string name="files_drop_hint">Up to 30 MB · Encrypted with XChaCha20</string>
-    <string name="chip_photos">📷 Photos</string>
-    <string name="chip_documents">📄 Documents</string>
-    <string name="chip_any_file">📁 Any File</string>
+    <string name="chip_photos">Photos</string>
+    <string name="chip_documents">Documents</string>
+    <string name="chip_any_file">Any File</string>
     <string name="file_too_large_error">Selected file (%1$s) exceeds the 30 MB limit.</string>
     <string name="uploading">Uploading %1$s…</string>
     <string name="uploading_n">Uploading %1$d files… (%2$d of %3$d)</string>
@@ -101,7 +105,7 @@
     <string name="file_failed">%1$s could not be sent</string>
 
     <string name="share_sending">Sending “%1$s”…</string>
-    <string name="share_sent">Sent ✓</string>
+    <string name="share_sent">Sent</string>
     <string name="share_empty">Nothing to share</string>
     <string name="share_uploading">Encrypting &amp; sending %1$s</string>
     <string name="share_uploading_n">Encrypting &amp; sending %1$d files</string>
@@ -112,8 +116,8 @@
     <string name="cancel">Cancel</string>
     <string name="transfer_cancelling">Cancelling transfer…</string>
     <string name="share_cancelled">Transfer cancelled</string>
-    <string name="upload_via_lan">⚡ Via Direct LAN</string>
-    <string name="upload_via_relay">☁️ Via Encrypted Relay</string>
+    <string name="upload_via_lan">Via Direct LAN</string>
+    <string name="upload_via_relay">Via Encrypted Relay</string>
     <string name="watch_title">Send what I copy</string>
     <string name="watch_hint">Copy anything — a notification offers a one-tap “Send” button. Nothing is sent until you explicitly tap it.</string>
     <string name="watch_idle_title">Teilen is watching</string>
@@ -141,17 +145,17 @@
     <string name="login_button">Sign in</string>
     <string name="logging_in">Signing in…</string>
     <string name="login_failed">Sign in failed: %1$s</string>
-    <string name="account_mode_register_hint">Create an account with your phone number and password.</string>
-    <string name="account_mode_login_hint">Sign in to your account with your phone number and password.</string>
+    <string name="account_mode_register_hint">Create an account with your username and password.</string>
+    <string name="account_mode_login_hint">Sign in to your account with your username and password.</string>
 
     <!-- privacy & compliance -->
     <string name="privacy_policy">Privacy Policy</string>
     <string name="account_delete">Delete Account &amp; Data</string>
 
     <!-- status badges -->
-    <string name="status_direct_lan">⚡ Direct LAN</string>
-    <string name="status_encrypted_relay">☁️ Encrypted Relay</string>
-    <string name="status_lan_ready">⚡ Direct LAN Fast-Path</string>
+    <string name="status_direct_lan">Direct LAN</string>
+    <string name="status_encrypted_relay">Encrypted Relay</string>
+    <string name="status_lan_ready">Direct LAN Fast-Path</string>
 
     <!-- TTL segmented pills -->
     <string name="ttl_10m">10m</string>
@@ -168,10 +172,13 @@
     <string name="sign_in_required_banner">Sign in or register in the Account tab to start sharing securely.</string>
     <string name="go_to_account">Go to Account</string>
 
-    <!-- Send mode selector & file preview -->
-    <string name="mode_text">✍️ Text / Link</string>
-    <string name="mode_media">🖼️ Photo / Media</string>
-    <string name="mode_file">📄 Document / File</string>
+    <!-- Send mode selector (4 options: Text, Files, Photos, Audio) -->
+    <string name="mode_text">Text</string>
+    <string name="mode_files">Files</string>
+    <string name="mode_photos">Photos</string>
+    <string name="mode_audio">Audio</string>
+    <string name="mode_media">Photos</string>
+    <string name="mode_file">Files</string>
     <string name="selected_file">Selected File</string>
     <string name="change_file">Change</string>
     <string name="remove_file">Remove</string>
@@ -180,10 +187,34 @@
     <string name="select_file_first">Please select a file to send.</string>
 
     <!-- Clipboard & Trampoline strings -->
-    <string name="send_current_clipboard">⚡ Send Current Clipboard</string>
-    <string name="quick_paste_with_preview">📋 Paste: %1$s</string>
+    <string name="send_current_clipboard">Send Current Clipboard</string>
+    <string name="quick_paste_with_preview">Paste: %1$s</string>
 
     <!-- Brand Launch Screen -->
-    <string name="launch_status_vault">🔒 Initializing Zero-Knowledge Vault…</string>
-    <string name="launch_status_feed">⚡ Syncing Ephemeral Feed…</string>
+    <string name="launch_status_vault">Initializing Zero-Knowledge Vault…</string>
+    <string name="launch_status_feed">Syncing Ephemeral Feed…</string>
+
+    <!-- Downloads & Bidirectional Pairing -->
+    <string name="feed_download">Download</string>
+    <string name="saved_to_downloads">Saved %1$s to Downloads</string>
+    <string name="open_downloaded_file">Open</string>
+    <string name="downloading_file">Downloading %1$s…</string>
+    <string name="pair_another_device">Pair Another Device</string>
+    <string name="pair_enter_code_hint">Enter 8-digit code (e.g. K7PM-3XQD)</string>
+    <string name="pair_scan_qr">Scan QR Code</string>
+    <string name="pair_device_button">Pair Device</string>
+    <string name="copy_code">Copy Code</string>
+    <string name="code_copied">Code copied to clipboard</string>
+    <string name="camera_permission_required">Camera permission is required to scan pairing QR codes.</string>
+
+    <!-- In-App Updates & Versioning -->
+    <string name="update_ready_banner">A new version of Teilen is downloaded and ready.</string>
+    <string name="btn_restart_update">Restart &amp; Update</string>
+    <string name="update_required_title">Update Required</string>
+    <string name="update_required_body">This version of Teilen is no longer compatible with the latest security protocol. Please update on Google Play to continue.</string>
+    <string name="btn_update_now">Update Now</string>
+    <string name="btn_check_updates">Check for Updates</string>
+    <string name="app_up_to_date">Teilen is up to date</string>
+    <string name="checking_for_updates">Checking for updates…</string>
+    <string name="app_version_format">Version %1$s (%2$d)</string>
 </resources>

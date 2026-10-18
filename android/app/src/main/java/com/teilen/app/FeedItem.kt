@@ -40,6 +40,7 @@ data class FeedItem(
             "IMAGE" -> "image"
             "PDF" -> "pdf"
             "FILE" -> "file"
+            "AUDIO" -> "audio"
             "LINK" -> "link"
             else -> "text"
         }

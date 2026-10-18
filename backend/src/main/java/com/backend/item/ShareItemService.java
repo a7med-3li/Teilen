@@ -251,4 +251,18 @@ public class ShareItemService {
         String cleaned = original.replaceAll("[/\\\\\\r\\n\"]", "_").strip();
         return cleaned.length() > 200 ? cleaned.substring(0, 200) : cleaned;
     }
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void cleanupOrphanedBlobsOnStartup() {
+        try {
+            java.util.Set<String> activeRefs = repository.findAll().stream()
+                    .map(ShareItem::getStorageRef)
+                    .filter(java.util.Objects::nonNull)
+                    .collect(java.util.stream.Collectors.toSet());
+            blobStore.deleteOrphansExcept(activeRefs);
+            log.info("completed startup cleanup of orphaned blobs");
+        } catch (Exception e) {
+            log.warn("failed to sweep orphaned blobs on startup", e);
+        }
+    }
 }

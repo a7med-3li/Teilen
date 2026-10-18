@@ -38,6 +38,16 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return new ResponseEntity<>(payload(statusCode, describe(ex)), headers, statusCode);
     }
 
+    @ExceptionHandler(com.backend.auth.exception.UsernameTakenException.class)
+    public ResponseEntity<Object> onUsernameTaken(com.backend.auth.exception.UsernameTakenException e) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("status", 409);
+        payload.put("error", "username_taken");
+        payload.put("message", "This username is already taken. Please choose another.");
+        payload.put("at", Instant.now());
+        return new ResponseEntity<>(payload, HttpHeaders.EMPTY, HttpStatus.CONFLICT);
+    }
+
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Object> onStatusException(ResponseStatusException e) {
         String message = e.getReason() == null ? e.getMessage() : e.getReason();

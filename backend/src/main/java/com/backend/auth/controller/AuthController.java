@@ -59,18 +59,18 @@ public class AuthController {
         this.qrCodes = qrCodes;
     }
 
-    /** creates an account with phone and password, pairs this device */
+    /** creates an account with username and password, pairs this device */
     @PostMapping("/api/auth/account")
     public ResponseEntity<SessionResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
-        SessionResponse session = auth.createAccount(request.phone(), request.password(), request.displayName(),
+        SessionResponse session = auth.createAccount(request.username(), request.password(), request.displayName(),
                 request.deviceName(), request.deviceType());
         return ResponseEntity.status(HttpStatus.CREATED).body(session);
     }
 
-    /** logs in with phone and password, pairs this device */
+    /** logs in with username and password, pairs this device */
     @PostMapping("/api/auth/login")
     public ResponseEntity<SessionResponse> login(@Valid @RequestBody LoginRequest request) {
-        SessionResponse session = auth.login(request.phone(), request.password(), request.deviceName(),
+        SessionResponse session = auth.login(request.username(), request.password(), request.deviceName(),
                 request.deviceType());
         return ResponseEntity.ok(session);
     }

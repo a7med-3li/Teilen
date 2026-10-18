@@ -111,6 +111,23 @@
             android:visibility="gone" />
 
         <Button
+            android:id="@+id/feed_action_download"
+            style="@style/Button.Outline"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginStart="6dp"
+            android:minHeight="32dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:drawableStart="@drawable/ic_download"
+            android:drawablePadding="4dp"
+            android:drawableTint="@color/accent"
+            android:text="@string/feed_download"
+            android:textColor="@color/accent"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <Button
             android:id="@+id/feed_action_extend"
             style="@style/Button.Outline"
             android:layout_width="wrap_content"
@@ -131,14 +148,13 @@
         <Button
             android:id="@+id/feed_action_delete"
             style="@style/Button.Outline"
-            android:layout_width="wrap_content"
+            android:layout_width="36dp"
             android:layout_height="32dp"
             android:minHeight="32dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:text="✕"
-            android:textColor="@color/danger"
-            android:textSize="12sp" />
+            android:padding="6dp"
+            android:drawableStart="@drawable/ic_trash"
+            android:drawableTint="@color/danger"
+            android:contentDescription="@string/delete_item" />
     </LinearLayout>
 
 </LinearLayout>

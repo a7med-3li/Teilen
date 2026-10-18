@@ -40,7 +40,8 @@ public class SecurityConfig {
             "/api/auth/device/code",
             "/api/auth/device/token",
             "/api/auth/device/qr.svg",
-            "/api/auth/device/pending"
+            "/api/auth/device/pending",
+            "/api/version"
     };
 
     @Bean

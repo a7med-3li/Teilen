@@ -123,30 +123,34 @@ class PairActivity : Activity() {
             .show()
     }
 
-    private companion object {
+    companion object {
 
         /**
          * Exactly the alphabet the server draws codes from: no I or O (they read as 1 and 0), no 0
          * or 1 either. Kept in step with {@code Tokens.CODE_ALPHABET} on the backend.
-         *
-         * <p>Checked here rather than passed on, because this is the one value that arrives from
-         * outside: the code is the whole credential, so a link carrying anything else is refused
-         * before it reaches the network. Dashes, spaces and case are cosmetic and get stripped, so
-         * what reaches the server is always the eight characters it issued.
          */
-        private val CODE_LETTERS = ('A'..'Z').filterNot { it == 'I' || it == 'O' }.toSet() + ('2'..'9').toSet()
+        val CODE_LETTERS = ('A'..'Z').filterNot { it == 'I' || it == 'O' }.toSet() + ('2'..'9').toSet()
 
         /** {@code teilen://pair?code=K7PM-3XQD} */
         fun codeOf(data: Uri?): String? {
             if (data == null ||
                 !data.scheme.equals("teilen", ignoreCase = true) ||
-                // the manifest only routes teilen://pair, so anything else was not meant for us
                 !data.host.equals("pair", ignoreCase = true)
             ) {
                 return null
             }
             val raw = data.getQueryParameter("code") ?: return null
             val compact = raw.uppercase().filter { it in CODE_LETTERS }
+            return compact.takeIf { it.length == 8 }
+        }
+
+        /** Parses either raw 8-digit code or a teilen://pair?code=... URI */
+        fun cleanCode(raw: String): String? {
+            val trimmed = raw.trim()
+            if (trimmed.startsWith("teilen://", ignoreCase = true)) {
+                return codeOf(Uri.parse(trimmed))
+            }
+            val compact = trimmed.uppercase().filter { it in CODE_LETTERS }
             return compact.takeIf { it.length == 8 }
         }
     }

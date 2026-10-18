@@ -20,6 +20,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
@@ -40,17 +41,21 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import com.google.zxing.integration.android.IntentIntegrator
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Modern 3-tab interface: Send, Feed, and Account.
- * Features an integrated multimodal composer (Text, Photo/Media, Document/File),
+ * Features an integrated multimodal composer (Text, Files, Photos, Audio),
  * tactile haptics, tabular counters, pre-flight size checks, live route badges,
+ * 1-tap blob downloads to public MediaStore.Downloads, in-app ZXing QR scanner,
  * Android 10+ clipboard watcher support, and a sleek 1,400 ms brand launch screen.
  */
 class MainActivity : Activity() {
 
     enum class Tab { SEND, FEED, ACCOUNT }
-    enum class SendMode { TEXT, MEDIA, FILE }
+    enum class SendMode { TEXT, FILES, PHOTOS, AUDIO }
 
     // TTL values in seconds
     private val ttls = listOf(600L, 1800L, 3600L, 14400L, 86400L)
@@ -73,10 +78,11 @@ class MainActivity : Activity() {
     private lateinit var headerRouteBadge: TextView
     private lateinit var headerSessionBadge: TextView
 
-    // Tab 1: Unified Send Composer
+    // Tab 1: Unified Send Composer (4 Modes: Text, Files, Photos, Audio)
     private lateinit var modePillText: TextView
-    private lateinit var modePillMedia: TextView
-    private lateinit var modePillFile: TextView
+    private lateinit var modePillFiles: TextView
+    private lateinit var modePillPhotos: TextView
+    private lateinit var modePillAudio: TextView
 
     private lateinit var composerTextLayout: View
     private lateinit var content: EditText
@@ -84,9 +90,6 @@ class MainActivity : Activity() {
 
     private lateinit var composerFileLayout: View
     private lateinit var filePickerPrompt: View
-    private lateinit var btnChipPhotos: Button
-    private lateinit var btnChipDocuments: Button
-    private lateinit var btnChipAnyFile: Button
     private lateinit var pickFile: Button
 
     private lateinit var fileSelectedCard: View
@@ -126,6 +129,15 @@ class MainActivity : Activity() {
     private lateinit var saveServer: Button
     private lateinit var btnPrivacyPolicy: Button
     private lateinit var btnAccountDelete: Button
+    private lateinit var accountVersionInfo: TextView
+    private lateinit var btnCheckUpdates: Button
+
+    // In-App Updates & Versioning
+    private lateinit var appUpdateHelper: AppUpdateHelper
+    private lateinit var updateBanner: View
+    private lateinit var btnRestartUpdate: Button
+    private lateinit var cardUpdateRequired: View
+    private lateinit var btnUpdateNow: Button
 
     // Containers & Gating Banners
     private lateinit var pageSend: View
@@ -178,10 +190,11 @@ class MainActivity : Activity() {
         setupSendTab()
         setupFeedTab()
         setupAccountTab()
+        setupUpdateComponents()
 
         connectivityManager = getSystemService(ConnectivityManager::class.java)
 
-        account = AccountCard(this) { applyGating() }
+        account = AccountCard(this, onScanQr = { startQrScanner() }) { applyGating() }
         account.render()
 
         takeHandedOverText(intent)
@@ -281,6 +294,8 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        appUpdateHelper.onResumeCheck()
+        checkMinimumVersionGate()
         updateRouteBadge()
         registerNetworkCallback()
         updatePasteButtonPreview()
@@ -298,6 +313,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        appUpdateHelper.stop()
         main.removeCallbacks(feedTicker)
     }
 
@@ -333,8 +349,9 @@ class MainActivity : Activity() {
         headerSessionBadge = findViewById(R.id.header_session_badge)
 
         modePillText = findViewById(R.id.mode_pill_text)
-        modePillMedia = findViewById(R.id.mode_pill_media)
-        modePillFile = findViewById(R.id.mode_pill_file)
+        modePillFiles = findViewById(R.id.mode_pill_files)
+        modePillPhotos = findViewById(R.id.mode_pill_photos)
+        modePillAudio = findViewById(R.id.mode_pill_audio)
 
         composerTextLayout = findViewById(R.id.composer_text_layout)
         content = findViewById(R.id.content)
@@ -342,9 +359,6 @@ class MainActivity : Activity() {
 
         composerFileLayout = findViewById(R.id.composer_file_layout)
         filePickerPrompt = findViewById(R.id.file_picker_prompt)
-        btnChipPhotos = findViewById(R.id.btn_chip_photos)
-        btnChipDocuments = findViewById(R.id.btn_chip_documents)
-        btnChipAnyFile = findViewById(R.id.btn_chip_any_file)
         pickFile = findViewById(R.id.pick_file)
 
         fileSelectedCard = findViewById(R.id.file_selected_card)
@@ -379,6 +393,13 @@ class MainActivity : Activity() {
         saveServer = findViewById(R.id.save_server)
         btnPrivacyPolicy = findViewById(R.id.btn_privacy_policy)
         btnAccountDelete = findViewById(R.id.btn_account_delete)
+        accountVersionInfo = findViewById(R.id.account_version_info)
+        btnCheckUpdates = findViewById(R.id.btn_check_updates)
+
+        updateBanner = findViewById(R.id.update_banner)
+        btnRestartUpdate = findViewById(R.id.btn_restart_update)
+        cardUpdateRequired = findViewById(R.id.card_update_required)
+        btnUpdateNow = findViewById(R.id.btn_update_now)
 
         pageSend = findViewById(R.id.page_send)
         pageFeed = findViewById(R.id.page_feed)
@@ -539,13 +560,20 @@ class MainActivity : Activity() {
             performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
             setSendMode(SendMode.TEXT)
         }
-        modePillMedia.setOnClickListener {
+        modePillFiles.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
-            setSendMode(SendMode.MEDIA)
+            setSendMode(SendMode.FILES)
+            launchPicker("*/*")
         }
-        modePillFile.setOnClickListener {
+        modePillPhotos.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
-            setSendMode(SendMode.FILE)
+            setSendMode(SendMode.PHOTOS)
+            launchPicker("image/*")
+        }
+        modePillAudio.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            setSendMode(SendMode.AUDIO)
+            launchPicker("audio/*")
         }
 
         btnPasteSend.setOnClickListener {
@@ -564,26 +592,14 @@ class MainActivity : Activity() {
             }
         }
 
-        btnChipPhotos.setOnClickListener {
-            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            launchPicker("image/*")
-        }
-        btnChipDocuments.setOnClickListener {
-            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            launchPicker("application/pdf")
-        }
-        btnChipAnyFile.setOnClickListener {
-            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            launchPicker("*/*")
-        }
         pickFile.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            launchPicker(if (currentSendMode == SendMode.MEDIA) "image/*" else "*/*")
+            launchCurrentPicker()
         }
 
         btnChangeFile.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            launchPicker(if (currentSendMode == SendMode.MEDIA) "image/*" else "*/*")
+            launchCurrentPicker()
         }
 
         btnRemoveFile.setOnClickListener {
@@ -603,12 +619,21 @@ class MainActivity : Activity() {
         setSendMode(SendMode.TEXT)
     }
 
+    private fun launchCurrentPicker() {
+        when (currentSendMode) {
+            SendMode.PHOTOS -> launchPicker("image/*")
+            SendMode.AUDIO -> launchPicker("audio/*")
+            else -> launchPicker("*/*")
+        }
+    }
+
     private fun setSendMode(mode: SendMode) {
         currentSendMode = mode
         val modes = listOf(
             modePillText to SendMode.TEXT,
-            modePillMedia to SendMode.MEDIA,
-            modePillFile to SendMode.FILE
+            modePillFiles to SendMode.FILES,
+            modePillPhotos to SendMode.PHOTOS,
+            modePillAudio to SendMode.AUDIO
         )
         for ((pill, m) in modes) {
             val selected = m == mode
@@ -642,6 +667,19 @@ class MainActivity : Activity() {
     @Deprecated("platform activities only; there is no AndroidX result API here")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == AppUpdateHelper.REQ_APP_UPDATE) {
+            if (resultCode != RESULT_OK) {
+                Log.w("MainActivity", "Update flow failed or canceled by user: $resultCode")
+            }
+            return
+        }
+        val scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
+        if (scanResult != null) {
+            if (scanResult.contents != null) {
+                account.handleApproveCode(scanResult.contents)
+            }
+            return
+        }
         if (requestCode != REQ_OPEN_DOCUMENT || resultCode != RESULT_OK || data == null) {
             return
         }
@@ -694,6 +732,21 @@ class MainActivity : Activity() {
         filePreviewSize.text = if (totalSize > 0) TeilenApi.humanSize(totalSize) else "Ready"
         fileStatus.visibility = View.GONE
         fileProgress.visibility = View.GONE
+
+        // Theme-matched vector icon based on current send mode and MIME type
+        val mime = firstUri.let { contentResolver.getType(it) } ?: ""
+        when {
+            currentSendMode == SendMode.PHOTOS || mime.startsWith("image/") -> {
+                filePreviewIcon.setImageResource(R.drawable.ic_image)
+            }
+            currentSendMode == SendMode.AUDIO || mime.startsWith("audio/") -> {
+                filePreviewIcon.setImageResource(R.drawable.ic_audio)
+            }
+            else -> {
+                filePreviewIcon.setImageResource(R.drawable.ic_file)
+            }
+        }
+        filePreviewIcon.imageTintList = ColorStateList.valueOf(getColor(R.color.accent))
     }
 
     private fun clearSelectedFiles() {
@@ -703,6 +756,7 @@ class MainActivity : Activity() {
         fileErrorBox.visibility = View.GONE
         fileProgress.visibility = View.GONE
         fileStatus.visibility = View.GONE
+        setSendMode(SendMode.TEXT)
     }
 
     private fun pickedUris(data: Intent): List<Uri> {
@@ -726,8 +780,13 @@ class MainActivity : Activity() {
         val url = Server.normalize(server.text.toString())
         Server.set(this, url)
 
+        val isUrl = text.startsWith("http://", ignoreCase = true) ||
+                    text.startsWith("https://", ignoreCase = true) ||
+                    android.util.Patterns.WEB_URL.matcher(text).matches()
+        val itemType = if (isUrl) "LINK" else "TEXT"
+
         setBusy(true)
-        TeilenApi.send(url, Session.token(this), text, selectedTtlSeconds) { ok, message ->
+        TeilenApi.send(url, Session.token(this), text, selectedTtlSeconds, itemType) { ok, message ->
             setBusy(false)
             when {
                 ok -> {
@@ -753,7 +812,7 @@ class MainActivity : Activity() {
     private fun submitFiles() {
         if (selectedFiles.isEmpty()) {
             Toast.makeText(this, R.string.select_file_first, Toast.LENGTH_SHORT).show()
-            launchPicker(if (currentSendMode == SendMode.MEDIA) "image/*" else "*/*")
+            launchCurrentPicker()
             return
         }
 
@@ -982,6 +1041,71 @@ class MainActivity : Activity() {
                 .setNegativeButton(R.string.cancel, null)
                 .show()
         }
+
+        accountVersionInfo.text = getString(
+            R.string.app_version_format,
+            BuildConfig.VERSION_NAME,
+            BuildConfig.VERSION_CODE
+        )
+        btnCheckUpdates.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            Toast.makeText(this, R.string.checking_for_updates, Toast.LENGTH_SHORT).show()
+            appUpdateHelper.checkForUpdates(isManual = true) { isLatest ->
+                if (isLatest) {
+                    Toast.makeText(this, R.string.app_up_to_date, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------- In-App Updates & Versioning
+
+    private fun setupUpdateComponents() {
+        appUpdateHelper = AppUpdateHelper(this) {
+            runOnUiThread {
+                updateBanner.visibility = View.VISIBLE
+            }
+        }
+        appUpdateHelper.start()
+
+        btnRestartUpdate.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            appUpdateHelper.completeUpdate()
+        }
+
+        btnUpdateNow.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            appUpdateHelper.triggerImmediateUpdate {
+                openPlayStore()
+            }
+        }
+
+        // Silent in-app update check on launch
+        appUpdateHelper.checkForUpdates(isManual = false)
+
+        // Backend minimum version check
+        checkMinimumVersionGate()
+    }
+
+    private fun checkMinimumVersionGate() {
+        TeilenApi.fetchVersion(Server.get(this)) { info ->
+            if (info != null && BuildConfig.VERSION_CODE < info.minAndroidVersionCode) {
+                cardUpdateRequired.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun openPlayStore() {
+        val pkg = packageName
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (_: ActivityNotFoundException) {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
     }
 
     private fun setWatching(watching: Boolean) {
@@ -992,17 +1116,40 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun startQrScanner() {
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.CAMERA), REQ_CAMERA)
+            return
+        }
+        val integrator = IntentIntegrator(this)
+        integrator.setPrompt(getString(R.string.pair_scan_qr))
+        integrator.setBeepEnabled(false)
+        integrator.setOrientationLocked(true)
+        integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+        integrator.initiateScan()
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_NOTIFICATIONS) {
-            val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
-            if (granted) {
-                setWatching(true)
-                ClipboardWatchService.start(this)
-                Toast.makeText(this, R.string.watching_on, Toast.LENGTH_SHORT).show()
-            } else {
-                setWatching(false)
-                Toast.makeText(this, R.string.notifications_needed, Toast.LENGTH_LONG).show()
+        when (requestCode) {
+            REQ_NOTIFICATIONS -> {
+                val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+                if (granted) {
+                    setWatching(true)
+                    ClipboardWatchService.start(this)
+                    Toast.makeText(this, R.string.watching_on, Toast.LENGTH_SHORT).show()
+                } else {
+                    setWatching(false)
+                    Toast.makeText(this, R.string.notifications_needed, Toast.LENGTH_LONG).show()
+                }
+            }
+            REQ_CAMERA -> {
+                val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+                if (granted) {
+                    startQrScanner()
+                } else {
+                    Toast.makeText(this, R.string.camera_permission_required, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -1031,9 +1178,6 @@ class MainActivity : Activity() {
         send.isEnabled = !busy
         send.text = getString(if (busy) R.string.sending else R.string.encrypt_and_send)
         pickFile.isEnabled = !busy
-        btnChipPhotos.isEnabled = !busy
-        btnChipDocuments.isEnabled = !busy
-        btnChipAnyFile.isEnabled = !busy
         btnChangeFile.isEnabled = !busy
         btnRemoveFile.isEnabled = !busy
     }
@@ -1105,6 +1249,7 @@ class MainActivity : Activity() {
 
             val btnCopy = view.findViewById<Button>(R.id.feed_action_copy)
             val btnOpen = view.findViewById<Button>(R.id.feed_action_open)
+            val btnDownload = view.findViewById<Button>(R.id.feed_action_download)
             val btnExtend = view.findViewById<Button>(R.id.feed_action_extend)
             val btnDelete = view.findViewById<Button>(R.id.feed_action_delete)
 
@@ -1151,6 +1296,17 @@ class MainActivity : Activity() {
                 btnOpen.visibility = View.GONE
             }
 
+            // Download Action (for blobs)
+            if (item.hasBlob) {
+                btnDownload.visibility = View.VISIBLE
+                btnDownload.setOnClickListener {
+                    performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+                    downloadItem(item)
+                }
+            } else {
+                btnDownload.visibility = View.GONE
+            }
+
             // Extend Action (+1h)
             btnExtend.setOnClickListener {
                 performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
@@ -1192,11 +1348,80 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun downloadItem(item: FeedItem) {
+        val url = item.blobUrl(Server.get(this)) ?: return
+        val fileName = item.content.ifBlank { "downloaded-file" }
+        val mimeType = item.mimeType ?: "*/*"
+
+        Toast.makeText(this, getString(R.string.downloading_file, fileName), Toast.LENGTH_SHORT).show()
+
+        Thread {
+            var downloadedUri: Uri? = null
+            try {
+                val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 10_000
+                    readTimeout = 30_000
+                    instanceFollowRedirects = true
+                }
+                if (connection.responseCode in 200..299) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val contentValues = android.content.ContentValues().apply {
+                            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                            put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Teilen")
+                            put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                        }
+                        val resolver = contentResolver
+                        val insertedUri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                        if (insertedUri != null) {
+                            resolver.openOutputStream(insertedUri)?.use { out ->
+                                connection.inputStream.use { input ->
+                                    input.copyTo(out)
+                                }
+                            }
+                            contentValues.clear()
+                            contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                            resolver.update(insertedUri, contentValues, null, null)
+                            downloadedUri = insertedUri
+                        }
+                    } else {
+                        val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                        val targetDir = java.io.File(downloadsDir, "Teilen").apply { mkdirs() }
+                        val targetFile = java.io.File(targetDir, fileName)
+                        targetFile.outputStream().use { out ->
+                            connection.inputStream.use { input ->
+                                input.copyTo(out)
+                            }
+                        }
+                        downloadedUri = Uri.fromFile(targetFile)
+                    }
+                }
+                connection.disconnect()
+            } catch (e: Exception) {
+                downloadedUri = null
+            }
+
+            main.post {
+                if (downloadedUri != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        window.decorView.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    } else {
+                        window.decorView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    }
+                    Toast.makeText(this, getString(R.string.saved_to_downloads, fileName), Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this, "Download failed for $fileName", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.apply { name = "teilen-download" }.start()
+    }
+
     companion object {
         const val EXTRA_TEXT = "teilen.extra.text"
         const val EXTRA_STOP_WATCHING = "teilen.extra.stop_watching"
         private const val REQ_NOTIFICATIONS = 41
         private const val REQ_OPEN_DOCUMENT = 42
+        private const val REQ_CAMERA = 43
         private const val FEED_POLL_MS = 5000L
     }
 }

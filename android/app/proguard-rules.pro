@@ -27,7 +27,12 @@
 
 # 5. Keep Kotlin Metadata & Serialization Models
 -keepattributes *Annotation*,InnerClasses,Signature,Exceptions
--keepclassmembers class kotlin.Metadata {
-    public <methods>;
-}
 -keep class com.teilen.app.** { *; }
+ 
+# 6. ZXing Barcode Scanner
+-keep class com.journeyapps.barcodescanner.** { *; }
+-keep class com.google.zxing.** { *; }
+-dontwarn com.journeyapps.barcodescanner.**
+
+# 7. Google Play In-App Updates
+-keep class com.google.android.play.core.** { *; }
