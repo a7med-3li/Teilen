@@ -22,6 +22,10 @@ public interface DeviceRepository extends JpaRepository<Device, UUID> {
 
     void deleteByIdAndUserId(UUID id, UUID userId);
 
+    @Modifying
+    @Query("delete from Device d where d.userId = :userId and d.id <> :id")
+    void deleteByUserIdAndIdNot(@Param("userId") UUID userId, @Param("id") UUID id);
+
     /**
      * One write per device every few minutes instead of one per request: the feed polls and pushes
      * constantly and "last seen" is only a rough hint anyway.

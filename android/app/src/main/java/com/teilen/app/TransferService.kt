@@ -12,6 +12,8 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.PowerManager
+import android.net.wifi.WifiManager
 import android.system.Os
 import android.system.OsConstants
 import java.io.FileInputStream
@@ -29,10 +31,20 @@ class TransferService : Service() {
     private val main = Handler(Looper.getMainLooper())
     @Volatile private var cancelled = false
     @Volatile private var currentRoute: String? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onCreate() {
         super.onCreate()
         TeilenNotifications.ensureTransferChannel(this)
+        val pm = getSystemService(PowerManager::class.java)
+        wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "teilen:transfer_wakelock")?.apply {
+            setReferenceCounted(false)
+        }
+        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        wifiLock = wm?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "teilen:transfer_wifilock")?.apply {
+            setReferenceCounted(false)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -47,6 +59,9 @@ class TransferService : Service() {
             stopSelf(startId)
             return START_NOT_STICKY
         }
+
+        wakeLock?.acquire(60 * 60 * 1000L)
+        wifiLock?.acquire()
 
         currentRoute = getString(R.string.upload_via_relay)
         startInForeground(workingNotification(getString(R.string.sending), currentRoute))
@@ -78,7 +93,8 @@ class TransferService : Service() {
         }
         // a share that carried both text and files becomes two items; text goes first
         if (!text.isNullOrBlank()) {
-            TeilenApi.send(Server.get(this), Session.token(this), text, ttl) { _, _ ->
+            val activeSession = Session.activeSessionId(this)
+            TeilenApi.send(Server.get(this), Session.token(this), text, ttl, sessionId = activeSession) { _, _ ->
                 sendFiles(fds, names, mimes, sizes, ttl)
             }
         } else {
@@ -91,7 +107,8 @@ class TransferService : Service() {
             done(getString(R.string.share_empty), ok = false)
             return
         }
-        TeilenApi.send(Server.get(this), Session.token(this), text, ttl) { ok, message ->
+        val activeSession = Session.activeSessionId(this)
+        TeilenApi.send(Server.get(this), Session.token(this), text, ttl, sessionId = activeSession) { ok, message ->
             done(if (ok) getString(R.string.share_sent) else message, ok)
         }
     }
@@ -110,16 +127,27 @@ class TransferService : Service() {
             val name = names.getOrNull(0) ?: "file"
             val mime = mimes.getOrNull(0) ?: "application/octet-stream"
             val size = sizes.getOrNull(0) ?: -1L
-            currentRoute = getString(R.string.upload_via_lan)
+            val isDirectLanOnly = size > TeilenApi.MAX_UPLOAD_BYTES
+
+            currentRoute = if (isDirectLanOnly) "⚡ Direct LAN Only (0 Server Bytes)" else getString(R.string.upload_via_lan)
             manager().notify(
                 TeilenNotifications.TRANSFER_ID,
                 workingNotification(getString(R.string.share_uploading, name), currentRoute)
             )
             val engine = LanTransferEngine(this)
-            engine.attempt(LanTransferEngine.Payload(name, mime, size) { inputOf(fds[0]) }) { sent ->
+            engine.attempt(
+                payload = LanTransferEngine.Payload(name, mime, size) { inputOf(fds[0]) },
+                onProgress = { written, total ->
+                    if (!cancelled) {
+                        onProgress(1, 1, written, total)
+                    }
+                }
+            ) { sent ->
                 if (cancelled) return@attempt
                 if (sent) {
                     done(getString(R.string.share_sent), ok = true)
+                } else if (isDirectLanOnly) {
+                    done("Files over 30 MB transfer directly device-to-device. Ensure receiving device is open on same Wi-Fi.", ok = false)
                 } else {
                     currentRoute = getString(R.string.upload_via_relay)
                     // the LAN read may have moved the descriptor; the server upload starts at zero
@@ -141,6 +169,7 @@ class TransferService : Service() {
     ) {
         currentRoute = getString(R.string.upload_via_relay)
         val count = fds.size
+        val activeSession = Session.activeSessionId(this)
         TeilenApi.uploadAllFds(
             baseUrl = Server.get(this),
             token = Session.token(this),
@@ -149,6 +178,7 @@ class TransferService : Service() {
             mimes = mimes,
             sizes = sizes,
             ttlSeconds = ttl,
+            sessionId = activeSession,
             onProgress = { index, _, written, total ->
                 if (!cancelled) onProgress(index, count, written, total)
             },
@@ -239,6 +269,8 @@ class TransferService : Service() {
 
     /** the last word: detach the ongoing notice and let the outcome replace it, then stop */
     private fun done(message: String, ok: Boolean) {
+        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
+        runCatching { if (wifiLock?.isHeld == true) wifiLock?.release() }
         val notification = TeilenNotifications.transferBuilder(this)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(message)
@@ -250,6 +282,12 @@ class TransferService : Service() {
         stopForeground(STOP_FOREGROUND_DETACH)
         manager().notify(TeilenNotifications.TRANSFER_ID, notification)
         stopSelf()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
+        runCatching { if (wifiLock?.isHeld == true) wifiLock?.release() }
     }
 
     private fun manager() = getSystemService(NotificationManager::class.java)

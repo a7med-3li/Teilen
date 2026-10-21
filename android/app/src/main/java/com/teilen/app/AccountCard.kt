@@ -55,6 +55,7 @@ class AccountCard(
     private val btnScanQr: Button = activity.findViewById(R.id.btn_scan_qr)
     private val btnApproveCode: Button = activity.findViewById(R.id.btn_approve_code)
     private val approvePairStatus: TextView = activity.findViewById(R.id.approve_pair_status)
+    private val btnRevokeOthers: Button = activity.findViewById(R.id.btn_revoke_others)
 
     private var mode = AuthMode.LOGIN
 
@@ -84,6 +85,20 @@ class AccountCard(
         btnApproveCode.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             handleApproveCode(inputApproveCode.text.toString())
+        }
+        btnRevokeOthers.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            val token = Session.token(activity) ?: return@setOnClickListener
+            AlertDialog.Builder(activity)
+                .setTitle("Sign out all other devices?")
+                .setMessage("All other sessions and devices paired with this account will be immediately revoked.")
+                .setPositiveButton("Sign Out Others") { _, _ ->
+                    TeilenApi.revokeOtherDevices(Server.get(activity), token) { ok, msg ->
+                        Toast.makeText(activity, msg, Toast.LENGTH_LONG).show()
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
         }
 
         updateModeUI()

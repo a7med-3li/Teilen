@@ -78,6 +78,27 @@
                 android:visibility="gone" />
         </LinearLayout>
 
+        <!-- Horizontal Session Spaces Pill Bar -->
+        <HorizontalScrollView
+            android:id="@+id/session_scroll_view"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_header"
+            android:paddingStart="16dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="8dp"
+            android:scrollbars="none"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/session_pill_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
         <!-- Page Container -->
         <FrameLayout
             android:id="@+id/page_container"
@@ -211,10 +232,11 @@
                                 android:layout_marginTop="10dp"
                                 android:gravity="top|start"
                                 android:hint="@string/content_hint"
-                                android:inputType="textMultiLine|textCapSentences"
+                                android:inputType="textMultiLine|textNoSuggestions"
                                 android:lines="4"
-                                android:maxLength="20000"
-                                android:maxLines="6" />
+                                android:maxHeight="220dp"
+                                android:overScrollMode="always"
+                                android:scrollbars="vertical" />
                         </LinearLayout>
 
                         <!-- File Composer Layout -->
@@ -436,6 +458,16 @@
                                     android:layout_weight="1"
                                     android:gravity="center"
                                     android:text="@string/ttl_24h"
+                                    android:textColor="@color/pill_unselected_text"
+                                    android:textSize="11sp" />
+
+                                <TextView
+                                    android:id="@+id/ttl_pill_custom"
+                                    android:layout_width="0dp"
+                                    android:layout_height="28dp"
+                                    android:layout_weight="1"
+                                    android:gravity="center"
+                                    android:text="Custom"
                                     android:textColor="@color/pill_unselected_text"
                                     android:textSize="11sp" />
                             </LinearLayout>
@@ -984,6 +1016,15 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="8dp"
                             android:visibility="gone" />
+
+                        <Button
+                            android:id="@+id/btn_revoke_others"
+                            style="@style/Button.Outline"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:text="Sign Out All Other Devices"
+                            android:textColor="@color/danger" />
                     </LinearLayout>
 
                     <!-- Clipboard Watcher Card -->

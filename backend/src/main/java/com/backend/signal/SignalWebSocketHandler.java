@@ -11,6 +11,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -30,14 +31,17 @@ public class SignalWebSocketHandler extends TextWebSocketHandler {
 
     public static final String USER_ID = "teilen.signal.userId";
     public static final String DEVICE_ID = "teilen.signal.deviceId";
+    public static final String SESSION_ID = "teilen.signal.sessionId";
 
     private static final Logger log = LoggerFactory.getLogger(SignalWebSocketHandler.class);
 
     private final Map<UUID, Set<WebSocketSession>> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
+    private final org.springframework.context.ApplicationContext applicationContext;
 
-    public SignalWebSocketHandler(ObjectMapper objectMapper) {
+    public SignalWebSocketHandler(ObjectMapper objectMapper, org.springframework.context.ApplicationContext applicationContext) {
         this.objectMapper = objectMapper;
+        this.applicationContext = applicationContext;
     }
 
     @Override
@@ -64,14 +68,43 @@ public class SignalWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         String stamped;
+        UUID targetSessionId = null;
         try {
             // the client's own "from" is overwritten: the socket already proved which device this is
             ObjectNode node = (ObjectNode) objectMapper.readTree(message.getPayload());
             node.put("from", deviceId);
+            if (node.has("sessionId") && !node.get("sessionId").isNull()) {
+                try {
+                    targetSessionId = UUID.fromString(node.get("sessionId").asText());
+                } catch (Exception ignored) {
+                }
+            } else {
+                Object sessAttr = session.getAttributes().get(SESSION_ID);
+                if (sessAttr != null) {
+                    try {
+                        targetSessionId = UUID.fromString(sessAttr.toString());
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
             stamped = objectMapper.writeValueAsString(node);
         } catch (Exception e) {
             log.debug("ignoring a malformed signal on {}: {}", session.getId(), e.getMessage());
             return;
+        }
+
+        if (targetSessionId != null) {
+            try {
+                com.backend.session.SessionService sessionService =
+                        applicationContext.getBean(com.backend.session.SessionService.class);
+                List<UUID> memberIds = sessionService.getMemberUserIds(targetSessionId);
+                for (UUID memberId : memberIds) {
+                    relay(memberId, session, stamped);
+                }
+                return;
+            } catch (Exception e) {
+                log.debug("could not resolve session members: {}", e.getMessage());
+            }
         }
         relay(userId, session, stamped);
     }

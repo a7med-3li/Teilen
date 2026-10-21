@@ -12,6 +12,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.ListView
 import android.widget.ProgressBar
@@ -136,7 +137,8 @@ class FeedActivity : Activity() {
         if (adapter.count == 0) {
             spinner.visibility = View.VISIBLE
         }
-        TeilenApi.fetchItems(Server.get(this), Session.token(this)) { items, error ->
+        val activeSession = Session.activeSessionId(this)
+        TeilenApi.fetchItems(Server.get(this), Session.token(this), sessionId = activeSession) { items, error ->
             loading = false
             spinner.visibility = View.GONE
             if (error != null) {
@@ -252,6 +254,57 @@ class FeedActivity : Activity() {
                 thumb.setImageDrawable(null)
                 thumb.visibility = View.GONE
             }
+
+            val btnExtend = view.findViewById<Button?>(R.id.feed_action_extend)
+            val btnCopy = view.findViewById<Button?>(R.id.feed_action_copy)
+            val btnDownload = view.findViewById<Button?>(R.id.feed_action_download)
+            val btnOpen = view.findViewById<Button?>(R.id.feed_action_open)
+            val btnDelete = view.findViewById<Button?>(R.id.feed_action_delete)
+
+            btnCopy?.visibility = if (!item.hasBlob) View.VISIBLE else View.GONE
+            btnCopy?.setOnClickListener {
+                val cm = getSystemService(android.content.ClipboardManager::class.java)
+                cm?.setPrimaryClip(android.content.ClipData.newPlainText("Teilen", item.content))
+                Toast.makeText(this@FeedActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+            }
+
+            btnOpen?.visibility = if (item.hasBlob || item.type == "LINK") View.VISIBLE else View.GONE
+            btnOpen?.setOnClickListener { open(item) }
+
+            btnDownload?.visibility = if (item.hasBlob) View.VISIBLE else View.GONE
+            btnDownload?.setOnClickListener { open(item) }
+
+            btnExtend?.setOnClickListener {
+                btnExtend.isEnabled = false
+                TeilenApi.extendItem(Server.get(this@FeedActivity), Session.token(this@FeedActivity), item.id) { ok, msg ->
+                    btnExtend.isEnabled = true
+                    if (ok) {
+                        Toast.makeText(this@FeedActivity, "Extended +1 hour", Toast.LENGTH_SHORT).show()
+                        refresh()
+                    } else {
+                        Toast.makeText(this@FeedActivity, msg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+
+            btnDelete?.setOnClickListener {
+                AlertDialog.Builder(this@FeedActivity)
+                    .setTitle("Delete item?")
+                    .setMessage("This item will be deleted immediately.")
+                    .setPositiveButton("Delete") { _, _ ->
+                        TeilenApi.deleteItem(Server.get(this@FeedActivity), Session.token(this@FeedActivity), item.id) { ok, msg ->
+                            if (ok) {
+                                Toast.makeText(this@FeedActivity, "Deleted", Toast.LENGTH_SHORT).show()
+                                refresh()
+                            } else {
+                                Toast.makeText(this@FeedActivity, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+            }
+
             return view
         }
     }

@@ -50,6 +50,7 @@ class LanTransferEngine(private val context: Context) {
     private var peer: PeerConnection? = null
     private var channel: DataChannel? = null
     private var payload: Payload? = null
+    private var onProgressCallback: ((Long, Long) -> Unit)? = null
     private var onResult: ((Boolean) -> Unit)? = null
 
     private val timeout = Runnable { finish(false) }
@@ -58,8 +59,13 @@ class LanTransferEngine(private val context: Context) {
      * Tries the local path once. [onResult] is called exactly once, on the main thread: true when
      * the envelope made it over the data channel, false when the caller should use the fallback.
      */
-    fun attempt(payload: Payload, onResult: (Boolean) -> Unit) {
+    fun attempt(
+        payload: Payload,
+        onProgress: ((Long, Long) -> Unit)? = null,
+        onResult: (Boolean) -> Unit
+    ) {
         this.payload = payload
+        this.onProgressCallback = onProgress
         this.onResult = onResult
         main.postDelayed(timeout, FALLBACK_MS)
 
@@ -146,15 +152,86 @@ class LanTransferEngine(private val context: Context) {
         override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) = Unit
         override fun onAddStream(stream: org.webrtc.MediaStream) = Unit
         override fun onRemoveStream(stream: org.webrtc.MediaStream) = Unit
-        override fun onDataChannel(channel: DataChannel) = Unit
+        override fun onDataChannel(channel: DataChannel) {
+            setupReceiver(channel)
+        }
         override fun onRenegotiationNeeded() = Unit
+    }
+
+    private fun setupReceiver(channel: DataChannel) {
+        val pipedOut = java.io.PipedOutputStream()
+        val pipedIn = java.io.PipedInputStream(pipedOut, 256 * 1024)
+        val key = SecureKeyManager.ensureSessionKey(context, Session.activeSessionId(context))
+
+        Thread {
+            try {
+                val tempFile = java.io.File(context.cacheDir, "teilen_lan_${System.currentTimeMillis()}.tmp")
+                tempFile.outputStream().use { fileOut ->
+                    val metaBytes = CipherStreamEngine.decrypt(key, pipedIn, fileOut)
+                    val metaJson = JSONObject(String(metaBytes, Charsets.UTF_8))
+                    val fileName = metaJson.optString("name").ifBlank { "received_lan_file" }
+                    val mimeType = metaJson.optString("type").ifBlank { "*/*" }
+                    saveToDownloads(tempFile, fileName, mimeType)
+                    tempFile.delete()
+                }
+            } catch (e: Exception) {
+                // stream finished or error
+            } finally {
+                runCatching { pipedIn.close() }
+            }
+        }.apply { name = "teilen-lan-receive" }.start()
+
+        channel.registerObserver(object : DataChannel.Observer {
+            override fun onBufferedAmountChange(previousAmount: Long) = Unit
+            override fun onStateChange() = Unit
+            override fun onMessage(buffer: DataChannel.Buffer) {
+                val data = buffer.data
+                val bytes = ByteArray(data.remaining())
+                data.get(bytes)
+                if (String(bytes, Charsets.UTF_8).contains("\"type\":\"eof\"")) {
+                    runCatching { pipedOut.close() }
+                } else {
+                    runCatching { pipedOut.write(bytes) }
+                }
+            }
+        })
+    }
+
+    private fun saveToDownloads(sourceFile: java.io.File, fileName: String, mimeType: String) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val contentValues = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Teilen")
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val resolver = context.contentResolver
+            val insertedUri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            if (insertedUri != null) {
+                resolver.openOutputStream(insertedUri)?.use { out ->
+                    sourceFile.inputStream().use { it.copyTo(out) }
+                }
+                contentValues.clear()
+                contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(insertedUri, contentValues, null, null)
+            }
+        } else {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val targetDir = java.io.File(downloadsDir, "Teilen").apply { mkdirs() }
+            val targetFile = java.io.File(targetDir, fileName)
+            sourceFile.inputStream().use { input ->
+                targetFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+        }
     }
 
     /** the envelope goes out here: encrypt to a throttled data-channel sink, then signal eof */
     private fun pump(channel: DataChannel) {
         try {
             val file = payload ?: throw IllegalStateException("no payload")
-            val master = SecureKeyManager.ensureMasterKey(context)
+            val key = SecureKeyManager.ensureSessionKey(context, Session.activeSessionId(context))
             val metadata = JSONObject()
                 .put("name", file.name)
                 .put("type", file.mime)
@@ -162,8 +239,8 @@ class LanTransferEngine(private val context: Context) {
                 .toString()
                 .toByteArray(Charsets.UTF_8)
 
-            val sink = ChannelSink(channel)
-            file.open().use { input -> CipherStreamEngine.encrypt(master, metadata, input, sink) }
+            val sink = ChannelSink(channel, file.size)
+            file.open().use { input -> CipherStreamEngine.encrypt(key, metadata, input, sink) }
             sink.flush()
             channel.send(DataChannel.Buffer(ByteBuffer.wrap(EOF.toByteArray(Charsets.UTF_8)), false))
             finish(true)
@@ -260,9 +337,10 @@ class LanTransferEngine(private val context: Context) {
     }
 
     /** sends whole 64 KiB messages and blocks until the channel's buffer drains below the cap */
-    private inner class ChannelSink(private val channel: DataChannel) : OutputStream() {
+    private inner class ChannelSink(private val channel: DataChannel, private val totalBytes: Long) : OutputStream() {
         private val buffer = ByteArray(64 * 1024)
         private var count = 0
+        private var totalSent = 0L
 
         override fun write(b: Int) {
             buffer[count++] = b.toByte()
@@ -300,7 +378,12 @@ class LanTransferEngine(private val context: Context) {
             if (!channel.send(DataChannel.Buffer(ByteBuffer.wrap(message), true))) {
                 throw IllegalStateException("the data channel refused a chunk")
             }
+            totalSent += count
             count = 0
+            val cb = onProgressCallback
+            if (cb != null) {
+                main.post { cb(totalSent, totalBytes) }
+            }
         }
     }
 
@@ -315,7 +398,9 @@ class LanTransferEngine(private val context: Context) {
         val base = Server.normalize(Server.get(context))
         val ws = base.replaceFirst("http", "ws")
         val token = URLEncoder.encode(Session.token(context).orEmpty(), "UTF-8")
-        return "$ws/ws/signal?token=$token"
+        val activeSession = Session.activeSessionId(context)
+        val sessionParam = if (!activeSession.isNullOrBlank()) "&sessionId=" + URLEncoder.encode(activeSession, "UTF-8") else ""
+        return "$ws/ws/signal?token=$token$sessionParam"
     }
 
     private fun rtcConfig(): PeerConnection.RTCConfiguration =
@@ -331,7 +416,7 @@ class LanTransferEngine(private val context: Context) {
         private const val CHANNEL_LABEL = "teilen-transfer"
         private const val SIGN_CONTEXT = "teilen-webrtc-v1"
         private const val FALLBACK_MS = 2500L
-        private const val BUFFER_CAP = 2L * 1024 * 1024
+        private const val BUFFER_CAP = 4L * 1024 * 1024
         private const val EOF = "{\"type\":\"eof\"}"
 
         @Volatile

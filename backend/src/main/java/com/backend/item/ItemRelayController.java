@@ -71,14 +71,25 @@ public class ItemRelayController {
 
     /** Everything still live for the caller's account — the plan's pending list. */
     @GetMapping("/pending")
-    public List<ShareItemResponse> pending(@AuthenticationPrincipal AuthenticatedUser caller) {
-        return service.listLive(caller.userId());
+    public List<ShareItemResponse> pending(@AuthenticationPrincipal AuthenticatedUser caller,
+                                           @org.springframework.web.bind.annotation.RequestParam(value = "sessionId", required = false) UUID sessionId) {
+        return service.listLive(caller.userId(), sessionId);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal AuthenticatedUser caller, @PathVariable UUID id) {
         service.delete(caller.userId(), id);
+    }
+
+    public record UpdateTtlRequest(Long ttlSeconds) {
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/{id}/ttl")
+    public ShareItemResponse updateTtl(@AuthenticationPrincipal AuthenticatedUser caller,
+                                       @PathVariable UUID id,
+                                       @RequestBody UpdateTtlRequest request) {
+        return service.extend(caller.userId(), id, request != null ? request.ttlSeconds() : null);
     }
 
     /** One-tap extension: the plan's 60 minutes, capped by the ordinary TTL ceiling. */

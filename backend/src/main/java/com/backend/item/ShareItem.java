@@ -17,9 +17,13 @@ public class ShareItem {
     @Id
     private UUID id;
 
-    /** whose feed this belongs to; the only thing that decides who may see it */
+    /** whose feed this belongs to; the author/uploader */
     @Column(name = "user_id", nullable = false)
     private UUID userId;
+
+    /** the session/room this item is scoped to */
+    @Column(name = "session_id", nullable = false)
+    private UUID sessionId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
@@ -54,13 +58,24 @@ public class ShareItem {
 
     public ShareItem(UUID id, UUID userId, ShareItemType type, String content,
                      Instant createdAt, Instant expiresAt) {
-        this(id, userId, type, content, null, null, null, createdAt, expiresAt);
+        this(id, userId, null, type, content, null, null, null, createdAt, expiresAt);
+    }
+
+    public ShareItem(UUID id, UUID userId, UUID sessionId, ShareItemType type, String content,
+                     Instant createdAt, Instant expiresAt) {
+        this(id, userId, sessionId, type, content, null, null, null, createdAt, expiresAt);
     }
 
     public ShareItem(UUID id, UUID userId, ShareItemType type, String content, String storageRef,
                      String mimeType, Long sizeBytes, Instant createdAt, Instant expiresAt) {
+        this(id, userId, null, type, content, storageRef, mimeType, sizeBytes, createdAt, expiresAt);
+    }
+
+    public ShareItem(UUID id, UUID userId, UUID sessionId, ShareItemType type, String content, String storageRef,
+                     String mimeType, Long sizeBytes, Instant createdAt, Instant expiresAt) {
         this.id = id;
         this.userId = userId;
+        this.sessionId = sessionId;
         this.type = type;
         this.content = content;
         this.storageRef = storageRef;
@@ -85,6 +100,14 @@ public class ShareItem {
 
     public UUID getUserId() {
         return userId;
+    }
+
+    public UUID getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
     }
 
     public ShareItemType getType() {

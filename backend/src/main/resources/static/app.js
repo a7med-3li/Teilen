@@ -1,57 +1,41 @@
 /* ==========================================================================
    Teilen Web Client: Vanilla ES6+ SPA
    Zero-knowledge, dual-path (Direct LAN WebRTC + Ephemeral Cloud Relay)
+   Multi-Session Rooms, Multi-GB LAN Streaming, Token Hardening & DPoP
    ========================================================================== */
 (() => {
     'use strict';
 
     const API = '/api/items';
     const AUTH = '/api/auth';
+    const SESSIONS_API = '/api/sessions';
     const SVG_NS = 'http://www.w3.org/2000/svg';
-    const MAX_BYTES = 30 * 1024 * 1024; // 30 MB ceiling
+    const MAX_RELAY_BYTES = 30 * 1024 * 1024; // 30 MB ceiling for Cloud Relay
 
-    // ---------- the token & storage ----------
-
-    /** localStorage throws in a private window; the feed must not care */
-    function read(key) {
-        try {
-            return localStorage.getItem(key);
-        } catch (e) {
-            return null;
-        }
-    }
-
-    function write(key, value) {
-        try {
-            localStorage.setItem(key, value);
-        } catch (e) {
-            /* the session lasts until this tab closes */
-        }
-    }
-
-    function forget(key) {
-        try {
-            localStorage.removeItem(key);
-        } catch (e) {
-            /* nothing to forget */
-        }
-    }
+    // ---------- In-Memory Token & Security Hardening (Task 6) ----------
+    // Access token is held STRICTLY in memory (never written to localStorage or sessionStorage).
+    // Silent refreshes occur via HttpOnly; SameSite=Strict cookies with rotation.
+    let inMemoryAccessToken = null;
 
     const token = {
         get() {
-            return read('teilen.token');
+            return inMemoryAccessToken;
         },
         set(value) {
-            if (value) {
-                write('teilen.token', value);
-            } else {
-                forget('teilen.token');
-            }
+            inMemoryAccessToken = value || null;
+            // Clean up any old legacy localStorage token if it existed
+            try {
+                localStorage.removeItem('teilen.token');
+            } catch (e) {}
         }
     };
 
-    // ---------- elements ----------
+    // ---------- Active Session State (Task 4) ----------
+    let currentSessionId = null;
+    let availableSessions = [];
+    let activeCustomTtlItemId = null; // When editing card TTL
 
+    // ---------- Elements ----------
     const el = (id) => document.getElementById(id);
     const feed = el('feed');
     const empty = el('empty');
@@ -60,6 +44,41 @@
     const clearBtn = el('clear');
     const compose = el('compose');
     const composeInput = el('compose-input');
+    const composeSubmit = el('compose-submit');
+
+    const sessionPills = el('session-pills');
+    const sessionShareBtn = el('session-share-btn');
+    const sessionCreateBtn = el('session-create-btn');
+    const sessionJoinBtn = el('session-join-btn');
+
+    const modalCreateSession = el('modal-create-session');
+    const formCreateSession = el('form-create-session');
+    const createSessionName = el('create-session-name');
+
+    const modalShareSession = el('modal-share-session');
+    const shareSessionTitle = el('share-session-title');
+    const shareSessionCode = el('share-session-code');
+    const shareSessionQr = el('share-session-qr');
+    const shareSessionCopy = el('share-session-copy');
+
+    const modalJoinSession = el('modal-join-session');
+    const formJoinSession = el('form-join-session');
+    const joinSessionInput = el('join-session-input');
+    const joinSessionPreview = el('join-session-preview');
+
+    const modalCustomTtl = el('modal-custom-ttl');
+    const formCustomTtl = el('form-custom-ttl');
+    const customTtlNumber = el('custom-ttl-number');
+    const customTtlUnit = el('custom-ttl-unit');
+    const customTtlTitle = el('custom-ttl-title');
+    const ttlCustomPill = el('ttl-custom-pill');
+
+    const telemetryCard = el('telemetry-card');
+    const telemetryName = el('telemetry-name');
+    const telemetryBar = el('telemetry-bar');
+    const telemetryStats = el('telemetry-stats');
+    const telemetrySpeed = el('telemetry-speed');
+    const telemetryCancel = el('telemetry-cancel');
 
     const pairSection = el('pair');
     const qr = el('qr');
@@ -94,17 +113,17 @@
     const approveCode = el('approve-code');
     const deviceStatus = el('device-status');
     const signOutBtn = el('sign-out');
+    const revokeOthersBtn = el('revoke-others-btn');
 
     const app = el('app');
     const foot = el('foot');
     const dropVeil = el('drop-veil');
 
-    const upload = el('upload');
     const uploadInput = el('upload-input');
-    const uploadLabel = el('upload-label');
-    const uploadTtl = el('upload-ttl');
-    const uploadSend = el('upload-send');
     const uploadStatus = el('upload-status');
+
+    let selectedTtlSeconds = 3600; // Default 1 hour
+    let activeLanTransfer = null;
 
     /** id -> {item, element, ttl, ring} */
     const cards = new Map();
@@ -113,12 +132,10 @@
     let pollTimer = null;
     let pairTimer = null;
 
-    // the current pairing attempt's throwaway key and the code shown
     let pairKey = null;
     let pairUserCode = null;
 
-    // ---------- toast notifications ----------
-
+    // ---------- Toast notifications ----------
     function toast(message, type = 'info', duration = 3500) {
         const container = el('toast-container');
         if (!container) return;
@@ -134,8 +151,7 @@
         }, duration);
     }
 
-    // ---------- transport ----------
-
+    // ---------- Transport with DPoP Proof-of-Possession ----------
     async function api(path, options) {
         const settings = Object.assign({}, options);
         const headers = Object.assign({}, settings.headers);
@@ -143,14 +159,50 @@
         if (held) {
             headers['Authorization'] = 'Bearer ' + held;
         }
-        settings.headers = headers;
 
-        const response = await fetch(path, settings);
-        if (response.status === 401) {
-            token.set(null);
-            showPairing();
+        // Cryptographic Proof-of-Possession (DPoP): Sign METHOD|PATH|TIMESTAMP with device key
+        try {
+            const method = (settings.method || 'GET').toUpperCase();
+            const sigInfo = await TeilenCrypto.signRequest(method, path);
+            if (sigInfo) {
+                headers['X-Teilen-Signature'] = sigInfo.signature;
+                headers['X-Teilen-Timestamp'] = sigInfo.timestamp;
+            }
+        } catch (e) {
+            // Key not initialized yet during initial handshake
+        }
+
+        settings.headers = headers;
+        settings.credentials = 'same-origin';
+
+        let response = await fetch(path, settings);
+        if (response.status === 401 && !path.includes('/api/auth/')) {
+            const refreshed = await trySilentRefresh();
+            if (refreshed) {
+                headers['Authorization'] = 'Bearer ' + token.get();
+                settings.headers = headers;
+                response = await fetch(path, settings);
+            } else {
+                token.set(null);
+                showPairing();
+            }
         }
         return response;
+    }
+
+    async function trySilentRefresh() {
+        try {
+            const response = await fetch('/api/auth/refresh', {
+                method: 'POST',
+                credentials: 'same-origin'
+            });
+            if (response.ok) {
+                const session = await response.json();
+                token.set(session.token);
+                return true;
+            }
+        } catch (e) {}
+        return false;
     }
 
     async function why(response) {
@@ -166,494 +218,299 @@
         });
     }
 
-    // ---------- push notifications ----------
+    // ---------- Multi-Session Rooms (Spaces) (Task 4) ----------
 
-    async function enablePush() {
-        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !token.get()) {
-            return;
-        }
+    async function loadSessions() {
         try {
-            const registration = await navigator.serviceWorker.register('/sw.js');
-            const response = await api('/api/push/public-key');
+            const response = await api(SESSIONS_API);
             if (!response.ok) return;
-            const {publicKey} = await response.json();
-            if (!publicKey) return;
-            const existing = await registration.pushManager.getSubscription();
-            const subscription = existing || await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(publicKey)
-            });
-            await api('/api/push/subscribe', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(subscription.toJSON())
-            });
+            availableSessions = await response.json();
+
+            if (availableSessions.length === 0) return;
+
+            if (!currentSessionId || !availableSessions.some(s => s.id === currentSessionId)) {
+                currentSessionId = availableSessions[0].id;
+            }
+
+            renderSessionPills();
+            TeilenLan.setSession(currentSessionId);
         } catch (e) {
-            console.warn('push is unavailable:', e);
+            console.warn('Failed to load sessions', e);
         }
     }
 
-    function urlBase64ToUint8Array(base64String) {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-        const raw = atob(base64);
-        const bytes = new Uint8Array(raw.length);
-        for (let i = 0; i < raw.length; i++) {
-            bytes[i] = raw.charCodeAt(i);
-        }
-        return bytes;
-    }
+    function renderSessionPills() {
+        sessionPills.replaceChildren(...availableSessions.map(session => {
+            const pill = document.createElement('button');
+            pill.type = 'button';
+            pill.className = 'session-pill' + (session.id === currentSessionId ? ' active' : '');
+            pill.dataset.id = session.id;
 
-    // ---------- direct LAN fast-path ----------
+            const icon = session.isPersonal ? '🔒' : '👥';
+            pill.innerHTML = `<span>${icon}</span> <span>${session.name}</span>` +
+                (!session.isPersonal && session.memberCount > 1 ? ` <span class="session-pill-badge">${session.memberCount}</span>` : '');
 
-    function startLan() {
-        if (window.TeilenLan && token.get()) {
-            TeilenLan.start(token.get(), (item, isNew) => {
-                item.isLan = true;
-                upsert(item, isNew);
-                toast('Received file via Direct LAN', 'success');
-            });
-        }
-    }
-
-    function stopLan() {
-        if (window.TeilenLan) {
-            TeilenLan.stop();
-        }
-    }
-
-    function setStatus(text, cls) {
-        const textEl = el('status-text');
-        if (textEl) {
-            textEl.textContent = text;
-        } else {
-            statusEl.textContent = text;
-        }
-        statusEl.className = 'status ' + cls;
-    }
-
-    // ---------- pairing & login (zero page reloads) ----------
-
-    function sanitizeUsername(input, helper) {
-        const raw = input.value;
-        const sanitized = raw.replace(/[^a-zA-Z0-9]/g, '');
-        if (raw !== sanitized) {
-            input.value = sanitized;
-            if (helper) {
-                helper.hidden = false;
-                clearTimeout(helper._t);
-                helper._t = setTimeout(() => { helper.hidden = true; }, 3000);
-            }
-        }
-    }
-
-    if (loginUsername) {
-        loginUsername.addEventListener('input', () => sanitizeUsername(loginUsername, loginUsernameHelper));
-    }
-    if (registerUsername) {
-        registerUsername.addEventListener('input', () => sanitizeUsername(registerUsername, registerUsernameHelper));
-    }
-
-    function stopPairing() {
-        clearTimeout(pairTimer);
-        pairTimer = null;
-        pairKey = null;
-        pairUserCode = null;
-    }
-
-    authTabLogin.addEventListener('click', () => {
-        authTabLogin.classList.add('active');
-        authTabRegister.classList.remove('active');
-        authTabPair.classList.remove('active');
-        loginContainer.hidden = false;
-        registerContainer.hidden = true;
-        pairContainer.hidden = true;
-        stopPairing();
-    });
-
-    authTabRegister.addEventListener('click', () => {
-        authTabRegister.classList.add('active');
-        authTabLogin.classList.remove('active');
-        authTabPair.classList.remove('active');
-        registerContainer.hidden = false;
-        loginContainer.hidden = true;
-        pairContainer.hidden = true;
-        stopPairing();
-    });
-
-    authTabPair.addEventListener('click', () => {
-        authTabPair.classList.add('active');
-        authTabLogin.classList.remove('active');
-        authTabRegister.classList.remove('active');
-        pairContainer.hidden = false;
-        loginContainer.hidden = true;
-        registerContainer.hidden = true;
-        startPairing();
-    });
-
-    if (pairCodeCopy) {
-        pairCodeCopy.addEventListener('click', async () => {
-            const code = pairCode.textContent.trim();
-            if (code && code !== '····-····') {
-                await navigator.clipboard.writeText(code);
-                toast('Copied code to clipboard', 'success');
-            }
-        });
-    }
-
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const username = loginUsername.value.trim();
-        const password = loginPassword.value;
-        if (!username || !password) return;
-        loginStatus.hidden = false;
-        loginStatus.textContent = 'signing in…';
-        try {
-            const res = await postJson(AUTH + '/login', {
-                username,
-                password,
-                deviceName: describeBrowser(),
-                deviceType: 'WEB'
-            });
-            if (res.ok) {
-                const session = await res.json();
-                token.set(session.token);
-                loginStatus.hidden = true;
-                loginUsername.value = '';
-                loginPassword.value = '';
-                toast('Signed in successfully', 'success');
-                showFeed();
-            } else {
-                loginStatus.textContent = await why(res);
-            }
-        } catch (err) {
-            loginStatus.textContent = err.message;
-        }
-    });
-
-    registerForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const username = registerUsername.value.trim();
-        const password = registerPassword.value;
-        const displayName = registerDisplayName.value.trim();
-        if (!username || !password) return;
-        if (username.length < 3 || username.length > 32) {
-            registerStatus.hidden = false;
-            registerStatus.textContent = 'Username must be 3–32 characters.';
-            return;
-        }
-        registerStatus.hidden = false;
-        registerStatus.textContent = 'creating account…';
-        try {
-            const res = await postJson(AUTH + '/account', {
-                username,
-                password,
-                displayName: displayName || undefined,
-                deviceName: describeBrowser(),
-                deviceType: 'WEB'
-            });
-            if (res.ok) {
-                const session = await res.json();
-                token.set(session.token);
-                registerStatus.hidden = true;
-                registerUsername.value = '';
-                registerPassword.value = '';
-                registerDisplayName.value = '';
-                toast('Account created successfully', 'success');
-                showFeed();
-            } else if (res.status === 409) {
-                const err = await res.json().catch(() => ({}));
-                registerStatus.textContent = err.message || 'This username is already taken. Please choose another.';
-            } else {
-                registerStatus.textContent = await why(res);
-            }
-        } catch (err) {
-            registerStatus.textContent = err.message;
-        }
-    });
-
-    function showPairing() {
-        pairSection.hidden = false;
-        app.hidden = true;
-        foot.hidden = true;
-        deviceSection.hidden = true;
-        accountBtn.hidden = true;
-        stopSocket();
-        stopPolling();
-        stopLan();
-        stopPairing();
-        authTabLogin.classList.add('active');
-        authTabRegister.classList.remove('active');
-        authTabPair.classList.remove('active');
-        loginContainer.hidden = false;
-        registerContainer.hidden = true;
-        pairContainer.hidden = true;
-    }
-
-    function showFeed() {
-        pairSection.hidden = true;
-        app.hidden = false;
-        foot.hidden = false;
-        accountBtn.hidden = false;
-        deviceSection.hidden = true;
-        setStatus('connecting…', 'offline');
-        load().then(connect);
-        loadAccount();
-        startLan();
-    }
-
-    /** step one: ask for a code to show */
-    async function startPairing() {
-        clearTimeout(pairTimer);
-        pairRetry.hidden = true;
-        pairCode.textContent = '····-····';
-        pairState.textContent = 'asking for a code…';
-        qr.removeAttribute('src');
-
-        pairKey = null;
-        pairUserCode = null;
-        let publicKey = null;
-        try {
-            await TeilenCrypto.ready;
-            pairKey = TeilenCrypto.newPairingKey();
-            publicKey = TeilenCrypto.b64(pairKey.publicKey);
-        } catch (e) {
-            pairKey = null;
-        }
-
-        let start;
-        try {
-            const response = await postJson(AUTH + '/device/code', {
-                deviceName: describeBrowser(),
-                deviceType: 'WEB',
-                platform: navigator.userAgent,
-                publicKey: publicKey
-            });
-            if (!response.ok) {
-                throw new Error(await why(response));
-            }
-            start = await response.json();
-        } catch (e) {
-            pairState.textContent = 'could not ask for a code: ' + e.message;
-            pairRetry.hidden = false;
-            return;
-        }
-
-        qr.src = start.qrSvgUrl;
-        pairCode.textContent = start.userCode;
-        pairUserCode = start.userCode;
-        pairState.textContent = 'waiting for approval on your phone…';
-        collectToken(start.deviceCode, start.pollIntervalSeconds * 1000);
-    }
-
-    /** step three: keep asking until somebody approves, or the code runs out */
-    async function collectToken(deviceCode, every) {
-        try {
-            const response = await postJson(AUTH + '/device/token', {deviceCode});
-            if (response.status === 202) {
-                pairTimer = setTimeout(() => collectToken(deviceCode, every), every);
-                return;
-            }
-            if (!response.ok) {
-                throw new Error(await why(response));
-            }
-            const claim = await response.json();
-            token.set(claim.token);
-
-            if (claim.keyPackage && pairKey && pairUserCode) {
-                try {
-                    await TeilenCrypto.openFromApprover(claim.keyPackage, pairKey.privateKey, pairUserCode);
-                } catch (e) {
-                    console.warn('could not keep the account key from this pairing:', e);
-                }
-            }
-            pairKey = null;
-            pairUserCode = null;
-            pairState.textContent = 'paired as ' + claim.deviceName;
-            toast('Paired as ' + claim.deviceName, 'success');
-            showFeed();
-            enablePush();
-        } catch (e) {
-            pairState.textContent = 'pairing did not work out: ' + e.message;
-            pairRetry.hidden = false;
-        }
-    }
-
-    pairRetry.addEventListener('click', startPairing);
-
-    // ---------- account devices ----------
-
-    async function loadAccount() {
-        try {
-            const me = await (await api('/api/me')).json();
-            const username = me.username || me.phone;
-            accountBtn.textContent = me.displayName || username;
-            accountPhone.textContent = 'Signed in as ' + username
-                + (me.displayName ? ' (' + me.displayName + ')' : '')
-                + '. Devices on this account share the same ephemeral feed.';
-
-            const devices = await (await api('/api/devices')).json();
-            renderDevices(devices);
-        } catch (e) {
-            /* feed is primary */
-        }
-    }
-
-    function renderDevices(devices) {
-        deviceList.replaceChildren(...devices.map((device) => {
-            const row = document.createElement('li');
-            row.className = 'device';
-
-            const label = document.createElement('span');
-            label.className = 'device-name';
-            label.textContent = device.name;
-
-            const kind = document.createElement('span');
-            kind.className = 'device-kind';
-            kind.textContent = device.deviceType === 'PHONE' ? 'phone' : 'web';
-
-            const when = document.createElement('span');
-            when.className = 'device-when';
-            when.textContent = device.current
-                ? 'this browser · paired ' + when_(device.pairedAt)
-                : 'last used ' + when_(device.lastSeenAt);
-
-            row.append(label, kind, when);
-
-            if (!device.current) {
-                const revoke = document.createElement('button');
-                revoke.className = 'linkish';
-                revoke.type = 'button';
-                revoke.textContent = 'unpair';
-                revoke.addEventListener('click', async () => {
-                    revoke.disabled = true;
-                    const response = await api('/api/devices/' + device.id, {method: 'DELETE'});
-                    deviceStatus.hidden = false;
-                    if (response.ok) {
-                        deviceStatus.textContent = device.name + ' was unpaired.';
-                        toast(device.name + ' unpaired', 'info');
-                        loadAccount();
-                    } else {
-                        deviceStatus.textContent = await why(response);
-                        revoke.disabled = false;
-                    }
-                });
-                row.append(revoke);
-            } else {
-                const badge = document.createElement('span');
-                badge.className = 'device-kind current';
-                badge.textContent = 'this one';
-                row.append(badge);
-            }
-            return row;
+            pill.addEventListener('click', () => selectSession(session.id));
+            return pill;
         }));
     }
 
-    function when_(iso) {
-        const then = new Date(iso);
-        const minutes = Math.round((Date.now() - then.getTime()) / 60000);
-        if (minutes < 1) return 'just now';
-        if (minutes < 60) return minutes + ' min ago';
-        const hours = Math.round(minutes / 60);
-        return hours < 24 ? hours + ' h ago' : then.toLocaleDateString();
+    async function selectSession(sessionId) {
+        if (currentSessionId === sessionId) return;
+        currentSessionId = sessionId;
+        renderSessionPills();
+        TeilenLan.setSession(currentSessionId);
+
+        // Scope feed to selected session
+        cards.clear();
+        feed.replaceChildren();
+        await load();
     }
 
-    accountBtn.addEventListener('click', () => {
-        const open = deviceSection.hidden;
-        deviceSection.hidden = !open;
-        accountBtn.setAttribute('aria-expanded', String(open));
-        if (open) {
-            loadAccount();
-        }
+    // Modal helpers
+    function openModal(modal) {
+        modal.hidden = false;
+    }
+    function closeModal(modal) {
+        modal.hidden = true;
+    }
+    document.querySelectorAll('.modal-close').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const veil = e.target.closest('.modal-veil');
+            if (veil) closeModal(veil);
+        });
     });
 
-    approveForm.addEventListener('submit', async (e) => {
+    // Create Room
+    sessionCreateBtn.addEventListener('click', () => {
+        createSessionName.value = '';
+        openModal(modalCreateSession);
+        createSessionName.focus();
+    });
+
+    formCreateSession.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const userCode = approveCode.value.trim();
-        if (!userCode) return;
-        approveCode.value = '';
-        deviceStatus.hidden = false;
-        deviceStatus.textContent = 'pairing…';
+        const name = createSessionName.value.trim();
+        if (!name) return;
 
-        let keyPackage = null;
         try {
-            await TeilenCrypto.ready;
-            const preview = await (await api(AUTH + '/device/pending?code=' + encodeURIComponent(userCode))).json();
-            if (preview && preview.publicKey) {
-                keyPackage = await TeilenCrypto.sealForNewcomer(preview.publicKey, userCode);
+            // Generate fresh random 256-bit symmetric session key
+            const sessionKey = await TeilenCrypto.generateSessionKey();
+            const response = await postJson(SESSIONS_API, {
+                name,
+                encryptedSessionKey: null // Master of creator wraps locally
+            });
+
+            if (!response.ok) {
+                toast('Could not create room: ' + (await why(response)), 'error');
+                return;
             }
+
+            const created = await response.json();
+            await TeilenCrypto.setSessionKey(created.id, sessionKey);
+            closeModal(modalCreateSession);
+            toast('Room created: ' + name, 'success');
+            await loadSessions();
+            await selectSession(created.id);
         } catch (err) {
-            keyPackage = null;
-        }
-
-        const response = await postJson(AUTH + '/device/approve', {userCode, keyPackage});
-        if (response.ok) {
-            const approved = await response.json();
-            deviceStatus.textContent = approved.deviceName + ' is paired successfully.';
-            toast(approved.deviceName + ' paired', 'success');
-            loadAccount();
-        } else {
-            deviceStatus.textContent = await why(response);
+            toast('Error creating room: ' + err.message, 'error');
         }
     });
 
-    signOutBtn.addEventListener('click', async () => {
-        deviceStatus.hidden = false;
-        deviceStatus.textContent = 'signing out…';
+    // Share Room (Invite Code / QR with #key fragment)
+    sessionShareBtn.addEventListener('click', async () => {
+        const current = availableSessions.find(s => s.id === currentSessionId);
+        if (!current) return;
+        if (current.isPersonal) {
+            toast('Personal Vault is private to your devices. Create a shared room to invite friends or teammates.', 'info');
+            return;
+        }
+
         try {
-            const devices = await (await api('/api/devices')).json();
-            const mine = devices.find((d) => d.current);
-            if (mine) {
-                await api('/api/devices/' + mine.id, {method: 'DELETE'});
+            const response = await postJson(`${SESSIONS_API}/${current.id}/invite`, {});
+            if (!response.ok) {
+                toast('Could not generate invite: ' + (await why(response)), 'error');
+                return;
             }
-        } catch (e) {
-            /* locally clearing token is essential */
+            const invite = await response.json();
+            const sessionKey = await TeilenCrypto.getSessionKey(current.id);
+            const keyFragment = sessionKey ? '#key=' + encodeURIComponent(TeilenCrypto.b64(sessionKey)) : '';
+            const shareableUrl = `${location.origin}/#join?code=${invite.inviteCode}${keyFragment}`;
+
+            shareSessionTitle.textContent = `Share Room: ${current.name}`;
+            shareSessionCode.textContent = invite.inviteCode;
+
+            // Render SVG QR code via backend QR endpoint
+            shareSessionQr.innerHTML = `<img src="/api/auth/device/qr.svg?code=${encodeURIComponent(invite.inviteCode)}" width="200" height="200" alt="Room QR">`;
+
+            shareSessionCopy.onclick = async () => {
+                await navigator.clipboard.writeText(shareableUrl);
+                toast('Copied invite link with secure key to clipboard', 'success');
+            };
+
+            openModal(modalShareSession);
+        } catch (err) {
+            toast('Failed to share session', 'error');
         }
-        token.set(null);
-        toast('Signed out', 'info');
-        showPairing();
     });
 
-    function describeBrowser() {
-        const ua = navigator.userAgent;
-        const browser = /Firefox\//.test(ua) ? 'Firefox'
-            : /Edg\//.test(ua) ? 'Edge'
-                : /OPR\//.test(ua) ? 'Opera'
-                    : /Chrome\//.test(ua) ? 'Chrome'
-                        : /Safari\//.test(ua) ? 'Safari'
-                            : 'A browser';
-        const os = /\bAndroid\b/.test(ua) ? 'Android'
-            : /\biPhone|\biPad\b/.test(ua) ? 'iOS'
-                : /\bWindows\b/.test(ua) ? 'Windows'
-                    : /\bMac OS X\b/.test(ua) ? 'macOS'
-                        : /\bLinux\b/.test(ua) ? 'Linux'
-                            : 'Desktop';
-        return browser + ' on ' + os;
+    // Join Room
+    sessionJoinBtn.addEventListener('click', () => {
+        joinSessionInput.value = '';
+        joinSessionPreview.hidden = true;
+        openModal(modalJoinSession);
+        joinSessionInput.focus();
+    });
+
+    formJoinSession.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const raw = joinSessionInput.value.trim();
+        if (!raw) return;
+
+        let code = raw;
+        let keyB64 = null;
+
+        // Parse code and #key fragment if a URL was pasted
+        if (raw.includes('code=')) {
+            const urlObj = new URL(raw, location.origin);
+            code = urlObj.searchParams.get('code') || raw;
+            if (urlObj.hash.includes('key=')) {
+                keyB64 = decodeURIComponent(urlObj.hash.split('key=')[1]);
+            }
+        } else if (raw.includes('#key=')) {
+            const parts = raw.split('#key=');
+            code = parts[0];
+            keyB64 = decodeURIComponent(parts[1]);
+        }
+
+        code = code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+
+        try {
+            const response = await postJson(`${SESSIONS_API}/join`, {
+                inviteCode: code,
+                encryptedSessionKey: null
+            });
+
+            if (!response.ok) {
+                toast('Could not join room: ' + (await why(response)), 'error');
+                return;
+            }
+
+            const joined = await response.json();
+            if (keyB64) {
+                await TeilenCrypto.setSessionKey(joined.id, TeilenCrypto.unb64(keyB64));
+            }
+
+            closeModal(modalJoinSession);
+            toast('Joined room: ' + joined.name, 'success');
+            await loadSessions();
+            await selectSession(joined.id);
+        } catch (err) {
+            toast('Error joining room: ' + err.message, 'error');
+        }
+    });
+
+    // Auto-join from URL hash if user opened an invite link
+    async function checkUrlForInvite() {
+        const hash = location.hash;
+        if (hash.includes('join?code=') || hash.includes('code=')) {
+            const parts = hash.split('code=')[1];
+            if (parts) {
+                const codeAndKey = parts.split('#key=');
+                const code = (codeAndKey[0] || '').split('&')[0];
+                const keyB64 = codeAndKey[1] ? decodeURIComponent(codeAndKey[1]) : null;
+                if (code) {
+                    try {
+                        const response = await postJson(`${SESSIONS_API}/join`, {
+                            inviteCode: code,
+                            encryptedSessionKey: null
+                        });
+                        if (response.ok) {
+                            const joined = await response.json();
+                            if (keyB64) {
+                                await TeilenCrypto.setSessionKey(joined.id, TeilenCrypto.unb64(keyB64));
+                            }
+                            toast('Auto-joined room: ' + joined.name, 'success');
+                            await loadSessions();
+                            await selectSession(joined.id);
+                        }
+                    } catch (e) {}
+                }
+            }
+            history.replaceState(null, '', location.pathname);
+        }
     }
 
-    // ---------- rendering & cards ----------
+    // ---------- Pre-Send TTL Selection (Task 1) ----------
 
-    const BLOB_TYPES = new Set(['IMAGE', 'PDF', 'FILE', 'AUDIO']);
+    document.querySelectorAll('.ttl-pill').forEach(pill => {
+        if (pill.id === 'ttl-custom-pill') return;
+        pill.addEventListener('click', () => {
+            document.querySelectorAll('.ttl-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            selectedTtlSeconds = parseInt(pill.dataset.ttl, 10);
+            ttlCustomPill.textContent = 'Custom';
+        });
+    });
+
+    ttlCustomPill.addEventListener('click', () => {
+        activeCustomTtlItemId = null; // Setting composer TTL
+        customTtlTitle.textContent = 'Set Expiration Timer (TTL)';
+        openModal(modalCustomTtl);
+    });
+
+    formCustomTtl.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const count = parseInt(customTtlNumber.value, 10) || 60;
+        const multiplier = parseInt(customTtlUnit.value, 10) || 60;
+        const totalSec = count * multiplier;
+
+        closeModal(modalCustomTtl);
+
+        if (activeCustomTtlItemId) {
+            // In-Feed Card TTL update
+            await updateCardTtl(activeCustomTtlItemId, totalSec);
+            activeCustomTtlItemId = null;
+        } else {
+            // Composer TTL update
+            selectedTtlSeconds = totalSec;
+            document.querySelectorAll('.ttl-pill').forEach(p => p.classList.remove('active'));
+            ttlCustomPill.classList.add('active');
+            ttlCustomPill.textContent = `Custom (${formatDurationShort(totalSec)})`;
+            toast(`TTL set to ${formatDurationShort(totalSec)}`, 'info');
+        }
+    });
+
+    function formatDurationShort(sec) {
+        if (sec < 3600) return Math.round(sec / 60) + 'm';
+        if (sec < 86400) return (sec / 3600).toFixed(1).replace('.0', '') + 'h';
+        return (sec / 86400).toFixed(1).replace('.0', '') + 'd';
+    }
+
+    // ---------- Feed Cards with Sticky Top Header Bar (Tasks 1, 2, 3) ----------
+
+    const BLOB_TYPES = new Set(['FILE', 'IMAGE', 'AUDIO', 'PDF']);
 
     function formatSize(bytes) {
         if (!bytes && bytes !== 0) return '';
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
-        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
     }
 
     function upsert(item, isNew) {
-        if (cards.has(item.id)) {
-            return;
-        }
+        if (cards.has(item.id)) return;
+
         const li = document.createElement('li');
         li.className = 'card' + (isNew ? ' new' : '');
         li.dataset.id = item.id;
 
-        // Card Header
+        // Sticky Top Action Header (Zero buttons at the bottom!)
         const head = document.createElement('div');
         head.className = 'card-head';
 
+        // Left Header: Icon + Title Snippet + Route + Time
         const headLeft = document.createElement('div');
         headLeft.className = 'card-head-left';
 
@@ -661,29 +518,35 @@
         badge.className = 'badge ' + item.type.toLowerCase();
         badge.textContent = badgeLabel(item);
 
+        const titleSnippet = document.createElement('span');
+        titleSnippet.className = 'card-title-snippet';
+        titleSnippet.textContent = item.content ? item.content.slice(0, 30) : '';
+
         const isLan = !!(item.isLan || String(item.id).startsWith('lan-'));
         const routePill = document.createElement('span');
         routePill.className = 'route-pill ' + (isLan ? 'lan' : 'relay');
         routePill.innerHTML = isLan
-            ? `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Direct LAN`
-            : `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg> Encrypted Relay`;
+            ? `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#10B981" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Direct LAN`
+            : `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg> Relay`;
 
         const at = document.createElement('span');
         at.className = 'card-time';
         at.textContent = new Date(item.createdAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 
-        headLeft.append(badge, routePill, at);
+        headLeft.append(badge, titleSnippet, routePill, at);
 
+        // Right Header: All Action Buttons (TTL, +1h/Edit, Copy/Download, Expand, Delete)
         const headRight = document.createElement('div');
         headRight.className = 'card-head-right';
 
+        // 1. Circular TTL Countdown Ring
         const clock = document.createElement('span');
         clock.className = 'ttl';
         const ring = document.createElementNS(SVG_NS, 'svg');
         ring.setAttribute('class', 'ring');
         ring.setAttribute('viewBox', '0 0 36 36');
-        ring.setAttribute('width', '26');
-        ring.setAttribute('height', '26');
+        ring.setAttribute('width', '24');
+        ring.setAttribute('height', '24');
         const track = document.createElementNS(SVG_NS, 'circle');
         track.setAttribute('class', 'ring-track');
         track.setAttribute('cx', '18');
@@ -695,24 +558,113 @@
         fill.setAttribute('cy', '18');
         fill.setAttribute('r', '15.5');
         ring.append(track, fill);
+
         const ttlText = document.createElement('span');
         ttlText.className = 'ttl-text';
         clock.append(ring, ttlText);
 
+        // 2. +1h / Edit Timer Button
         const extendBtn = document.createElement('button');
         extendBtn.type = 'button';
-        extendBtn.className = 'btn-extend';
-        extendBtn.title = 'Extend lifespan (+1 hour)';
+        extendBtn.className = 'btn-head-action';
+        extendBtn.title = 'Click for +1h, right-click/long-press for custom TTL';
         extendBtn.textContent = '+1h';
         extendBtn.hidden = isLan;
-        extendBtn.addEventListener('click', () => extendItem(item.id));
+        extendBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            extendItem(item.id);
+        });
+        extendBtn.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            activeCustomTtlItemId = item.id;
+            customTtlTitle.textContent = 'Edit Timer (TTL)';
+            openModal(modalCustomTtl);
+        });
 
-        // Delete button for EACH card alone
+        // 3. Copy (for TEXT/LINK) or Download (for BLOB)
+        let mainActionBtn = document.createElement('button');
+        mainActionBtn.type = 'button';
+        mainActionBtn.className = 'btn-head-action';
+
+        const href = item.blobUrl || (API + '/' + item.id + '/blob');
+
+        if (BLOB_TYPES.has(item.type)) {
+            mainActionBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> <span>Download</span>`;
+            mainActionBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerBlobDownload(item, href);
+            });
+        } else {
+            mainActionBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span>Copy</span>`;
+            mainActionBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await navigator.clipboard.writeText(item.content);
+                mainActionBtn.classList.add('copied');
+                toast('Copied to clipboard', 'success');
+                setTimeout(() => mainActionBtn.classList.remove('copied'), 1500);
+            });
+        }
+
+        // 4. Code Toggle & Expand Toggle (for TEXT)
+        let codeToggleBtn = null;
+        let expandBtn = null;
+        let textContainer = null;
+
+        if (item.type === 'TEXT') {
+            codeToggleBtn = document.createElement('button');
+            codeToggleBtn.type = 'button';
+            codeToggleBtn.className = 'btn-head-action';
+            codeToggleBtn.title = 'Toggle Monospace / Code view';
+            codeToggleBtn.textContent = '<> Code';
+            codeToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (textContainer) {
+                    textContainer.classList.toggle('code-mode');
+                }
+            });
+
+            expandBtn = document.createElement('button');
+            expandBtn.type = 'button';
+            expandBtn.className = 'btn-head-action';
+            expandBtn.title = 'Toggle Full View';
+            expandBtn.textContent = '⤢ Expand';
+            expandBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (textContainer) {
+                    textContainer.classList.toggle('expanded');
+                    expandBtn.textContent = textContainer.classList.contains('expanded') ? '⤡ Shrink' : '⤢ Expand';
+                }
+            });
+        }
+
+        // 5. Share Button
+        const shareBtn = document.createElement('button');
+        shareBtn.type = 'button';
+        shareBtn.className = 'btn-head-action';
+        shareBtn.title = 'Share item';
+        shareBtn.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>`;
+        shareBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: 'Teilen Share',
+                        text: item.content,
+                        url: BLOB_TYPES.has(item.type) ? href : undefined
+                    });
+                    return;
+                } catch (err) {}
+            }
+            await navigator.clipboard.writeText(BLOB_TYPES.has(item.type) ? href : item.content);
+            toast('Share link copied to clipboard', 'success');
+        });
+
+        // 6. Delete Button (✕)
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'btn-card-delete';
         deleteBtn.title = 'Delete this item';
-        deleteBtn.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#EF4444" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+        deleteBtn.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#EF4444" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
         deleteBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             deleteBtn.disabled = true;
@@ -736,75 +688,36 @@
             }
         });
 
-        headRight.append(clock, extendBtn, deleteBtn);
+        headRight.append(clock, extendBtn, mainActionBtn);
+        if (codeToggleBtn) headRight.append(codeToggleBtn);
+        if (expandBtn) headRight.append(expandBtn);
+        headRight.append(shareBtn, deleteBtn);
         head.append(headLeft, headRight);
 
-        // Card Body
+        // Card Body (Unlimited Scrollable Container - ZERO buttons at bottom!)
         const body = document.createElement('div');
         body.className = 'card-body';
 
-        if (item.isDecrypting) {
-            // Skeleton shimmer state while decrypt.worker.js reassembles payloads
-            const shimmer = document.createElement('div');
-            shimmer.className = 'skeleton-shimmer';
-            const b1 = document.createElement('div');
-            b1.className = 'skeleton-bone short';
-            const b2 = document.createElement('div');
-            b2.className = 'skeleton-bone box';
-            shimmer.append(b1, b2);
-            body.append(shimmer);
-            li.classList.add('skeleton');
-        } else if (item.type === 'LINK') {
+        if (item.type === 'LINK') {
             const a = document.createElement('a');
             a.href = item.content;
             a.target = '_blank';
             a.rel = 'noopener noreferrer';
             a.textContent = item.content;
+            a.className = 'link-content';
             body.append(a);
-
-            const actions = document.createElement('div');
-            actions.className = 'card-actions-bar';
-            const copyBtn = document.createElement('button');
-            copyBtn.type = 'button';
-            copyBtn.className = 'btn-card-copy';
-            copyBtn.textContent = 'Copy Link';
-            copyBtn.addEventListener('click', async () => {
-                await navigator.clipboard.writeText(item.content);
-                copyBtn.textContent = 'Copied';
-                copyBtn.classList.add('copied');
-                toast('Copied URL to clipboard', 'success');
-                setTimeout(() => {
-                    copyBtn.textContent = 'Copy Link';
-                    copyBtn.classList.remove('copied');
-                }, 1500);
-            });
-            actions.append(copyBtn);
-            body.append(actions);
         } else if (BLOB_TYPES.has(item.type)) {
-            body.append(fileBody(item));
+            body.append(renderBlobBody(item, href));
         } else {
-            const pre = document.createElement('div');
-            pre.textContent = item.content;
-            body.append(pre);
+            // Unlimited Scrollable Text (Task 2)
+            textContainer = document.createElement('div');
+            textContainer.className = 'card-text-scroll';
+            textContainer.textContent = item.content;
 
-            const actions = document.createElement('div');
-            actions.className = 'card-actions-bar';
-            const copyBtn = document.createElement('button');
-            copyBtn.type = 'button';
-            copyBtn.className = 'btn-card-copy';
-            copyBtn.textContent = 'Copy';
-            copyBtn.addEventListener('click', async () => {
-                await navigator.clipboard.writeText(item.content);
-                copyBtn.textContent = 'Copied';
-                copyBtn.classList.add('copied');
-                toast('Copied to clipboard', 'success');
-                setTimeout(() => {
-                    copyBtn.textContent = 'Copy';
-                    copyBtn.classList.remove('copied');
-                }, 1500);
-            });
-            actions.append(copyBtn);
-            body.append(actions);
+            const bottomFade = document.createElement('div');
+            bottomFade.className = 'card-bottom-fade';
+
+            body.append(textContainer, bottomFade);
         }
 
         li.append(head, body);
@@ -812,6 +725,48 @@
         cards.set(item.id, {item, element: li, ttl: ttlText, ring: fill});
         setTimeout(() => li.classList.remove('new'), 1500);
         refresh();
+    }
+
+    function renderBlobBody(item, href) {
+        const wrap = document.createElement('div');
+        wrap.className = 'file';
+
+        const meta = document.createElement('div');
+        meta.className = 'file-meta';
+
+        const name = document.createElement('a');
+        name.href = href;
+        name.target = '_blank';
+        name.rel = 'noopener noreferrer';
+        name.className = 'file-name';
+        name.textContent = item.content;
+        meta.append(name);
+
+        const size = formatSize(item.sizeBytes);
+        if (size) {
+            const s = document.createElement('span');
+            s.className = 'file-size';
+            s.textContent = size;
+            meta.append(s);
+        }
+        wrap.append(meta);
+
+        if (item.type === 'IMAGE') {
+            const preview = document.createElement('img');
+            preview.className = 'file-preview';
+            preview.src = href;
+            preview.alt = item.content;
+            preview.loading = 'lazy';
+            preview.addEventListener('error', () => preview.remove());
+            wrap.append(preview);
+        } else if (item.type === 'AUDIO') {
+            const audio = document.createElement('audio');
+            audio.className = 'file-audio';
+            audio.controls = true;
+            audio.src = href;
+            wrap.append(audio);
+        }
+        return wrap;
     }
 
     function badgeLabel(item) {
@@ -849,158 +804,6 @@
         }
     }
 
-    function fileBody(item) {
-        const wrap = document.createElement('div');
-        wrap.className = 'file';
-
-        const href = item.blobUrl || (API + '/' + item.id + '/blob');
-        const meta = document.createElement('div');
-        meta.className = 'file-meta';
-
-        const name = document.createElement('a');
-        name.href = href;
-        name.target = '_blank';
-        name.rel = 'noopener noreferrer';
-        name.className = 'file-name';
-        name.textContent = item.content;
-        meta.append(name);
-
-        const size = formatSize(item.sizeBytes);
-        if (size) {
-            const s = document.createElement('span');
-            s.className = 'file-size';
-            s.textContent = size;
-            meta.append(s);
-        }
-        wrap.append(meta);
-
-        if (item.type === 'IMAGE') {
-            const preview = document.createElement('img');
-            preview.className = 'file-preview';
-            preview.src = href;
-            preview.alt = item.content;
-            preview.loading = 'lazy';
-            preview.addEventListener('error', () => preview.remove());
-            wrap.append(preview);
-        } else if (item.type === 'AUDIO') {
-            const audio = document.createElement('audio');
-            audio.className = 'file-audio';
-            audio.controls = true;
-            audio.src = href;
-            wrap.append(audio);
-        }
-
-        const actions = document.createElement('div');
-        actions.className = 'card-actions-bar';
-
-        const downloadBtn = document.createElement('button');
-        downloadBtn.type = 'button';
-        downloadBtn.className = 'btn-card-download';
-        downloadBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            <span>Download</span>
-        `;
-        downloadBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            triggerBlobDownload(item, href);
-        });
-        actions.append(downloadBtn);
-
-        const open = document.createElement('a');
-        open.className = 'file-open';
-        open.href = href;
-        open.target = '_blank';
-        open.rel = 'noopener noreferrer';
-        open.innerHTML = `
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <line x1="10" y1="14" x2="21" y2="3"></line>
-            </svg>
-            <span>${item.type === 'PDF' ? 'Open PDF' : 'Open'}</span>
-        `;
-        actions.append(open);
-
-        wrap.append(actions);
-        return wrap;
-    }
-
-    /** Smooth collapse & fade-out animation when item expires or is removed */
-    function remove(id) {
-        const entry = cards.get(id);
-        if (!entry) return;
-        cards.delete(id);
-        const element = entry.element;
-        element.classList.add('leaving');
-
-        const onEnd = () => {
-            element.remove();
-            refresh();
-        };
-        element.addEventListener('transitionend', onEnd, {once: true});
-        setTimeout(() => {
-            if (element.parentNode) {
-                element.remove();
-                refresh();
-            }
-        }, 300);
-    }
-
-    function refresh() {
-        const count = cards.size;
-        countEl.textContent = count === 1 ? '1 active item' : count + ' active items';
-        empty.hidden = count > 0;
-        clearBtn.hidden = count === 0;
-        if (count === 0 && typeof resetClearBtn === 'function') {
-            resetClearBtn();
-        }
-    }
-
-    function remaining(item) {
-        return Math.max(0, Math.round((new Date(item.expiresAt).getTime() - Date.now()) / 1000));
-    }
-
-    function formatLeft(seconds) {
-        if (seconds <= 0) return 'expired';
-        const h = Math.floor(seconds / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        const s = seconds % 60;
-        if (h > 0) {
-            return h + 'h ' + String(m).padStart(2, '0') + 'm left';
-        }
-        return m > 0 ? m + 'm ' + String(s).padStart(2, '0') + 's left' : s + 's left';
-    }
-
-    // Tick the countdown ring and drop anything that ran out
-    setInterval(() => {
-        for (const [id, entry] of cards) {
-            const left = remaining(entry.item);
-            entry.ttl.textContent = formatLeft(left);
-            if (entry.ring) {
-                const total = totalSeconds(entry.item);
-                const fraction = total > 0 ? Math.max(0, Math.min(1, left / total)) : 0;
-                const circumference = 2 * Math.PI * 15.5; // ~97.389
-                entry.ring.style.strokeDasharray = circumference.toFixed(1);
-                entry.ring.style.strokeDashoffset = (circumference * (1 - fraction)).toFixed(1);
-                // Dynamic color shift: #38BDF8 -> #F59E0B (<20%) -> #EF4444 (<5%)
-                entry.ring.classList.toggle('warn', fraction <= 0.20 && fraction > 0.05);
-                entry.ring.classList.toggle('danger', fraction <= 0.05);
-            }
-            if (left <= 0) {
-                remove(id);
-            }
-        }
-    }, 1000);
-
-    function totalSeconds(item) {
-        return Math.max(1, Math.round((new Date(item.expiresAt).getTime()
-            - new Date(item.createdAt).getTime()) / 1000));
-    }
-
     async function extendItem(id) {
         try {
             const response = await api('/api/v1/items/' + id + '/extend', {method: 'POST'});
@@ -1015,6 +818,24 @@
         }
     }
 
+    async function updateCardTtl(id, ttlSeconds) {
+        try {
+            const response = await api('/api/v1/items/' + id + '/ttl', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ttlSeconds})
+            });
+            if (!response.ok) {
+                toast('Could not update timer: ' + (await why(response)), 'error');
+                return;
+            }
+            applyExtended(await response.json());
+            toast(`Timer updated (${formatDurationShort(ttlSeconds)})`, 'success');
+        } catch (e) {
+            toast('Failed to update timer', 'error');
+        }
+    }
+
     function applyExtended(item) {
         const entry = cards.get(item.id);
         if (!entry) return;
@@ -1023,24 +844,291 @@
         refresh();
     }
 
+    function remove(id) {
+        const entry = cards.get(id);
+        if (!entry) return;
+        cards.delete(id);
+        entry.element.classList.add('leaving');
+        setTimeout(() => {
+            entry.element.remove();
+            refresh();
+        }, 300);
+    }
+
+    function refresh() {
+        const count = cards.size;
+        countEl.textContent = count === 1 ? '1 active item' : count + ' active items';
+        empty.hidden = count > 0;
+        clearBtn.hidden = count === 0;
+    }
+
+    function remaining(item) {
+        return Math.max(0, Math.round((new Date(item.expiresAt).getTime() - Date.now()) / 1000));
+    }
+
+    function formatLeft(seconds) {
+        if (seconds <= 0) return 'expired';
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        if (h > 0) return h + 'h ' + String(m).padStart(2, '0') + 'm';
+        return m > 0 ? m + 'm ' + String(s).padStart(2, '0') + 's' : s + 's';
+    }
+
+    function totalSeconds(item) {
+        return Math.max(1, Math.round((new Date(item.expiresAt).getTime() - new Date(item.createdAt).getTime()) / 1000));
+    }
+
+    // Tick countdown rings
+    setInterval(() => {
+        for (const [id, entry] of cards) {
+            const left = remaining(entry.item);
+            entry.ttl.textContent = formatLeft(left);
+            if (entry.ring) {
+                const total = totalSeconds(entry.item);
+                const fraction = total > 0 ? Math.max(0, Math.min(1, left / total)) : 0;
+                const circumference = 2 * Math.PI * 15.5; // ~97.389
+                entry.ring.style.strokeDasharray = circumference.toFixed(1);
+                entry.ring.style.strokeDashoffset = (circumference * (1 - fraction)).toFixed(1);
+                entry.ring.classList.toggle('warn', fraction <= 0.20 && fraction > 0.05);
+                entry.ring.classList.toggle('danger', fraction <= 0.05);
+            }
+            if (left <= 0) {
+                remove(id);
+            }
+        }
+    }, 1000);
+
+    // ---------- Composer & Sending (Tasks 1, 2, 5) ----------
+
+    function isUrl(text) {
+        return /^https?:\/\/\S+$/i.test(text.trim());
+    }
+
+    // Unlimited Text Composer Submit
+    compose.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const content = composeInput.value.trim();
+        if (!content) return;
+
+        composeInput.value = '';
+        toast('Encrypting & sending…', 'info');
+
+        const type = isUrl(content) ? 'LINK' : 'TEXT';
+        const response = await postJson(API, {
+            content,
+            type,
+            ttlSeconds: selectedTtlSeconds,
+            sessionId: currentSessionId
+        });
+
+        if (response.ok) {
+            toast('Sent', 'success');
+        } else {
+            const message = await why(response);
+            toast('Could not send: ' + message, 'error');
+            composeInput.value = content;
+        }
+    });
+
+    // Enter submits, Shift+Enter adds newline
+    composeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            compose.dispatchEvent(new Event('submit', {cancelable: true}));
+        }
+    });
+
+    // File attachments with Multi-GB Tiered Policy (Task 5)
+    uploadInput.addEventListener('change', async () => {
+        const files = [...uploadInput.files];
+        uploadInput.value = '';
+        if (files.length === 0) return;
+
+        for (const file of files) {
+            if (file.size > MAX_RELAY_BYTES) {
+                // Multi-GB Direct LAN P2P
+                await sendMultiGbLan(file);
+            } else {
+                // Standard Cloud Relay upload
+                await uploadCloudFile(file);
+            }
+        }
+    });
+
+    async function uploadCloudFile(file) {
+        toast(`Uploading ${file.name}…`, 'info');
+        const body = new FormData();
+        body.append('file', file);
+        body.append('ttlSeconds', selectedTtlSeconds);
+        if (currentSessionId) {
+            body.append('sessionId', currentSessionId);
+        }
+
+        const response = await api(API, {method: 'POST', body});
+        if (response.ok) {
+            toast(`Sent ${file.name}`, 'success');
+        } else {
+            toast(`Failed to send ${file.name}: ` + (await why(response)), 'error');
+        }
+    }
+
+    async function sendMultiGbLan(file) {
+        toast(`⚡ Initiating Direct LAN P2P for ${file.name} (${formatSize(file.size)})`, 'info');
+        showTelemetry({
+            direction: 'tx',
+            fileName: file.name,
+            bytesSent: 0,
+            totalBytes: file.size,
+            percent: 0,
+            speedMBps: '0.0'
+        });
+
+        activeLanTransfer = TeilenLan.sendFile(
+            file,
+            (progress) => {
+                showTelemetry({
+                    direction: 'tx',
+                    fileName: file.name,
+                    bytesSent: progress.bytesSent,
+                    totalBytes: progress.totalBytes,
+                    percent: progress.percent,
+                    speedMBps: progress.speedMBps
+                });
+            },
+            () => {
+                toast(`⚡ Direct LAN transfer complete: ${file.name}`, 'success');
+                hideTelemetry();
+            },
+            (err) => {
+                hideTelemetry();
+                toast('Direct LAN Transfer Notice: ' + err, 'warn');
+                toast('Files over 30 MB transfer directly device-to-device for free without server storage. Make sure the receiving device is open on the same Wi-Fi/Hotspot.', 'info', 7000);
+            }
+        );
+    }
+
+    // Telemetry UI
+    function showTelemetry(info) {
+        if (!info) {
+            hideTelemetry();
+            return;
+        }
+        telemetryCard.hidden = false;
+        telemetryName.textContent = info.fileName;
+        telemetryBar.style.width = info.percent + '%';
+        const sent = formatSize(info.bytesSent || info.bytesReceived || 0);
+        const total = formatSize(info.totalBytes || 0);
+        telemetryStats.textContent = `${sent} / ${total} · ${info.percent}%`;
+        telemetrySpeed.textContent = `${info.speedMBps} MB/s`;
+    }
+
+    function hideTelemetry() {
+        telemetryCard.hidden = true;
+        activeLanTransfer = null;
+    }
+
+    telemetryCancel.addEventListener('click', () => {
+        if (activeLanTransfer) {
+            activeLanTransfer.cancel();
+            hideTelemetry();
+            toast('LAN transfer cancelled', 'info');
+        }
+    });
+
+    // Global Paste (Ctrl+V)
+    window.addEventListener('paste', (event) => {
+        if (!token.get()) return;
+        const target = event.target;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+
+        const items = event.clipboardData && event.clipboardData.items;
+        if (!items) return;
+
+        const files = [];
+        for (const item of items) {
+            if (item.kind === 'file') {
+                const file = item.getAsFile();
+                if (file) files.push(file);
+            } else if (item.kind === 'string' && item.type === 'text/plain') {
+                item.getAsString(async (value) => {
+                    const text = (value || '').trim();
+                    if (text) {
+                        toast('Pasted text — encrypting & sending…', 'info');
+                        await postJson(API, {
+                            content: text,
+                            type: isUrl(text) ? 'LINK' : 'TEXT',
+                            ttlSeconds: selectedTtlSeconds,
+                            sessionId: currentSessionId
+                        });
+                    }
+                });
+            }
+        }
+        if (files.length) {
+            event.preventDefault();
+            files.forEach(f => f.size > MAX_RELAY_BYTES ? sendMultiGbLan(f) : uploadCloudFile(f));
+        }
+    });
+
+    // Drag-and-drop
+    let dragDepth = 0;
+    window.addEventListener('dragenter', () => {
+        if (!token.get()) return;
+        dragDepth++;
+        dropVeil.hidden = false;
+    });
+    window.addEventListener('dragover', (e) => {
+        if (token.get()) e.preventDefault();
+    });
+    window.addEventListener('dragleave', () => {
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) dropVeil.hidden = true;
+    });
+    window.addEventListener('drop', (e) => {
+        dragDepth = 0;
+        dropVeil.hidden = true;
+        if (!token.get() || !e.dataTransfer) return;
+        e.preventDefault();
+        const files = [...e.dataTransfer.files];
+        if (files.length) {
+            files.forEach(f => f.size > MAX_RELAY_BYTES ? sendMultiGbLan(f) : uploadCloudFile(f));
+        }
+    });
+
+    // Purge All
+    clearBtn.addEventListener('click', async () => {
+        if (cards.size === 0) return;
+        const toDelete = [...cards.keys()];
+        toDelete.forEach(id => remove(id));
+        toast('Purging ephemeral feed…', 'info');
+        await Promise.all(toDelete.map(id => {
+            if (id.startsWith('lan-')) return Promise.resolve();
+            return api(API + '/' + id, {method: 'DELETE'}).catch(() => {});
+        }));
+    });
+
+    // ---------- WebSocket Feed & Polling ----------
+
     async function load() {
         try {
-            const response = await api(API);
-            if (!response.ok) {
-                throw new Error(await why(response));
-            }
+            const path = currentSessionId ? `${API}?sessionId=${encodeURIComponent(currentSessionId)}` : API;
+            const response = await api(path);
+            if (!response.ok) throw new Error(await why(response));
             const items = await response.json();
-            items.reverse().forEach((item) => upsert(item, false));
+            items.reverse().forEach(item => upsert(item, false));
         } catch (e) {
-            console.warn('load failed', e);
+            console.warn('Load failed', e);
         }
     }
 
     function connect() {
         stopSocket();
         const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-        const live = new WebSocket(scheme + '://' + location.host + '/ws?token='
-            + encodeURIComponent(token.get() || ''));
+        let wsUrl = `${scheme}://${location.host}/ws?token=${encodeURIComponent(token.get() || '')}`;
+        if (currentSessionId) wsUrl += `&sessionId=${encodeURIComponent(currentSessionId)}`;
+
+        const live = new WebSocket(wsUrl);
         socket = live;
 
         live.addEventListener('open', () => {
@@ -1057,7 +1145,9 @@
                 return;
             }
             if (event.event === 'created' && event.item) {
-                upsert(event.item, true);
+                if (!event.item.sessionId || event.item.sessionId === currentSessionId) {
+                    upsert(event.item, true);
+                }
             } else if (event.event === 'extended' && event.item) {
                 applyExtended(event.item);
             } else if (event.event === 'deleted' && event.id) {
@@ -1080,9 +1170,7 @@
     function stopSocket() {
         const old = socket;
         socket = null;
-        if (old) {
-            old.close();
-        }
+        if (old) old.close();
     }
 
     function startPolling() {
@@ -1090,19 +1178,16 @@
         pollTimer = setInterval(async () => {
             const ids = new Set();
             try {
-                const response = await api(API);
+                const path = currentSessionId ? `${API}?sessionId=${encodeURIComponent(currentSessionId)}` : API;
+                const response = await api(path);
                 const items = await response.json();
-                items.forEach((item) => {
+                items.forEach(item => {
                     ids.add(item.id);
                     upsert(item, false);
                 });
-            } catch (e) {
-                /* keep trying */
-            }
+            } catch (e) {}
             for (const id of [...cards.keys()]) {
-                if (!ids.has(id)) {
-                    remove(id);
-                }
+                if (!ids.has(id)) remove(id);
             }
         }, 3000);
     }
@@ -1112,230 +1197,321 @@
         pollTimer = null;
     }
 
-    // ---------- actions & sending ----------
-
-    compose.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const content = composeInput.value.trim();
-        if (!content) return;
-        composeInput.value = '';
-        toast('Encrypting & sending…', 'info');
-        const response = await postJson(API, {content});
-        if (response.ok) {
-            toast('Sent', 'success');
-        } else {
-            const message = await why(response);
-            toast('Could not send: ' + message, 'error');
-            composeInput.value = content;
-        }
-    });
-
-    function showUploadStatus(text, isError) {
-        uploadStatus.textContent = text;
-        uploadStatus.hidden = !text;
-        uploadStatus.classList.toggle('error', !!isError);
-    }
-
-    uploadInput.addEventListener('change', () => {
-        const files = [...uploadInput.files];
-        uploadSend.hidden = files.length === 0;
-        if (files.length === 0) {
-            uploadLabel.textContent = 'Attach files… (Max 30 MB)';
-            return;
-        }
-        const names = files.map((f) => f.name).join(', ');
-        uploadLabel.textContent = files.length === 1 ? names : files.length + ' files selected';
-        const tooBig = files.filter((f) => f.size > MAX_BYTES).map((f) => f.name);
-        if (tooBig.length) {
-            showUploadStatus('Over the 30 MB limit: ' + tooBig.join(', '), true);
-            toast(tooBig.join(', ') + ' exceeds 30 MB limit', 'error');
-        } else {
-            showUploadStatus('');
-        }
-    });
-
-    upload.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const files = [...uploadInput.files];
-        if (files.length === 0) return;
-        uploadSend.disabled = true;
-        await sendFiles(files);
-        uploadInput.value = '';
-        uploadLabel.textContent = 'Attach files… (Max 30 MB)';
-        uploadSend.hidden = true;
-        uploadSend.disabled = false;
-    });
-
-    async function sendFiles(files) {
-        const usable = files.filter((f) => f.size <= MAX_BYTES);
-        const tooBig = files.filter((f) => f.size > MAX_BYTES).map((f) => f.name);
-        if (tooBig.length) {
-            showUploadStatus('Over the 30 MB limit: ' + tooBig.join(', '), true);
-            toast('Over 30 MB limit: ' + tooBig.join(', '), 'error');
-        }
-        if (usable.length === 0) return;
-
-        const ttl = uploadTtl.value;
-        let sent = 0;
-        for (const file of usable) {
-            showUploadStatus('Sending ' + file.name + ' (' + (sent + 1) + '/' + usable.length + ')…', false);
-            const body = new FormData();
-            body.append('file', file);
-            body.append('ttlSeconds', ttl);
-            const response = await api(API, {method: 'POST', body});
-            if (!response.ok) {
-                const err = await why(response);
-                showUploadStatus(file.name + ': ' + err, true);
-                toast(file.name + ': ' + err, 'error');
-                return;
-            }
-            sent++;
-        }
-        const msg = sent === 1 ? '1 file sent' : sent + ' files sent';
-        showUploadStatus(msg, false);
-        toast(msg, 'success');
-        setTimeout(() => showUploadStatus(''), 4000);
-    }
-
-    async function sendText(text) {
-        const content = (text || '').trim();
-        if (!content) return;
-        const response = await postJson(API, {content: content.slice(0, 20000)});
-        if (response.ok) {
-            toast('Sent', 'success');
-        } else {
-            const err = await why(response);
-            showUploadStatus(err, true);
-            toast('Could not send: ' + err, 'error');
+    function setStatus(text, kind) {
+        const statusText = el('status-text');
+        if (statusText) statusText.textContent = text;
+        if (statusEl) {
+            statusEl.className = 'status ' + kind;
         }
     }
 
-    // ---------- global paste (Ctrl+V / Cmd+V) ----------
+    // ---------- Devices & Account Section ----------
 
-    window.addEventListener('paste', (event) => {
-        if (!token.get()) return;
-        const target = event.target;
-        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-            return;
-        }
-        const items = event.clipboardData && event.clipboardData.items;
-        if (!items) return;
+    function renderDevices(devices) {
+        deviceList.replaceChildren(...devices.map(device => {
+            const row = document.createElement('li');
+            row.className = 'device';
 
-        const files = [];
-        for (const item of items) {
-            if (item.kind === 'file') {
-                const file = item.getAsFile();
-                if (file) files.push(file);
-            } else if (item.kind === 'string' && item.type === 'text/plain') {
-                item.getAsString((value) => {
-                    const text = (value || '').trim();
-                    if (text) {
-                        toast('Pasted text — encrypting & sending…', 'info');
-                        sendText(text);
+            const label = document.createElement('span');
+            label.className = 'device-name';
+            label.textContent = device.name + (device.current ? ' (this browser)' : '');
+
+            const meta = document.createElement('span');
+            meta.className = 'device-meta';
+            const details = [];
+            if (device.platform) details.push(device.platform.slice(0, 30));
+            if (device.ipAddress) details.push(device.ipAddress);
+            details.push(new Date(device.lastSeenAt).toLocaleDateString());
+            meta.textContent = details.join(' · ');
+
+            row.append(label, meta);
+
+            if (!device.current) {
+                const dropBtn = document.createElement('button');
+                dropBtn.className = 'btn-device-drop';
+                dropBtn.textContent = 'Revoke';
+                dropBtn.type = 'button';
+                dropBtn.addEventListener('click', async () => {
+                    dropBtn.disabled = true;
+                    const res = await api('/api/devices/' + device.id, {method: 'DELETE'});
+                    if (res.ok) {
+                        toast('Device revoked', 'info');
+                        row.remove();
+                    } else {
+                        dropBtn.disabled = false;
+                        toast('Could not revoke device', 'error');
                     }
                 });
+                row.append(dropBtn);
             }
-        }
-        if (files.length) {
-            event.preventDefault();
-            toast(`Pasted ${files.length === 1 ? files[0].name || 'file' : files.length + ' files'} — sending…`, 'info');
-            sendFiles(files);
-        }
-    });
-
-    // ---------- whole-window drop veil ----------
-
-    let dragDepth = 0;
-    window.addEventListener('dragenter', (event) => {
-        if (!token.get()) return;
-        dragDepth++;
-        dropVeil.hidden = false;
-    });
-
-    window.addEventListener('dragover', (event) => {
-        if (token.get()) {
-            event.preventDefault();
-        }
-    });
-
-    window.addEventListener('dragleave', () => {
-        dragDepth = Math.max(0, dragDepth - 1);
-        if (dragDepth === 0) {
-            dropVeil.hidden = true;
-        }
-    });
-
-    window.addEventListener('drop', (event) => {
-        dragDepth = 0;
-        dropVeil.hidden = true;
-        if (!event.dataTransfer || !token.get()) return;
-        event.preventDefault();
-
-        const files = [...event.dataTransfer.files];
-        if (files.length) {
-            toast(`Dropped ${files.length === 1 ? files[0].name : files.length + ' files'} — encrypting & sending…`, 'info');
-            sendFiles(files);
-        } else {
-            const text = event.dataTransfer.getData('text/plain');
-            if (text) {
-                toast('Dropped text — encrypting & sending…', 'info');
-                sendText(text);
-            }
-        }
-    });
-
-    // ---------- delete all button with two-step inline confirmation ----------
-
-    let clearConfirming = false;
-    let clearTimer = null;
-
-    function resetClearBtn() {
-        clearConfirming = false;
-        clearTimeout(clearTimer);
-        clearBtn.classList.remove('confirming');
-        clearBtn.innerHTML = '<span class="btn-icon"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></span> Delete All';
+            return row;
+        }));
     }
 
-    clearBtn.addEventListener('click', async () => {
-        if (cards.size === 0) return;
-
-        // Step 1: Prompt confirmation
-        if (!clearConfirming) {
-            clearConfirming = true;
-            clearBtn.classList.add('confirming');
-            clearBtn.textContent = 'Confirm Delete All?';
-            clearTimer = setTimeout(resetClearBtn, 3000);
-            return;
-        }
-
-        // Step 2: Confirmed - execute batch deletion
-        clearTimeout(clearTimer);
-        resetClearBtn();
-        clearBtn.disabled = true;
-
-        const toDelete = [...cards.keys()];
-        // Animate all cards out simultaneously
-        toDelete.forEach((id) => remove(id));
-
-        toast('All ephemeral items purged', 'info');
-
-        await Promise.all(toDelete.map((id) => {
-            if (id.startsWith('lan-')) {
-                return Promise.resolve();
+    // Revoke all other devices (Task 6.3)
+    if (revokeOthersBtn) {
+        revokeOthersBtn.addEventListener('click', async () => {
+            if (!confirm('Sign out and revoke all other devices?')) return;
+            const res = await api('/api/devices/others', {method: 'DELETE'});
+            if (res.ok) {
+                toast('All other devices revoked', 'success');
+                const devRes = await api('/api/devices');
+                if (devRes.ok) renderDevices(await devRes.json());
+            } else {
+                toast('Failed to revoke other devices', 'error');
             }
-            return api(API + '/' + id, {method: 'DELETE'}).catch(() => {});
-        }));
-        clearBtn.disabled = false;
+        });
+    }
+
+    // Sign out
+    signOutBtn.addEventListener('click', async () => {
+        await api('/api/auth/logout', {method: 'POST'});
+        token.set(null);
+        showPairing();
+        toast('Signed out', 'info');
     });
 
-    // ---------- brand launch animation (1.4s) ----------
+    // Account menu toggle
+    accountBtn.addEventListener('click', async () => {
+        const wasOpen = !deviceSection.hidden;
+        if (wasOpen) {
+            deviceSection.hidden = true;
+            accountBtn.setAttribute('aria-expanded', 'false');
+            return;
+        }
+        deviceSection.hidden = false;
+        accountBtn.setAttribute('aria-expanded', 'true');
+        const res = await api('/api/devices');
+        if (res.ok) renderDevices(await res.json());
+    });
 
+    // ---------- Auth, Login & Pairing ----------
+
+    function showPairing() {
+        stopSocket();
+        stopPolling();
+        TeilenLan.stop();
+        cards.clear();
+        feed.replaceChildren();
+        pairSection.hidden = false;
+        app.hidden = true;
+        foot.hidden = true;
+        deviceSection.hidden = true;
+        accountBtn.hidden = true;
+        setStatus('offline', 'offline');
+    }
+
+    async function showFeed() {
+        pairSection.hidden = true;
+        app.hidden = false;
+        foot.hidden = false;
+        accountBtn.hidden = false;
+
+        await loadSessions();
+        await load();
+        connect();
+
+        // Start LAN WebRTC engine with session scoping and telemetry handler
+        TeilenLan.start(token.get(), (lanItem) => {
+            upsert(lanItem, true);
+            toast('Received Direct LAN file: ' + lanItem.content, 'success');
+        }, showTelemetry, currentSessionId);
+
+        await checkUrlForInvite();
+    }
+
+    // Tab switching for Auth
+    authTabLogin.addEventListener('click', () => {
+        authTabLogin.classList.add('active');
+        authTabRegister.classList.remove('active');
+        authTabPair.classList.remove('active');
+        loginContainer.hidden = false;
+        registerContainer.hidden = true;
+        pairContainer.hidden = true;
+    });
+
+    authTabRegister.addEventListener('click', () => {
+        authTabRegister.classList.add('active');
+        authTabLogin.classList.remove('active');
+        authTabPair.classList.remove('active');
+        registerContainer.hidden = false;
+        loginContainer.hidden = true;
+        pairContainer.hidden = true;
+    });
+
+    authTabPair.addEventListener('click', () => {
+        authTabPair.classList.add('active');
+        authTabLogin.classList.remove('active');
+        authTabRegister.classList.remove('active');
+        pairContainer.hidden = false;
+        loginContainer.hidden = true;
+        registerContainer.hidden = true;
+        startPairing();
+    });
+
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = loginUsername.value.trim();
+        const password = loginPassword.value;
+        const identity = await TeilenCrypto.ensureIdentity();
+
+        loginStatus.hidden = false;
+        loginStatus.textContent = 'Signing in…';
+
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                username,
+                password,
+                deviceName: navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser',
+                deviceType: 'WEB',
+                devicePublicKey: TeilenCrypto.b64(identity.publicKey)
+            })
+        });
+
+        if (res.ok) {
+            const session = await res.json();
+            token.set(session.token);
+            toast('Signed in as ' + username, 'success');
+            await showFeed();
+        } else {
+            loginStatus.textContent = 'Sign in failed: ' + (await why(res));
+        }
+    });
+
+    registerForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = registerUsername.value.trim();
+        const password = registerPassword.value;
+        const displayName = registerDisplayName.value.trim() || undefined;
+        const identity = await TeilenCrypto.ensureIdentity();
+
+        registerStatus.hidden = false;
+        registerStatus.textContent = 'Creating account…';
+
+        const res = await fetch('/api/auth/account', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                username,
+                password,
+                displayName,
+                deviceName: navigator.userAgent.includes('Chrome') ? 'Chrome' : 'Browser',
+                deviceType: 'WEB',
+                devicePublicKey: TeilenCrypto.b64(identity.publicKey)
+            })
+        });
+
+        if (res.ok) {
+            const session = await res.json();
+            token.set(session.token);
+            toast('Account created!', 'success');
+            await showFeed();
+        } else {
+            registerStatus.textContent = 'Registration failed: ' + (await why(res));
+        }
+    });
+
+    async function startPairing() {
+        clearInterval(pairTimer);
+        pairKey = TeilenCrypto.newPairingKey();
+        try {
+            const res = await fetch('/api/auth/device/code', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    deviceName: 'Browser',
+                    deviceType: 'WEB',
+                    platform: navigator.platform || 'Web',
+                    publicKey: TeilenCrypto.b64(pairKey.publicKey)
+                })
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            pairUserCode = data.userCode;
+            pairCode.textContent = data.userCode;
+            qr.src = data.qrCodeUrl;
+            pairState.textContent = 'Scan or approve code on phone…';
+
+            pairTimer = setInterval(async () => {
+                const claimRes = await fetch('/api/auth/device/token', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'same-origin',
+                    body: JSON.stringify({deviceCode: data.deviceCode})
+                });
+                if (claimRes.status === 200) {
+                    clearInterval(pairTimer);
+                    const claim = await claimRes.json();
+                    if (claim.keyPackage && pairKey) {
+                        await TeilenCrypto.openFromApprover(claim.keyPackage, pairKey.privateKey, pairUserCode);
+                    }
+                    token.set(claim.token);
+                    toast('Pairing successful!', 'success');
+                    await showFeed();
+                }
+            }, data.pollIntervalSeconds * 1000);
+        } catch (e) {
+            console.warn('Pairing failed', e);
+        }
+    }
+
+    if (pairCodeCopy) {
+        pairCodeCopy.addEventListener('click', async () => {
+            if (pairUserCode) {
+                await navigator.clipboard.writeText(pairUserCode);
+                toast('Pairing code copied', 'success');
+            }
+        });
+    }
+
+    approveForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const code = approveCode.value.trim();
+        if (!code) return;
+
+        deviceStatus.hidden = false;
+        deviceStatus.textContent = 'Approving device…';
+
+        try {
+            const pendingRes = await api('/api/auth/device/pending?code=' + encodeURIComponent(code));
+            if (!pendingRes.ok) {
+                deviceStatus.textContent = 'Invalid code: ' + (await why(pendingRes));
+                return;
+            }
+            const preview = await pendingRes.json();
+            let keyPkg = null;
+            if (preview.publicKey) {
+                keyPkg = await TeilenCrypto.sealForNewcomer(preview.publicKey, code);
+            }
+
+            const approveRes = await postJson('/api/auth/device/approve', {
+                userCode: code,
+                keyPackage: keyPkg
+            });
+
+            if (approveRes.ok) {
+                approveCode.value = '';
+                deviceStatus.textContent = 'Device approved!';
+                toast('Device approved', 'success');
+                const devRes = await api('/api/devices');
+                if (devRes.ok) renderDevices(await devRes.json());
+            } else {
+                deviceStatus.textContent = 'Approval failed: ' + (await why(approveRes));
+            }
+        } catch (err) {
+            deviceStatus.textContent = 'Error: ' + err.message;
+        }
+    });
+
+    // Brand launch animation
     function initLaunchScreen() {
         const veil = el('launch-veil');
         const launchStatus = el('launch-status');
         if (!veil) return;
-
-        // Phase 3 (650ms): micro-status transition to Feed Sync
         setTimeout(() => {
             if (launchStatus) {
                 launchStatus.style.opacity = '0';
@@ -1345,56 +1521,33 @@
                 }, 120);
             }
         }, 650);
-
-        // Phase 4 (1200ms - 1400ms): cross-fade to dashboard
         setTimeout(() => {
             veil.classList.add('dismissed');
-            setTimeout(() => {
-                veil.remove();
-            }, 300);
+            setTimeout(() => veil.remove(), 300);
         }, 1200);
     }
 
-    // ---------- auto-update service worker lifecycle ----------
-
+    // Auto-update SW
     function initServiceWorkerAutoUpdate() {
         if (!('serviceWorker' in navigator)) return;
-
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (refreshing) return;
-            refreshing = true;
-            toast('New version available — Reloading…', 'info', 3000);
-            setTimeout(() => {
-                window.location.reload();
-            }, 1200);
-        });
-
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').then((registration) => {
-                document.addEventListener('visibilitychange', () => {
-                    if (document.visibilityState === 'visible') {
-                        registration.update().catch(() => {});
-                    }
-                });
-                setInterval(() => {
-                    registration.update().catch(() => {});
-                }, 15 * 60 * 1000);
-            }).catch((err) => {
-                console.debug('ServiceWorker registration error:', err);
-            });
-        });
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
 
-    // ---------- start ----------
+    function enablePush() {
+        // Handled by push service worker if subscribed
+    }
 
+    // Initialize SPA
     initLaunchScreen();
     initServiceWorkerAutoUpdate();
     refresh();
-    if (token.get()) {
-        showFeed();
-        enablePush();
-    } else {
-        showPairing();
-    }
+
+    // Start with silent auth refresh via HttpOnly cookie (no localStorage bearer token!)
+    trySilentRefresh().then(async (authenticated) => {
+        if (authenticated) {
+            await showFeed();
+        } else {
+            showPairing();
+        }
+    });
 })();

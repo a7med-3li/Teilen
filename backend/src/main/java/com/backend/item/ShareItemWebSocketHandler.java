@@ -58,23 +58,32 @@ public class ShareItemWebSocketHandler extends TextWebSocketHandler {
     }
 
     public void broadcast(UUID userId, ShareItemEvent event) {
-        Set<WebSocketSession> open = sessions.get(userId);
-        if (open == null || open.isEmpty()) {
+        broadcastToUsers(java.util.List.of(userId), event);
+    }
+
+    public void broadcastToUsers(Iterable<UUID> userIds, ShareItemEvent event) {
+        if (userIds == null) {
             return;
         }
         String payload = serialize(event);
-        for (WebSocketSession session : open) {
-            if (!session.isOpen()) {
-                forget(session);
+        for (UUID userId : userIds) {
+            Set<WebSocketSession> open = sessions.get(userId);
+            if (open == null || open.isEmpty()) {
                 continue;
             }
-            try {
-                synchronized (session) {
-                    session.sendMessage(new TextMessage(payload));
+            for (WebSocketSession session : open) {
+                if (!session.isOpen()) {
+                    forget(session);
+                    continue;
                 }
-            } catch (IOException e) {
-                log.warn("dropping feed {}: {}", session.getId(), e.getMessage());
-                forget(session);
+                try {
+                    synchronized (session) {
+                        session.sendMessage(new TextMessage(payload));
+                    }
+                } catch (IOException e) {
+                    log.warn("dropping feed {}: {}", session.getId(), e.getMessage());
+                    forget(session);
+                }
             }
         }
     }

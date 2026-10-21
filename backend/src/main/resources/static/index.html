@@ -29,7 +29,7 @@
     <div class="panel auth-panel">
         <div class="auth-header">
             <h2 class="auth-title">Welcome to Teilen</h2>
-            <p class="auth-desc">End-to-end encrypted cross-device sync</p>
+            <p class="auth-desc">End-to-end encrypted cross-device sync &amp; multi-gigabyte Direct LAN</p>
         </div>
         <div class="auth-toggle">
             <button id="auth-tab-login" type="button" class="auth-btn active">Sign in</button>
@@ -106,6 +106,10 @@
         <p id="account-phone" class="panel-lead"></p>
         <ul id="device-list" class="devices"></ul>
 
+        <div class="account-actions-row">
+            <button id="revoke-others-btn" class="danger-outline" type="button">Sign Out All Other Devices</button>
+        </div>
+
         <form id="approve-form" autocomplete="off">
             <label for="approve-code">Pair another device — enter 8-digit code (e.g. K7PM-3XQD)</label>
             <div class="row">
@@ -121,30 +125,73 @@
 </section>
 
 <main id="app" hidden>
-    <form id="compose" autocomplete="off">
-        <input id="compose-input" type="text" placeholder="Type or paste text / URL and press Enter…" maxlength="20000">
-        <button type="submit">Send</button>
-    </form>
+    <!-- Multi-Session Rooms (Spaces) Bar -->
+    <div class="session-container">
+        <div class="session-bar-scroll">
+            <div id="session-pills" class="session-pills"></div>
+        </div>
+        <div class="session-actions">
+            <button id="session-share-btn" type="button" class="btn-pill-action" title="Share session">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+                <span>Share Room</span>
+            </button>
+            <button id="session-create-btn" type="button" class="btn-pill-action" title="Create room">+ Room</button>
+            <button id="session-join-btn" type="button" class="btn-pill-action" title="Join room">Join</button>
+        </div>
+    </div>
 
-    <form id="upload" autocomplete="off">
-        <label class="file-field" for="upload-input">
-            <svg class="field-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
-            </svg>
-            <input id="upload-input" type="file" multiple>
-            <span id="upload-label">Attach files… (Max 30 MB)</span>
-        </label>
-        <select id="upload-ttl" title="How long the files should live">
-            <option value="600">10 min</option>
-            <option value="1800">30 min</option>
-            <option value="3600" selected>1 hour</option>
-            <option value="14400">4 hours</option>
-            <option value="86400">24 hours</option>
-        </select>
-        <button id="upload-send" type="submit" hidden>Send</button>
-    </form>
+    <!-- Unified Multimodal Composer with Unlimited Scrollable Text -->
+    <div class="composer-card">
+        <form id="compose" autocomplete="off">
+            <textarea id="compose-input" placeholder="Type or paste unlimited text / URL… (Shift+Enter for newline, Enter to send)" rows="2"></textarea>
 
-    <p id="upload-status" class="upload-status" hidden></p>
+            <div class="composer-toolbar">
+                <div class="ttl-pills-group" id="ttl-pills">
+                    <span class="ttl-label">Expires in:</span>
+                    <button type="button" class="ttl-pill" data-ttl="600">10m</button>
+                    <button type="button" class="ttl-pill" data-ttl="1800">30m</button>
+                    <button type="button" class="ttl-pill active" data-ttl="3600">1h</button>
+                    <button type="button" class="ttl-pill" data-ttl="14400">4h</button>
+                    <button type="button" class="ttl-pill" data-ttl="86400">24h</button>
+                    <button type="button" class="ttl-pill" id="ttl-custom-pill">Custom</button>
+                </div>
+
+                <div class="composer-buttons">
+                    <label class="btn-attach" for="upload-input" title="Attach files (Multi-GB supported via Direct LAN)">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                        </svg>
+                        <span>Attach File</span>
+                        <input id="upload-input" type="file" multiple hidden>
+                    </label>
+                    <button type="submit" id="compose-submit" class="btn-send">Send</button>
+                </div>
+            </div>
+        </form>
+        <p id="upload-status" class="upload-status" hidden></p>
+    </div>
+
+    <!-- Live Direct LAN P2P Telemetry Card -->
+    <div id="telemetry-card" class="telemetry-card" hidden>
+        <div class="telemetry-head">
+            <div class="telemetry-title">
+                <span class="telemetry-icon">⚡</span>
+                <span id="telemetry-name">Direct LAN P2P Transfer</span>
+            </div>
+            <span class="telemetry-badge">0 Server Bytes Used</span>
+        </div>
+        <div class="telemetry-bar-wrap">
+            <div id="telemetry-bar" class="telemetry-bar" style="width: 0%"></div>
+        </div>
+        <div class="telemetry-foot">
+            <span id="telemetry-stats">0 MB / 0 MB · 0%</span>
+            <span id="telemetry-speed" class="telemetry-speed">0 MB/s</span>
+            <button id="telemetry-cancel" type="button" class="btn-telemetry-cancel">✕ Cancel</button>
+        </div>
+    </div>
 
     <div id="empty" class="empty" hidden>
         <div class="empty-icon">
@@ -154,9 +201,10 @@
             </svg>
         </div>
         <p class="empty-title">Nothing here yet</p>
-        <p class="empty-desc">Share a file or text from your phone, paste anywhere, or drop files onto the window.</p>
+        <p class="empty-desc">Share files, logs, or text from your devices. Unlimited paste and multi-gigabyte transfers supported.</p>
     </div>
 
+    <!-- Feed list: all card action buttons live strictly in sticky top header -->
     <ul id="feed"></ul>
 </main>
 
@@ -175,7 +223,89 @@
     </button>
 </footer>
 
-<!-- shown while a file is dragged over the page: a whole-window drop target -->
+<!-- Modal: Create New Session -->
+<div id="modal-create-session" class="modal-veil" hidden>
+    <div class="modal-panel">
+        <h3>Create New Session Room</h3>
+        <p class="modal-desc">Rooms are end-to-end encrypted with their own independent 256-bit symmetric key.</p>
+        <form id="form-create-session">
+            <div class="field">
+                <label for="create-session-name">Room Name</label>
+                <input id="create-session-name" type="text" placeholder="e.g. Study Group, Project Alpha" maxlength="120" required>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-subtle modal-close">Cancel</button>
+                <button type="submit" class="submit-btn">Create Room</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Share Session (QR + Link) -->
+<div id="modal-share-session" class="modal-veil" hidden>
+    <div class="modal-panel">
+        <h3 id="share-session-title">Share Session</h3>
+        <p class="modal-desc">Anyone with this code or QR will join this room and receive its encryption key.</p>
+        <div class="qr-wrapper">
+            <div id="share-session-qr"></div>
+        </div>
+        <div class="pair-code-row">
+            <p id="share-session-code" class="pair-code">····-····</p>
+            <button id="share-session-copy" type="button" class="btn-copy-code" title="Copy invite link">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn-subtle modal-close">Done</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Join Session -->
+<div id="modal-join-session" class="modal-veil" hidden>
+    <div class="modal-panel">
+        <h3>Join Session Room</h3>
+        <p class="modal-desc">Enter the 8-character code or paste a teilen:// invite link:</p>
+        <form id="form-join-session">
+            <div class="field">
+                <label for="join-session-input">Invite Code / Link</label>
+                <input id="join-session-input" type="text" placeholder="e.g. K7PM-3XQD or teilen://session/join?code=..." required>
+            </div>
+            <p id="join-session-preview" class="panel-status" hidden></p>
+            <div class="modal-actions">
+                <button type="button" class="btn-subtle modal-close">Cancel</button>
+                <button type="submit" class="submit-btn">Join Room</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Custom TTL Input -->
+<div id="modal-custom-ttl" class="modal-veil" hidden>
+    <div class="modal-panel">
+        <h3 id="custom-ttl-title">Set Expiration Timer (TTL)</h3>
+        <p class="modal-desc">Enter custom lifespan for this item:</p>
+        <form id="form-custom-ttl">
+            <div class="row">
+                <input id="custom-ttl-number" type="number" min="1" max="1440" value="60" required style="width: 100px;">
+                <select id="custom-ttl-unit">
+                    <option value="60">Minutes</option>
+                    <option value="3600" selected>Hours</option>
+                    <option value="86400">Days</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-subtle modal-close">Cancel</button>
+                <button type="submit" class="submit-btn">Apply</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Drag-and-drop whole window veil -->
 <div id="drop-veil" hidden>
     <div class="drop-veil-inner">
         <svg class="drop-icon" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -184,11 +314,11 @@
             <line x1="12" y1="3" x2="12" y2="15"></line>
         </svg>
         <span class="drop-title">Drop to encrypt &amp; send</span>
-        <span class="drop-subtitle">Send to your devices · Max 30 MB</span>
+        <span class="drop-subtitle">Multi-GB Direct LAN P2P · Cloud Relay up to 30 MB</span>
     </div>
 </div>
 
-<!-- Sleek Animated Brand Launch Screen (1.4s) -->
+<!-- Sleek Animated Brand Launch Screen -->
 <div id="launch-veil" class="launch-veil">
     <div class="launch-veil-content">
         <div class="launch-ring-container">
@@ -208,10 +338,8 @@
     </div>
 </div>
 
-<!-- Floating toasts for user feedback -->
 <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-<!-- libsodium first (it defines window.libsodium), then its wrappers (window.sodium) -->
 <script src="vendor/libsodium-sumo.js"></script>
 <script src="vendor/libsodium-wrappers.js"></script>
 <script src="cryptoStore.js"></script>

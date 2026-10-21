@@ -19,6 +19,13 @@ class PairActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val data = intent?.data
+        if (data != null && data.scheme.equals("teilen", ignoreCase = true) && data.host.equals("session", ignoreCase = true)) {
+            startActivity(Intent(this, MainActivity::class.java).setData(data))
+            finish()
+            return
+        }
+
         val code = codeOf(intent?.data)
         if (code == null) {
             // a bare teilen:// link, or a stale one from another app: nothing to approve

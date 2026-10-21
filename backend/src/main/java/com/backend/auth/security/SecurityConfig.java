@@ -8,39 +8,26 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
-
-/**
- * Stateless bearer-token security.
- *
- * <p>Off: sessions, CSRF tokens, form login, HTTP Basic — none of which have anything to do with
- * an app that proves itself with a token on every call, and all of which would only get in the way.
- *
- * <p>Open: creating an account, logging in, the steps of pairing (asking for a code, polling for a token,
- * drawing and describing the QR), and the web app's own files. Everything else under {@code /api}
- * needs a token, and so does the websocket handshake — a browser passes it as {@code /ws?token=…}.
- */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-    /**
-     * The only endpoints that answer to a stranger. Everything here is a step of pairing, login, or the
-     * call that creates an account; the QR endpoints only answer with what a code already says about
-     * itself, so knowing the code is knowing everything they know.
-     */
     static final String[] OPEN_PATHS = {
             "/api/auth/account",
             "/api/auth/login",
+            "/api/auth/refresh",
             "/api/auth/device/code",
             "/api/auth/device/token",
             "/api/auth/device/qr.svg",
             "/api/auth/device/pending",
+            "/api/sessions/join/preview",
             "/api/version"
     };
 
@@ -50,8 +37,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public BearerTokenFilter bearerTokenFilter(AuthService auth) {
-        return new BearerTokenFilter(auth);
+    public BearerTokenFilter bearerTokenFilter(AuthService auth, Ed25519Verifier verifier) {
+        return new BearerTokenFilter(auth, verifier);
     }
 
     @Bean
@@ -59,22 +46,23 @@ public class SecurityConfig {
             throws Exception {
         http
                 .authorizeHttpRequests(rules -> rules
-                        // blob bytes are reachable by a signed link too, so that <img> and plain
-                        // links work; the endpoint still checks the signature or the owner's token
                         .requestMatchers(HttpMethod.GET, "/api/items/*/blob").permitAll()
                         .requestMatchers(OPEN_PATHS).permitAll()
                         .requestMatchers("/ws", "/ws/signal").authenticated()
                         .requestMatchers("/api/**").authenticated()
-                        // the web app itself: index.html, app.js, style.css, the icons
                         .anyRequest().permitAll())
 
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
-                .anonymous(anonymous -> anonymous.disable())
+                .anonymous(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp
+                                .policyDirectives("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss: ws: https:; object-src 'none'; frame-ancestors 'none';"))
+                        .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny))
                 .exceptionHandling(exceptions ->
                         exceptions.authenticationEntryPoint(new JsonAuthenticationEntryPoint()))
                 .addFilterBefore(bearerTokenFilter, UsernamePasswordAuthenticationFilter.class);

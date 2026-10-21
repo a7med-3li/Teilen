@@ -16,6 +16,7 @@ object Session {
     private const val KEY_TOKEN = "device_token"
     private const val KEY_PHONE = "phone"
     private const val KEY_DEVICE = "device_name"
+    private const val KEY_ACTIVE_SESSION = "active_session_id"
 
     /** null when this device is not paired with any account */
     fun token(context: Context): String? = read(context, KEY_TOKEN)
@@ -28,6 +29,17 @@ object Session {
 
     /** what the account knows this device as */
     fun deviceName(context: Context): String? = read(context, KEY_DEVICE)
+
+    /** currently selected active session ID, or null for the user's default Personal session */
+    fun activeSessionId(context: Context): String? = read(context, KEY_ACTIVE_SESSION)
+
+    fun setActiveSessionId(context: Context, sessionId: String?) {
+        if (sessionId.isNullOrBlank()) {
+            prefs(context).edit().remove(KEY_ACTIVE_SESSION).apply()
+        } else {
+            prefs(context).edit().putString(KEY_ACTIVE_SESSION, sessionId).apply()
+        }
+    }
 
     /** the only thing that decides whether this device can talk to the backend */
     fun isPaired(context: Context): Boolean = token(context) != null

@@ -4,6 +4,7 @@ import com.backend.auth.domain.AuthenticatedUser;
 import com.backend.auth.service.AuthService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -12,42 +13,71 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
- * Turns a bearer token into an authenticated caller, or leaves the request anonymous and lets the
- * rules decide.
- *
- * <p>The websocket handshake is the one place a browser cannot set a header, so for that path the
- * token may also arrive as {@code /ws?token=…}. Nothing else reads it from the query string.
- *
- * <p>There is no cache and no session: the token is the whole of the identity, on every request.
+ * Turns a bearer token or HttpOnly session cookie into an authenticated caller.
+ * Verifies optional Device Proof-of-Possession (DPoP / X-Teilen-Signature) against
+ * the device's non-exportable hardware/WebCrypto identity key.
  */
 public class BearerTokenFilter extends OncePerRequestFilter {
 
-    private final AuthService auth;
+    public static final String SESSION_COOKIE_NAME = "teilen_session";
+    public static final String SIGNATURE_HEADER = "X-Teilen-Signature";
+    public static final String TIMESTAMP_HEADER = "X-Teilen-Timestamp";
 
-    public BearerTokenFilter(AuthService auth) {
+    private final AuthService auth;
+    private final Ed25519Verifier verifier;
+
+    public BearerTokenFilter(AuthService auth, Ed25519Verifier verifier) {
         this.auth = auth;
+        this.verifier = verifier;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
-        String token = bearerToken(request);
+        String token = resolveToken(request);
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             AuthenticatedUser user = auth.authenticate(token);
             if (user != null) {
+                // Verify optional DPoP device signature if presented or if device requires it
+                String signature = request.getHeader(SIGNATURE_HEADER);
+                if (signature != null && !signature.isBlank()) {
+                    String timestampStr = request.getHeader(TIMESTAMP_HEADER);
+                    long ts = 0L;
+                    try {
+                        ts = Long.parseLong(timestampStr);
+                    } catch (Exception ignored) {
+                    }
+
+                    long now = System.currentTimeMillis();
+                    if (Math.abs(now - ts) > 300_000L) { // 5 minutes skew tolerance
+                        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Request signature timestamp expired or skewed");
+                        return;
+                    }
+
+                    if (user.devicePublicKey() != null && !user.devicePublicKey().isBlank()) {
+                        String payload = request.getMethod().toUpperCase() + "|" + request.getRequestURI() + "|" + ts;
+                        boolean valid = verifier.verify(user.devicePublicKey(), payload.getBytes(StandardCharsets.UTF_8), signature);
+                        if (!valid) {
+                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Device signature verification failed");
+                            return;
+                        }
+                    }
+                }
+
                 var authentication = new UsernamePasswordAuthenticationToken(
                         user, token, AuthorityUtils.NO_AUTHORITIES);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-                // coarse on purpose: one write per device every five minutes, not one per request
                 auth.touch(user.deviceId());
             }
         }
         chain.doFilter(request, response);
     }
 
-    private String bearerToken(HttpServletRequest request) {
+    private String resolveToken(HttpServletRequest request) {
+        // 1. Authorization: Bearer <token>
         String header = request.getHeader("Authorization");
         if (header != null && header.regionMatches(true, 0, "Bearer ", 0, 7)) {
             String value = header.substring(7).strip();
@@ -55,6 +85,21 @@ public class BearerTokenFilter extends OncePerRequestFilter {
                 return value;
             }
         }
+
+        // 2. HttpOnly Cookie: `teilen_session`
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie c : cookies) {
+                if (SESSION_COOKIE_NAME.equals(c.getName()) || "__Host-teilen_session".equals(c.getName())) {
+                    String val = c.getValue();
+                    if (val != null && !val.isBlank()) {
+                        return val.strip();
+                    }
+                }
+            }
+        }
+
+        // 3. WebSocket query parameter: ?token=
         if (isWebSocketHandshake(request)) {
             String value = request.getParameter("token");
             if (value != null && !value.isBlank()) {
@@ -64,10 +109,8 @@ public class BearerTokenFilter extends OncePerRequestFilter {
         return null;
     }
 
-    /** Spring maps the handshake to this handler, so the path is a reliable marker */
     private boolean isWebSocketHandshake(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        // the feed socket and the WebRTC signaling socket both authenticate with ?token=
         return uri != null && (uri.endsWith("/ws") || uri.endsWith("/ws/signal"));
     }
 }

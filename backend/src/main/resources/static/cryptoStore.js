@@ -225,6 +225,46 @@ window.TeilenCrypto = (() => {
         return master;
     }
 
+    // ---------- per-session encryption keys ----------
+
+    async function getSessionKey(sessionId, isPersonal = false) {
+        await ready;
+        if (!sessionId || isPersonal) {
+            return getMasterKey();
+        }
+        let key = await idbGet('session_key_' + sessionId);
+        if (!key && isPersonal) {
+            return getMasterKey();
+        }
+        return key;
+    }
+
+    async function setSessionKey(sessionId, bytes) {
+        await ready;
+        if (!sessionId) return;
+        await idbPut('session_key_' + sessionId, new Uint8Array(bytes));
+    }
+
+    async function generateSessionKey() {
+        await ready;
+        return sodium.randombytes_buf(32);
+    }
+
+    // ---------- DPoP device proof-of-possession signing ----------
+
+    async function signRequest(method, path) {
+        await ready;
+        const identity = await ensureIdentity();
+        const timestamp = Date.now().toString();
+        const payload = (method || 'GET').toUpperCase() + '|' + (path || '/') + '|' + timestamp;
+        const sig = sodium.crypto_sign_detached(sodium.from_string(payload), identity.privateKey);
+        return {
+            signature: b64(sig),
+            timestamp: timestamp,
+            publicKey: b64(identity.publicKey)
+        };
+    }
+
     return {
         ready,
         b64,
@@ -234,7 +274,11 @@ window.TeilenCrypto = (() => {
         getMasterKey,
         ensureMasterKey,
         setMasterKey,
+        getSessionKey,
+        setSessionKey,
+        generateSessionKey,
         ensureIdentity,
+        signRequest,
         newPairingKey,
         sealForNewcomer,
         openFromApprover

@@ -18,6 +18,7 @@ data class FeedItem(
     val sizeBytes: Long?,
     val createdAt: Instant?,
     val expiresAt: Instant?,
+    val sessionId: String? = null,
     /**
      * A signed path to the bytes on the server, or null for text and links, which carry their
      * payload inline. The signature is what lets a plain image or PDF viewer open the file without
@@ -89,6 +90,7 @@ data class FeedItem(
                 sizeBytes = json.optLong("sizeBytes").takeIf { json.has("sizeBytes") },
                 createdAt = instant(json.optString("createdAt")),
                 expiresAt = instant(json.optString("expiresAt")),
+                sessionId = json.optString("sessionId").takeIf { it.isNotBlank() },
                 blobPath = json.optString("blobUrl").takeIf { it.isNotBlank() }
             )
         }

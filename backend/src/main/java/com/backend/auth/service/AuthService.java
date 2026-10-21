@@ -1,22 +1,25 @@
 package com.backend.auth.service;
 
-import com.backend.auth.dto.ApprovalResponse;
 import com.backend.auth.domain.AuthenticatedUser;
-import com.backend.auth.entity.Device;
-import com.backend.auth.repository.DeviceRepository;
-import com.backend.auth.dto.DeviceResponse;
-import com.backend.auth.enums.DeviceType;
-import com.backend.auth.entity.PairingRequest;
-import com.backend.auth.repository.PairingRequestRepository;
 import com.backend.auth.domain.PairingStartResponse;
+import com.backend.auth.domain.Tokens;
+import com.backend.auth.dto.ApprovalResponse;
+import com.backend.auth.dto.DeviceResponse;
 import com.backend.auth.dto.SessionResponse;
 import com.backend.auth.dto.TokenClaimResponse;
-import com.backend.auth.domain.Tokens;
-import com.backend.auth.repository.UserRepository;
 import com.backend.auth.dto.UserResponse;
+import com.backend.auth.entity.Device;
+import com.backend.auth.entity.PairingRequest;
 import com.backend.auth.entity.User;
+import com.backend.auth.enums.DeviceType;
+import com.backend.auth.repository.DeviceRepository;
+import com.backend.auth.repository.PairingRequestRepository;
+import com.backend.auth.repository.UserRepository;
+import com.backend.auth.security.AuthRateLimiter;
+import com.backend.session.SessionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -30,63 +33,71 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Accounts, devices, and the pairing dance between them.
- *
- * <p>The shape of it: the first phone creates an account with a phone number and is paired on the
- * spot. Every other device — browsers, a spare phone — asks for a code and waits for a device that
- * is already paired to approve it, then collects its own token by polling. Nothing else is
- * trusted, and no code is ever guessable from what it says.
- *
- * <p>Known gap, deliberately: creating an account proves nothing about the number. Whoever asks
- * for a number first owns it. An OTP is the one thing missing, and it would slot into
- * {@link #createAccount} without changing anything else here.
- */
 @Service
 public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
-    /** how long a pairing request stays answerable */
     private final Duration pairingTtl;
-    /** what a waiting device is told to wait between polls */
     private final Duration pollInterval;
 
     private final UserRepository users;
     private final DeviceRepository devices;
     private final PairingRequestRepository pairings;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    private final AuthRateLimiter rateLimiter;
+    private final SessionService sessionService;
 
+    @Autowired
     public AuthService(UserRepository users,
                        DeviceRepository devices,
                        PairingRequestRepository pairings,
                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
+                       @Autowired(required = false) AuthRateLimiter rateLimiter,
+                       @Autowired(required = false) SessionService sessionService,
                        @Value("${teilen.auth.pairing-ttl-seconds:300}") long pairingTtlSeconds,
                        @Value("${teilen.auth.poll-interval-seconds:3}") long pollIntervalSeconds) {
         this.users = users;
         this.devices = devices;
         this.pairings = pairings;
         this.passwordEncoder = passwordEncoder;
+        this.rateLimiter = rateLimiter != null ? rateLimiter : new AuthRateLimiter();
+        this.sessionService = sessionService;
         this.pairingTtl = Duration.ofSeconds(pairingTtlSeconds);
         this.pollInterval = Duration.ofSeconds(pollIntervalSeconds);
     }
 
+    public AuthService(UserRepository users,
+                       DeviceRepository devices,
+                       PairingRequestRepository pairings,
+                       org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
+                       long pairingTtlSeconds,
+                       long pollIntervalSeconds) {
+        this(users, devices, pairings, passwordEncoder, null, null, pairingTtlSeconds, pollIntervalSeconds);
+    }
+
     // ------------------------------------------------------------------ accounts
 
-    /**
-     * Creates the account with phone and password, and pairs the device that asked for it.
-     *
-     * @throws ResponseStatusException 409 if the number is already taken
-     */
     @Transactional
     public SessionResponse createAccount(String rawUsername, String password, String displayName,
                                          String rawDeviceName, String requestedType) {
+        return createAccount(rawUsername, password, displayName, rawDeviceName, requestedType, null, null, null);
+    }
+
+    @Transactional
+    public SessionResponse createAccount(String rawUsername, String password, String displayName,
+                                         String rawDeviceName, String requestedType,
+                                         String devicePublicKey, String ipAddress, String platform) {
+        String rateKey = "create:" + (ipAddress != null ? ipAddress : "local");
+        rateLimiter.checkAllowed(rateKey);
+
         String username = requireUsername(rawUsername);
         if (password == null || password.isBlank() || password.length() < 6) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "password must be at least 6 characters");
+            rateLimiter.recordFailure(rateKey);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "password must be at least 6 characters");
         }
         if (users.existsByUsernameIgnoreCase(username)) {
+            rateLimiter.recordFailure(rateKey);
             throw new com.backend.auth.exception.UsernameTakenException();
         }
 
@@ -96,38 +107,81 @@ public class AuthService {
         try {
             users.save(user);
         } catch (DataIntegrityViolationException e) {
+            rateLimiter.recordFailure(rateKey);
             throw new com.backend.auth.exception.UsernameTakenException();
         }
+
+        if (sessionService != null) {
+            sessionService.getOrCreatePersonalSession(user.getId());
+        }
+
         DeviceType type = requestedType != null ? DeviceType.parse(requestedType) : DeviceType.PHONE;
-        SessionResponse session = pairDevice(user, type, rawDeviceName, now);
+        SessionResponse session = pairDevice(user, type, rawDeviceName, devicePublicKey, ipAddress, platform, now);
+        rateLimiter.recordSuccess(rateKey);
         log.info("created account {} and paired device {}", username, session.deviceName());
         return session;
     }
 
-    /**
-     * Logs in using username and password, and mints a new device session.
-     *
-     * @throws ResponseStatusException 401 on incorrect credentials
-     */
     @Transactional
     public SessionResponse login(String rawUsername, String password, String rawDeviceName, String requestedType) {
+        return login(rawUsername, password, rawDeviceName, requestedType, null, null, null);
+    }
+
+    @Transactional
+    public SessionResponse login(String rawUsername, String password, String rawDeviceName, String requestedType,
+                                 String devicePublicKey, String ipAddress, String platform) {
+        String rateKey = "login:" + (ipAddress != null ? ipAddress : "local") + ":" + String.valueOf(rawUsername).toLowerCase();
+        rateLimiter.checkAllowed(rateKey);
+
         String username = requireUsername(rawUsername);
         if (password == null || password.isBlank()) {
+            rateLimiter.recordFailure(rateKey);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "password must not be blank");
         }
         User user = users.findByUsernameIgnoreCase(username)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
-                        "invalid_credentials: username or password incorrect"));
+                .orElseThrow(() -> {
+                    rateLimiter.recordFailure(rateKey);
+                    return new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                            "invalid_credentials: username or password incorrect");
+                });
         if (user.getPasswordHash() == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+            rateLimiter.recordFailure(rateKey);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
                     "invalid_credentials: username or password incorrect");
         }
 
+        if (sessionService != null) {
+            sessionService.getOrCreatePersonalSession(user.getId());
+        }
+
         Instant now = Instant.now();
         DeviceType type = requestedType != null ? DeviceType.parse(requestedType) : DeviceType.PHONE;
-        SessionResponse session = pairDevice(user, type, rawDeviceName, now);
+        SessionResponse session = pairDevice(user, type, rawDeviceName, devicePublicKey, ipAddress, platform, now);
+        rateLimiter.recordSuccess(rateKey);
         log.info("logged in account {} on device {}", username, session.deviceName());
         return session;
+    }
+
+    @Transactional
+    public SessionResponse refreshToken(String currentToken, String ipAddress) {
+        if (currentToken == null || currentToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "missing_session_token");
+        }
+        Device device = devices.findByTokenHash(Tokens.hash(currentToken))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid_or_expired_session"));
+
+        User user = findUser(device.getUserId());
+        String newToken = Tokens.newToken();
+        device.setTokenHash(Tokens.hash(newToken));
+        if (ipAddress != null && !ipAddress.isBlank()) {
+            device.setIpAddress(clean(ipAddress, 64));
+        }
+        Instant now = Instant.now();
+        device.setDevicePublicKey(device.getDevicePublicKey());
+        devices.save(device);
+
+        log.info("Rotated token for device {} of user {}", device.getName(), user.getUsername());
+        return new SessionResponse(newToken, device.getId(), device.getName(), UserResponse.from(user));
     }
 
     @Transactional(readOnly = true)
@@ -137,22 +191,15 @@ public class AuthService {
 
     // ------------------------------------------------------------------ pairing
 
-    /**
-     * Step one, called by a device that has nothing yet: hand back a code to show and a secret to
-     * poll with. Unauthenticated on purpose — this is the beginning of the trust chain, not a step
-     * in it.
-     */
     @Transactional
     public PairingStartResponse startPairing(String rawDeviceName, String requestedType, String platform,
                                              String publicKey) {
         DeviceType type = DeviceType.parse(requestedType);
         Instant now = Instant.now();
 
-        // the polling secret is generated here, hashed on the way in, and returned exactly once
         String deviceCode = Tokens.newToken();
         PairingRequest request = null;
         String userCode = null;
-        // the code is short, so it can collide; the unique index is what actually guarantees it
         for (int attempt = 0; attempt < 6; attempt++) {
             userCode = Tokens.newUserCode();
             try {
@@ -185,10 +232,6 @@ public class AuthService {
                 request.getExpiresAt());
     }
 
-    /**
-     * Step two, from a device that is already paired: the code from the QR or typed in. Mints the
-     * newcomer's token now; the newcomer picks it up by polling.
-     */
     @Transactional
     public ApprovalResponse approve(UUID userId, String rawUserCode, String keyPackage) {
         Instant now = Instant.now();
@@ -205,10 +248,10 @@ public class AuthService {
         User owner = findUser(userId);
         String token = Tokens.newToken();
         Device device = new Device(UUID.randomUUID(), owner.getId(), request.getDeviceType(),
-                request.getDeviceName(), Tokens.hash(token), now);
+                request.getDeviceName(), Tokens.hash(token), request.getNewcomerPublicKey(),
+                null, request.getPlatform(), now);
         devices.save(device);
         request.approve(device.getId(), token, now);
-        // sealed here, unreadable here: the newcomer unwraps it with the private half of its key
         request.setKeyPackage(clean(keyPackage, 4000));
 
         log.info("{} approved a {} device: {}", request.describe(), request.getDeviceType(),
@@ -217,7 +260,6 @@ public class AuthService {
                 request.describe(), request.getExpiresAt());
     }
 
-    /** step two, the other answer */
     @Transactional
     public void deny(UUID userId, String rawUserCode) {
         PairingRequest request = findPairingByUserCode(rawUserCode);
@@ -228,11 +270,6 @@ public class AuthService {
         log.info("{} denied a pairing request from {}", findUser(userId).label(), request.getDeviceName());
     }
 
-    /**
-     * Step three, back on the newcomer: give me my token.
-     *
-     * @return the token, or null while nobody has approved yet (the caller answers 202)
-     */
     @Transactional
     public TokenClaimResponse claim(String deviceCode) {
         Instant now = Instant.now();
@@ -245,7 +282,7 @@ public class AuthService {
         if (request.isPending() || request.getTokenValue() == null) {
             switch (request.getStatus()) {
                 case PENDING -> {
-                    return null; // still waiting: not an error
+                    return null;
                 }
                 case DENIED -> throw new ResponseStatusException(HttpStatus.FORBIDDEN, "pairing_denied");
                 default -> throw new ResponseStatusException(HttpStatus.GONE,
@@ -253,7 +290,6 @@ public class AuthService {
             }
         }
 
-        // exactly once: the row keeps a hash, this is the only time the token is readable
         String token = request.deliver(now);
         Device device = devices.findById(request.getDeviceId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.GONE, "pairing_gone"));
@@ -263,17 +299,24 @@ public class AuthService {
                 request.getKeyPackage(), UserResponse.from(user));
     }
 
-    /** the code behind a QR, so the phone knows which request the user is approving */
     @Transactional(readOnly = true)
     public PairingRequest pendingByCode(String rawUserCode) {
-        PairingRequest request = findPairingByUserCode(rawUserCode);
-        if (!request.isPending() || request.isExpired(Instant.now())) {
-            throw new ResponseStatusException(HttpStatus.GONE, "pairing_expired");
+        String rateKey = "pending:" + rawUserCode;
+        rateLimiter.checkAllowed(rateKey);
+        try {
+            PairingRequest request = findPairingByUserCode(rawUserCode);
+            if (!request.isPending() || request.isExpired(Instant.now())) {
+                rateLimiter.recordFailure(rateKey);
+                throw new ResponseStatusException(HttpStatus.GONE, "pairing_expired");
+            }
+            rateLimiter.recordSuccess(rateKey);
+            return request;
+        } catch (ResponseStatusException e) {
+            rateLimiter.recordFailure(rateKey);
+            throw e;
         }
-        return request;
     }
 
-    /** pairing requests are noise once their moment has passed, answered or not */
     @Scheduled(fixedDelayString = "${teilen.auth.sweep-interval-ms:60000}")
     @Transactional
     public void sweepPairings() {
@@ -292,13 +335,6 @@ public class AuthService {
                 .toList();
     }
 
-    /**
-     * Pulls a device's token.
-     *
-     * <p>A device may drop itself, which is how signing out actually unpairs: the account just has
-     * to have another way in, or revoking the last one would leave nobody able to approve the next
-     * pairing. That is the whole rule — sign out, and everything else follows.
-     */
     @Transactional
     public void revokeDevice(UUID userId, UUID deviceId, UUID revokingDeviceId) {
         Device device = devices.findById(deviceId)
@@ -314,7 +350,12 @@ public class AuthService {
         log.info("{} revoked device {}", findUser(userId).label(), device.getName());
     }
 
-    /** the token is valid, so note that this device is alive — at most one write every 5 minutes */
+    @Transactional
+    public void revokeOtherDevices(UUID userId, UUID currentDeviceId) {
+        devices.deleteByUserIdAndIdNot(userId, currentDeviceId);
+        log.info("Revoked all other devices for user {} except {}", userId, currentDeviceId);
+    }
+
     @Transactional
     public void touch(UUID deviceId) {
         Instant now = Instant.now();
@@ -323,7 +364,6 @@ public class AuthService {
 
     // ------------------------------------------------------------------ helpers
 
-    /** resolves a bearer token to the device it belongs to; null when it is not one of ours */
     @Transactional(readOnly = true)
     public AuthenticatedUser authenticate(String token) {
         if (token == null || token.isBlank()) {
@@ -337,16 +377,18 @@ public class AuthService {
         if (user == null) {
             return null;
         }
-        return new AuthenticatedUser(user.getId(), device.getId(), user.getUsername());
+        return new AuthenticatedUser(user.getId(), device.getId(), user.getUsername(), device.getDevicePublicKey());
     }
 
-    private SessionResponse pairDevice(User user, DeviceType type, String rawDeviceName, Instant now) {
+    private SessionResponse pairDevice(User user, DeviceType type, String rawDeviceName,
+                                       String devicePublicKey, String ipAddress, String platform, Instant now) {
         String name = clean(rawDeviceName, 120);
         if (name.isBlank()) {
             name = type == DeviceType.PHONE ? "phone" : "browser";
         }
         String token = Tokens.newToken();
-        Device device = new Device(UUID.randomUUID(), user.getId(), type, name, Tokens.hash(token), now);
+        Device device = new Device(UUID.randomUUID(), user.getId(), type, name, Tokens.hash(token),
+                clean(devicePublicKey, 200), clean(ipAddress, 64), clean(platform, 160), now);
         devices.save(device);
         return new SessionResponse(token, device.getId(), device.getName(), UserResponse.from(user));
     }
@@ -378,7 +420,6 @@ public class AuthService {
         return username;
     }
 
-    /** one line, no control characters, no longer than asked: these are shown in a device list */
     private static String clean(String raw, int max) {
         if (raw == null) {
             return null;
@@ -391,7 +432,6 @@ public class AuthService {
         return value == null ? "" : value;
     }
 
-    /** {@code teilen://pair?code=K7PM-3XQD}: the phone's camera opens this and the app claims it */
     public static String pairingUri(String rawUserCode) {
         return "teilen://pair?code=" + Tokens.formatUserCode(rawUserCode);
     }

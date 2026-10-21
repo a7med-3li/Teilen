@@ -21,7 +21,11 @@ public record LoginRequest(
         String deviceName,
 
         /** PHONE | WEB, optional (defaults to PHONE) */
-        String deviceType) {
+        String deviceType,
+
+        /** Ed25519 or hardware-backed device public key for DPoP device binding */
+        @Size(max = 200, message = "devicePublicKey must be at most 200 characters")
+        String devicePublicKey) {
 
     /** Legacy accessor for backward compatibility */
     public String phone() {

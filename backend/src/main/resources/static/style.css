@@ -1421,3 +1421,450 @@ button.danger:hover {
     gap: 5px;
 }
 
+
+
+/* ==========================================================================
+   UPGRADES: Multi-Session Rooms, Unlimited Scrollable Cards & Top Action Bar
+   ========================================================================== */
+
+/* Multi-Session Rooms Bar */
+.session-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 6px 10px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+}
+
+.session-bar-scroll {
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    gap: 6px;
+    padding: 2px 0;
+    scrollbar-width: none;
+}
+.session-bar-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.session-pills {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.session-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+
+.session-pill:hover {
+    background: var(--card-hover);
+    color: var(--fg);
+}
+
+.session-pill.active {
+    background: var(--accent-tint);
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    font-weight: 600;
+}
+
+.session-pill-badge {
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1px 6px;
+    border-radius: var(--radius-full);
+}
+
+.session-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-pill-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line);
+    background: var(--card-hover);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-pill-action:hover {
+    border-color: var(--accent);
+    color: var(--fg);
+}
+
+/* Unified Composer Card with Unlimited Scrollable Text */
+.composer-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-sm);
+}
+
+#compose-input {
+    width: 100%;
+    max-height: 260px;
+    min-height: 54px;
+    overflow-y: auto;
+    resize: vertical;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 14.5px;
+    line-height: 1.5;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+#compose-input:focus {
+    border-color: var(--accent);
+}
+
+.composer-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.ttl-pills-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg);
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line);
+}
+.ttl-label {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 0 4px;
+}
+.ttl-pill {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 11.5px;
+    padding: 3px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+.ttl-pill:hover {
+    color: var(--fg);
+}
+.ttl-pill.active {
+    background: var(--accent);
+    color: #000000;
+    font-weight: 700;
+}
+
+.composer-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+.btn-attach {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    background: var(--card-hover);
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.btn-attach:hover {
+    border-color: var(--accent);
+    color: var(--fg);
+}
+.btn-send {
+    padding: 7px 16px;
+    background: var(--accent);
+    color: #000000;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.btn-send:hover {
+    background: var(--accent-hover);
+}
+
+/* Live Direct LAN P2P Telemetry */
+.telemetry-card {
+    background: color-mix(in srgb, var(--lan) 10%, var(--card));
+    border: 1px solid color-mix(in srgb, var(--lan) 40%, var(--line));
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    animation: cardIn 200ms ease-out;
+}
+.telemetry-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.telemetry-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--fg);
+}
+.telemetry-icon {
+    font-size: 16px;
+}
+.telemetry-badge {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--lan);
+    background: var(--lan-tint);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in srgb, var(--lan) 30%, transparent);
+}
+.telemetry-bar-wrap {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    margin: 8px 0;
+}
+.telemetry-bar {
+    height: 100%;
+    background: var(--lan);
+    transition: width 0.2s ease;
+}
+.telemetry-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+}
+.telemetry-speed {
+    color: var(--lan);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.btn-telemetry-cancel {
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    border-radius: var(--radius-sm);
+    padding: 3px 9px;
+    font-size: 11.5px;
+    cursor: pointer;
+}
+.btn-telemetry-cancel:hover {
+    background: var(--danger-tint);
+}
+
+/* Refactored Feed Card & Sticky Top Action Header */
+.card-head {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    margin-bottom: 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.card-head-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.card-title-snippet {
+    color: var(--fg);
+    font-weight: 600;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+.card-head-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.btn-head-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line);
+    background: var(--card-hover);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.btn-head-action:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+}
+.btn-head-action.copied {
+    color: var(--lan);
+    border-color: var(--lan);
+}
+
+/* Scrollable Unlimited Text Body */
+.card-body {
+    padding: 12px 14px;
+    position: relative;
+}
+
+.card-text-scroll {
+    max-height: 280px;
+    overflow-y: auto;
+    font-size: 14.5px;
+    line-height: 1.6;
+    word-break: break-word;
+    position: relative;
+    padding-bottom: 8px;
+}
+
+.card-text-scroll.expanded {
+    max-height: none;
+}
+
+.card-text-scroll.code-mode {
+    font-family: var(--font-mono);
+    white-space: pre-wrap;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line);
+    font-size: 13px;
+}
+
+.card-bottom-fade {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 30px;
+    background: linear-gradient(to top, var(--card), transparent);
+    pointer-events: none;
+    opacity: 0.85;
+}
+
+/* Modals */
+.modal-veil {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 16px;
+}
+.modal-panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    max-width: 440px;
+    width: 100%;
+    box-shadow: var(--shadow-lg);
+    animation: cardIn 150ms ease-out;
+}
+.modal-panel h3 {
+    margin: 0 0 6px 0;
+    font-size: 18px;
+}
+.modal-desc {
+    margin: 0 0 16px 0;
+    font-size: 13px;
+    color: var(--muted);
+}
+.modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.danger-outline {
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    border-radius: var(--radius-sm);
+    padding: 7px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.danger-outline:hover {
+    background: var(--danger-tint);
+}
+.account-actions-row {
+    margin: 14px 0;
+}

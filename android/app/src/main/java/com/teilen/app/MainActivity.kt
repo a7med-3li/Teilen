@@ -29,6 +29,7 @@ import android.widget.ArrayAdapter
 import android.widget.BaseAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
@@ -41,6 +42,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import com.google.zxing.BarcodeFormat
+import com.journeyapps.barcodescanner.BarcodeEncoder
 import com.google.zxing.integration.android.IntentIntegrator
 import java.net.HttpURLConnection
 import java.net.URL
@@ -109,9 +112,15 @@ class MainActivity : Activity() {
     private lateinit var ttlPill1h: TextView
     private lateinit var ttlPill4h: TextView
     private lateinit var ttlPill24h: TextView
+    private lateinit var ttlPillCustom: TextView
     private lateinit var spinner: Spinner
     private lateinit var send: Button
     private lateinit var status: TextView
+
+    // Multi-Session Spaces
+    private lateinit var sessionScrollView: View
+    private lateinit var sessionPillContainer: LinearLayout
+    private val currentSessions = ArrayList<TeilenApi.SessionInfo>()
 
     // Tab 2: Feed
     private lateinit var feedList: ListView
@@ -198,6 +207,7 @@ class MainActivity : Activity() {
         account.render()
 
         takeHandedOverText(intent)
+        checkDeepLink(intent)
 
         if (savedInstanceState == null) {
             startLaunchAnimation()
@@ -378,6 +388,9 @@ class MainActivity : Activity() {
         ttlPill1h = findViewById(R.id.ttl_pill_1h)
         ttlPill4h = findViewById(R.id.ttl_pill_4h)
         ttlPill24h = findViewById(R.id.ttl_pill_24h)
+        ttlPillCustom = findViewById(R.id.ttl_pill_custom)
+        sessionScrollView = findViewById(R.id.session_scroll_view)
+        sessionPillContainer = findViewById(R.id.session_pill_container)
         spinner = findViewById(R.id.ttl)
         send = findViewById(R.id.send)
         status = findViewById(R.id.status)
@@ -527,6 +540,7 @@ class MainActivity : Activity() {
         ttlPill1h.setOnClickListener { selectTtl(3600L, it) }
         ttlPill4h.setOnClickListener { selectTtl(14400L, it) }
         ttlPill24h.setOnClickListener { selectTtl(86400L, it) }
+        ttlPillCustom.setOnClickListener { showCustomTtlDialog() }
 
         selectTtl(3600L, ttlPill1h)
     }
@@ -551,11 +565,73 @@ class MainActivity : Activity() {
             )
             pill.setTypeface(null, if (selected) Typeface.BOLD else Typeface.NORMAL)
         }
+        ttlPillCustom.setBackgroundResource(android.R.color.transparent)
+        ttlPillCustom.setTextColor(getColor(R.color.pill_unselected_text))
+        ttlPillCustom.setTypeface(null, Typeface.NORMAL)
+        ttlPillCustom.text = "Custom"
+    }
+
+    private fun showCustomTtlDialog() {
+        performHaptic(ttlPillCustom, HapticFeedbackConstants.CLOCK_TICK)
+        val input = EditText(this).apply {
+            hint = "Minutes (e.g. 90)"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText("90")
+        }
+        val container = FrameLayout(this).apply {
+            setPadding(48, 24, 48, 12)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Set Custom Expiration")
+            .setMessage("Enter the item lifetime in minutes (e.g. 90 for 1.5 hours):")
+            .setView(container)
+            .setPositiveButton("Set") { _, _ ->
+                val minutes = input.text.toString().toLongOrNull() ?: 90L
+                val ttlSec = (minutes * 60L).coerceIn(60L, 30L * 86400L)
+                selectCustomTtl(ttlSec)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun selectCustomTtl(seconds: Long) {
+        selectedTtlSeconds = seconds
+        val pills = listOf(ttlPill10m, ttlPill30m, ttlPill1h, ttlPill4h, ttlPill24h)
+        for (pill in pills) {
+            pill.setBackgroundResource(android.R.color.transparent)
+            pill.setTextColor(getColor(R.color.pill_unselected_text))
+            pill.setTypeface(null, Typeface.NORMAL)
+        }
+        ttlPillCustom.setBackgroundResource(R.drawable.bg_segmented_selected)
+        ttlPillCustom.setTextColor(getColor(R.color.accent))
+        ttlPillCustom.setTypeface(null, Typeface.BOLD)
+        val mins = seconds / 60
+        ttlPillCustom.text = when {
+            mins < 60 -> "${mins}m"
+            mins < 1440 -> "${mins / 60}h"
+            else -> "${mins / 1440}d"
+        }
     }
 
     // ------------------------------------------------------------- Tab 1: Send Composer
 
     private fun setupSendTab() {
+        content.movementMethod = android.text.method.ScrollingMovementMethod.getInstance()
+        content.setOnTouchListener { v, event ->
+            if (v.id == R.id.content) {
+                when (event.action and android.view.MotionEvent.ACTION_MASK) {
+                    android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
+                        v.parent.requestDisallowInterceptTouchEvent(true)
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        v.parent.requestDisallowInterceptTouchEvent(false)
+                    }
+                }
+            }
+            false
+        }
+
         modePillText.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
             setSendMode(SendMode.TEXT)
@@ -675,8 +751,13 @@ class MainActivity : Activity() {
         }
         val scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
         if (scanResult != null) {
-            if (scanResult.contents != null) {
-                account.handleApproveCode(scanResult.contents)
+            val content = scanResult.contents
+            if (content != null) {
+                if (content.startsWith("teilen://session/join") || (content.startsWith("teilen://session") && content.contains("code="))) {
+                    handleSessionJoinUri(Uri.parse(content))
+                } else {
+                    account.handleApproveCode(content)
+                }
             }
             return
         }
@@ -686,7 +767,7 @@ class MainActivity : Activity() {
         val picked = pickedUris(data)
         if (picked.isEmpty()) return
 
-        // Pre-flight Size Check (> 30 MB)
+        // Tiered Size Policy: files <= 30 MB dual-path; files > 30 MB Direct LAN Only
         val oversized = picked.mapNotNull { uri ->
             val size = TeilenApi.declaredSize(this, uri)
             val name = TeilenApi.displayName(this, uri)
@@ -698,12 +779,8 @@ class MainActivity : Activity() {
         if (oversized.isNotEmpty()) {
             val (name, size) = oversized.first()
             fileErrorBox.visibility = View.VISIBLE
-            fileErrorText.text = getString(
-                R.string.file_too_large_error,
-                "$name (${TeilenApi.humanSize(size)})"
-            )
-            performErrorHaptic(fileErrorBox)
-            return
+            fileErrorText.text = "⚡ Direct LAN Only · $name (${TeilenApi.humanSize(size)}) will stream peer-to-peer without server storage."
+            fileErrorText.setTextColor(getColor(R.color.lan_active))
         } else {
             fileErrorBox.visibility = View.GONE
         }
@@ -784,9 +861,10 @@ class MainActivity : Activity() {
                     text.startsWith("https://", ignoreCase = true) ||
                     android.util.Patterns.WEB_URL.matcher(text).matches()
         val itemType = if (isUrl) "LINK" else "TEXT"
+        val activeSession = Session.activeSessionId(this)
 
         setBusy(true)
-        TeilenApi.send(url, Session.token(this), text, selectedTtlSeconds, itemType) { ok, message ->
+        TeilenApi.send(url, Session.token(this), text, selectedTtlSeconds, itemType, activeSession) { ok, message ->
             setBusy(false)
             when {
                 ok -> {
@@ -818,6 +896,51 @@ class MainActivity : Activity() {
 
         val url = Server.normalize(server.text.toString())
         Server.set(this, url)
+        val activeSession = Session.activeSessionId(this)
+
+        // Tiered Transfer: Single file > 30 MB is Direct LAN Only
+        val firstUri = selectedFiles.first()
+        val declared = TeilenApi.declaredSize(this, firstUri) ?: 0L
+        if (selectedFiles.size == 1 && declared > TeilenApi.MAX_UPLOAD_BYTES) {
+            val name = TeilenApi.displayName(this, firstUri)
+            val mime = contentResolver.getType(firstUri) ?: "application/octet-stream"
+
+            setBusy(true)
+            showFileStatus("⚡ Direct LAN P2P: Connecting to peer...", false)
+            fileProgress.visibility = View.VISIBLE
+            fileProgress.progress = 0
+
+            val engine = LanTransferEngine(this)
+            val payload = LanTransferEngine.Payload(name, mime, declared) {
+                contentResolver.openInputStream(firstUri) ?: throw java.io.FileNotFoundException("cannot open $name")
+            }
+            engine.attempt(
+                payload = payload,
+                onProgress = { written, total ->
+                    val pct = if (total > 0) ((written * 100) / total).toInt() else 0
+                    fileProgress.progress = pct
+                    showFileStatus("⚡ Direct LAN P2P · ${TeilenApi.humanSize(written)} / ${TeilenApi.humanSize(total)} ($pct%)", false)
+                }
+            ) { sent ->
+                setBusy(false)
+                fileProgress.visibility = View.GONE
+                if (sent) {
+                    showFileStatus(getString(R.string.file_sent, name) + " (⚡ Direct LAN P2P)", false)
+                    Toast.makeText(this, "Transferred via Direct LAN (0 server bytes used)", Toast.LENGTH_SHORT).show()
+                    clearSelectedFiles()
+                    if (currentTab == Tab.FEED) refreshFeed()
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("Direct LAN Peer Unavailable")
+                        .setMessage("Files over 30 MB transfer directly device-to-device for free without server storage. Make sure the receiving device is open on the same Wi-Fi/Hotspot.")
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                    showFileStatus("Direct LAN peer unreachable. Open receiver on same Wi-Fi.", true)
+                }
+            }
+            return
+        }
+
         setBusy(true)
         showFileStatus(getString(R.string.uploading, TeilenApi.displayName(this, selectedFiles.first())), false)
         fileProgress.visibility = View.VISIBLE
@@ -829,6 +952,7 @@ class MainActivity : Activity() {
             token = Session.token(this),
             uris = ArrayList(selectedFiles),
             ttlSeconds = selectedTtlSeconds,
+            sessionId = activeSession,
             onProgress = { index, count, written, total ->
                 if (total != null && total > 0) {
                     fileProgress.progress = ((written * 100) / total).toInt()
@@ -915,7 +1039,8 @@ class MainActivity : Activity() {
         if (!silent && feedAdapter.count == 0) {
             feedSpinner.visibility = View.VISIBLE
         }
-        TeilenApi.fetchItems(Server.get(this), Session.token(this)) { items, error ->
+        val activeSession = Session.activeSessionId(this)
+        TeilenApi.fetchItems(Server.get(this), Session.token(this), sessionId = activeSession) { items, error ->
             feedLoading = false
             feedSpinner.visibility = View.GONE
             if (error != null) {
@@ -1161,6 +1286,7 @@ class MainActivity : Activity() {
             setWatching(false)
         }
         takeHandedOverText(intent)
+        checkDeepLink(intent)
     }
 
     private fun takeHandedOverText(intent: Intent?) {
@@ -1193,6 +1319,11 @@ class MainActivity : Activity() {
 
         cardClipboard.visibility = if (paired) View.VISIBLE else View.GONE
 
+        sessionScrollView.visibility = if (paired) View.VISIBLE else View.GONE
+        if (paired) {
+            loadSessions()
+        }
+
         headerSessionBadge.visibility = if (paired) View.VISIBLE else View.GONE
         if (paired) {
             headerSessionBadge.text = Session.phone(this) ?: getString(R.string.signed_in)
@@ -1223,6 +1354,8 @@ class MainActivity : Activity() {
 
     private inner class InlineFeedAdapter : BaseAdapter() {
         private val rows = ArrayList<FeedItem>()
+        private val codeModes = HashMap<String, Boolean>()
+        private val expandedModes = HashMap<String, Boolean>()
 
         fun replace(items: List<FeedItem>) {
             rows.clear()
@@ -1247,14 +1380,15 @@ class MainActivity : Activity() {
             val titleText = view.findViewById<TextView>(R.id.feed_title)
             val thumb = view.findViewById<ImageView>(R.id.feed_thumb)
 
-            val btnCopy = view.findViewById<Button>(R.id.feed_action_copy)
-            val btnOpen = view.findViewById<Button>(R.id.feed_action_open)
-            val btnDownload = view.findViewById<Button>(R.id.feed_action_download)
             val btnExtend = view.findViewById<Button>(R.id.feed_action_extend)
+            val btnCopy = view.findViewById<Button>(R.id.feed_action_copy)
+            val btnDownload = view.findViewById<Button>(R.id.feed_action_download)
+            val btnOpen = view.findViewById<Button>(R.id.feed_action_open)
+            val btnCode = view.findViewById<Button>(R.id.feed_action_code)
+            val btnExpand = view.findViewById<Button>(R.id.feed_action_expand)
             val btnDelete = view.findViewById<Button>(R.id.feed_action_delete)
 
             kindBadge.text = item.kind.uppercase()
-            titleText.text = item.title
             metaText.text = item.meta()
 
             // Calculate countdown ring progress
@@ -1266,7 +1400,7 @@ class MainActivity : Activity() {
             val ratio = (remaining.toFloat() / totalSpan.toFloat()).coerceIn(0f, 1f)
             ring.progress = ratio
 
-            // Image thumbnail
+            // Thumbnail for images
             val url = item.blobUrl(Server.get(this@MainActivity))
             if (item.isImage && url != null) {
                 thumb.visibility = View.VISIBLE
@@ -1277,26 +1411,75 @@ class MainActivity : Activity() {
                 thumb.visibility = View.GONE
             }
 
-            // Copy Action
-            btnCopy.setOnClickListener {
-                performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
-                val cm = getSystemService(ClipboardManager::class.java)
-                cm?.setPrimaryClip(ClipData.newPlainText("Teilen", item.content))
-                Toast.makeText(this@MainActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-            }
+            // Body content display (untrimmed, full content)
+            titleText.text = item.content
 
-            // Open Action
-            if (item.hasBlob || item.type == "LINK") {
-                btnOpen.visibility = View.VISIBLE
-                btnOpen.setOnClickListener {
-                    performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-                    openItem(item)
+            // Code Mode toggle (<>)
+            val isCode = codeModes[item.id] == true
+            if (item.type == "TEXT") {
+                btnCode.visibility = View.VISIBLE
+                if (isCode) {
+                    titleText.typeface = Typeface.MONOSPACE
+                    titleText.setBackgroundResource(R.drawable.bg_input)
+                    titleText.setPadding(16, 12, 16, 12)
+                    btnCode.setTextColor(getColor(R.color.accent))
+                } else {
+                    titleText.typeface = Typeface.DEFAULT
+                    titleText.background = null
+                    titleText.setPadding(0, 0, 0, 0)
+                    btnCode.setTextColor(getColor(R.color.text_secondary))
+                }
+                btnCode.setOnClickListener {
+                    performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+                    codeModes[item.id] = !isCode
+                    notifyDataSetChanged()
                 }
             } else {
-                btnOpen.visibility = View.GONE
+                btnCode.visibility = View.GONE
+                titleText.typeface = Typeface.DEFAULT
+                titleText.background = null
+                titleText.setPadding(0, 0, 0, 0)
             }
 
-            // Download Action (for blobs)
+            // Expand / Full View toggle
+            val isLong = item.type == "TEXT" && (item.content.length > 200 || item.content.lines().size > 4)
+            val isExpanded = expandedModes[item.id] == true
+            if (isLong) {
+                btnExpand.visibility = View.VISIBLE
+                if (isExpanded) {
+                    titleText.maxLines = Integer.MAX_VALUE
+                    titleText.ellipsize = null
+                    btnExpand.text = "Fold"
+                } else {
+                    titleText.maxLines = 6
+                    titleText.ellipsize = android.text.TextUtils.TruncateAt.END
+                    btnExpand.text = "Full"
+                }
+                btnExpand.setOnClickListener {
+                    performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+                    expandedModes[item.id] = !isExpanded
+                    notifyDataSetChanged()
+                }
+            } else {
+                btnExpand.visibility = View.GONE
+                titleText.maxLines = Integer.MAX_VALUE
+                titleText.ellipsize = null
+            }
+
+            // Copy Action (Text and Links)
+            if (!item.hasBlob) {
+                btnCopy.visibility = View.VISIBLE
+                btnCopy.setOnClickListener {
+                    performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
+                    val cm = getSystemService(ClipboardManager::class.java)
+                    cm?.setPrimaryClip(ClipData.newPlainText("Teilen", item.content))
+                    Toast.makeText(this@MainActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                btnCopy.visibility = View.GONE
+            }
+
+            // Download Action (Files, Images, PDFs, Audio)
             if (item.hasBlob) {
                 btnDownload.visibility = View.VISIBLE
                 btnDownload.setOnClickListener {
@@ -1307,7 +1490,18 @@ class MainActivity : Activity() {
                 btnDownload.visibility = View.GONE
             }
 
-            // Extend Action (+1h)
+            // Open Action (Links and Blobs)
+            if (item.hasBlob || item.type == "LINK") {
+                btnOpen.visibility = View.VISIBLE
+                btnOpen.setOnClickListener {
+                    performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+                    openItem(item)
+                }
+            } else {
+                btnOpen.visibility = View.GONE
+            }
+
+            // Extend Action (+1h on tap, Custom TTL on long-click)
             btnExtend.setOnClickListener {
                 performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
                 btnExtend.isEnabled = false
@@ -1320,6 +1514,11 @@ class MainActivity : Activity() {
                         Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
                     }
                 }
+            }
+            btnExtend.setOnLongClickListener {
+                performHaptic(it, HapticFeedbackConstants.LONG_PRESS)
+                showItemCustomTtlDialog(item)
+                true
             }
 
             // Delete Action
@@ -1346,6 +1545,290 @@ class MainActivity : Activity() {
 
             return view
         }
+    }
+
+    // ------------------------------------------------------------- Multi-Session Spaces
+
+    private fun loadSessions() {
+        if (!Session.isPaired(this)) return
+        val url = Server.get(this)
+        val token = Session.token(this)
+        TeilenApi.fetchSessions(url, token) { sessions, _ ->
+            if (sessions != null) {
+                currentSessions.clear()
+                currentSessions.addAll(sessions)
+                renderSessionPills()
+            }
+        }
+    }
+
+    private fun renderSessionPills() {
+        sessionPillContainer.removeAllViews()
+        val activeId = Session.activeSessionId(this)
+
+        // 1. Personal Vault Pill
+        val personalSession = currentSessions.firstOrNull { it.isPersonal }
+        val isPersonalActive = activeId == null || (personalSession != null && activeId == personalSession.id)
+        val personalPill = createPillView("🔒 Personal", isPersonalActive) {
+            Session.setActiveSessionId(this, personalSession?.id)
+            renderSessionPills()
+            refreshFeed()
+        }
+        sessionPillContainer.addView(personalPill)
+
+        // 2. Shared Group Sessions
+        currentSessions.filter { !it.isPersonal }.forEach { session ->
+            val isActive = activeId == session.id
+            val label = "👥 ${session.name} (${session.memberCount})"
+            val pill = createPillView(label, isActive) {
+                Session.setActiveSessionId(this, session.id)
+                renderSessionPills()
+                refreshFeed()
+            }
+            sessionPillContainer.addView(pill)
+        }
+
+        // 3. "+ Room" Action Pill
+        val addPill = createActionPillView("+ Room") {
+            showCreateRoomDialog()
+        }
+        sessionPillContainer.addView(addPill)
+
+        // 4. "Share Room" and "Leave Room" Action Pills (if active session is non-personal)
+        val activeGroupSession = currentSessions.firstOrNull { !it.isPersonal && it.id == activeId }
+        if (activeGroupSession != null) {
+            val sharePill = createActionPillView("🔗 Share") {
+                showShareRoomDialog(activeGroupSession)
+            }
+            sessionPillContainer.addView(sharePill)
+
+            val leavePill = createActionPillView("✕ Leave") {
+                showLeaveRoomDialog(activeGroupSession)
+            }
+            sessionPillContainer.addView(leavePill)
+        }
+    }
+
+    private fun createPillView(label: String, active: Boolean, onClick: () -> Unit): View {
+        return TextView(this).apply {
+            text = label
+            textSize = 11f
+            setTypeface(null, if (active) Typeface.BOLD else Typeface.NORMAL)
+            setTextColor(getColor(if (active) R.color.accent else R.color.pill_unselected_text))
+            setBackgroundResource(if (active) R.drawable.bg_segmented_selected else R.drawable.bg_segmented_container)
+            setPadding(24, 10, 24, 10)
+            val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = 16
+            }
+            layoutParams = params
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                performHaptic(this, HapticFeedbackConstants.CLOCK_TICK)
+                onClick()
+            }
+        }
+    }
+
+    private fun createActionPillView(label: String, onClick: () -> Unit): View {
+        return TextView(this).apply {
+            text = label
+            textSize = 11f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(getColor(R.color.accent))
+            setBackgroundResource(R.drawable.bg_input)
+            setPadding(20, 10, 20, 10)
+            val params = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = 16
+            }
+            layoutParams = params
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                performHaptic(this, HapticFeedbackConstants.CLOCK_TICK)
+                onClick()
+            }
+        }
+    }
+
+    private fun showCreateRoomDialog() {
+        val input = EditText(this).apply {
+            hint = "Room Name (e.g. Study Group, Project Team)"
+            setSingleLine(true)
+        }
+        val container = FrameLayout(this).apply {
+            setPadding(48, 24, 48, 12)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Create Space / Room")
+            .setView(container)
+            .setPositiveButton("Create") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotBlank()) {
+                    val url = Server.get(this)
+                    val token = Session.token(this)
+                    TeilenApi.createSession(url, token, name) { created, err ->
+                        if (created != null) {
+                            SecureKeyManager.ensureSessionKey(this, created.id)
+                            Session.setActiveSessionId(this, created.id)
+                            Toast.makeText(this, "Room '${created.name}' created", Toast.LENGTH_SHORT).show()
+                            loadSessions()
+                            refreshFeed()
+                        } else {
+                            Toast.makeText(this, err ?: "Failed to create room", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showShareRoomDialog(session: TeilenApi.SessionInfo) {
+        val url = Server.get(this)
+        val token = Session.token(this)
+        TeilenApi.generateSessionInvite(url, token, session.id) { code, err ->
+            if (code != null) {
+                val key = SecureKeyManager.ensureSessionKey(this, session.id)
+                val keyB64Url = android.util.Base64.encodeToString(
+                    key,
+                    android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP
+                )
+                val inviteUri = "teilen://session/join?code=$code#key=$keyB64Url"
+
+                val qrView = ImageView(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(400, 400).apply {
+                        gravity = android.view.Gravity.CENTER_HORIZONTAL
+                    }
+                }
+                try {
+                    val bitmap = BarcodeEncoder().encodeBitmap(inviteUri, BarcodeFormat.QR_CODE, 400, 400)
+                    qrView.setImageBitmap(bitmap)
+                } catch (_: Exception) {}
+
+                val textCode = TextView(this).apply {
+                    text = "Code: $code\n\nScan QR or copy invite link to join '${session.name}'."
+                    textSize = 13f
+                    gravity = android.view.Gravity.CENTER
+                    setPadding(0, 16, 0, 0)
+                }
+
+                val layout = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(32, 24, 32, 16)
+                    addView(qrView)
+                    addView(textCode)
+                }
+
+                AlertDialog.Builder(this)
+                    .setTitle("Share Room: ${session.name}")
+                    .setView(layout)
+                    .setPositiveButton("Copy Link") { _, _ ->
+                        val cm = getSystemService(ClipboardManager::class.java)
+                        cm?.setPrimaryClip(ClipData.newPlainText("Teilen Room Invite", inviteUri))
+                        Toast.makeText(this, "Invite link copied to clipboard", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("Close", null)
+                    .show()
+            } else {
+                Toast.makeText(this, err ?: "Could not generate invite code", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showLeaveRoomDialog(session: TeilenApi.SessionInfo) {
+        AlertDialog.Builder(this)
+            .setTitle("Leave Room '${session.name}'?")
+            .setMessage("You will lose access to items in this room unless re-invited.")
+            .setPositiveButton("Leave") { _, _ ->
+                val url = Server.get(this)
+                val token = Session.token(this)
+                TeilenApi.deleteSession(url, token, session.id) { _, msg ->
+                    Session.setActiveSessionId(this, null)
+                    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                    loadSessions()
+                    refreshFeed()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun checkDeepLink(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme.equals("teilen", ignoreCase = true) && data.host.equals("session", ignoreCase = true)) {
+            handleSessionJoinUri(data)
+        }
+    }
+
+    private fun handleSessionJoinUri(uri: Uri) {
+        val code = uri.getQueryParameter("code")
+        if (code.isNullOrBlank()) {
+            Toast.makeText(this, "Invalid session invite code", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val fragment = uri.fragment
+        var keyBytes: ByteArray? = null
+        if (!fragment.isNullOrBlank() && fragment.startsWith("key=")) {
+            val keyStr = fragment.removePrefix("key=")
+            keyBytes = runCatching {
+                android.util.Base64.decode(keyStr, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+            }.getOrNull()
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Join Space / Room")
+            .setMessage("Do you want to join this shared space with code: $code?")
+            .setPositiveButton("Join") { _, _ ->
+                val url = Server.get(this)
+                val token = Session.token(this)
+                TeilenApi.joinSession(url, token, code) { session, err ->
+                    if (session != null) {
+                        if (keyBytes != null) {
+                            SecureKeyManager.setSessionKey(this, session.id, keyBytes)
+                        }
+                        Session.setActiveSessionId(this, session.id)
+                        Toast.makeText(this, "Joined '${session.name}'", Toast.LENGTH_LONG).show()
+                        loadSessions()
+                        refreshFeed()
+                    } else {
+                        Toast.makeText(this, err ?: "Failed to join room", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showItemCustomTtlDialog(item: FeedItem) {
+        val input = EditText(this).apply {
+            hint = "Minutes (e.g. 120)"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText("60")
+        }
+        val container = FrameLayout(this).apply {
+            setPadding(48, 24, 48, 12)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Edit Expiration (TTL)")
+            .setMessage("Set new expiration time in minutes from now for this item:")
+            .setView(container)
+            .setPositiveButton("Update") { _, _ ->
+                val minutes = input.text.toString().toLongOrNull() ?: 60L
+                val ttlSec = (minutes * 60L).coerceIn(60L, 30L * 86400L)
+                TeilenApi.updateItemTtl(Server.get(this), Session.token(this), item.id, ttlSec) { ok, msg ->
+                    if (ok) {
+                        Toast.makeText(this, "Expiration updated", Toast.LENGTH_SHORT).show()
+                        refreshFeed()
+                    } else {
+                        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun downloadItem(item: FeedItem) {

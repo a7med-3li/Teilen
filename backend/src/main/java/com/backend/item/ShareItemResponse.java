@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record ShareItemResponse(
         UUID id,
+        UUID sessionId,
         String type,
         String content,
         String mimeType,
@@ -20,6 +21,7 @@ public record ShareItemResponse(
     public static ShareItemResponse from(ShareItem item, String blobUrl) {
         return new ShareItemResponse(
                 item.getId(),
+                item.getSessionId(),
                 item.getType().name(),
                 item.getContent(),
                 item.getMimeType(),

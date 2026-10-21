@@ -327,6 +327,222 @@ object TeilenApi {
         }.apply { name = "teilen-auth" }.start()
     }
 
+    /**
+     * Revokes all other active sessions/devices for the current account.
+     */
+    fun revokeOtherDevices(baseUrl: String, token: String?, onDone: (ok: Boolean, message: String) -> Unit) {
+        Thread {
+            val result = try {
+                val connection = open(baseUrl, "/api/devices/others", token, "DELETE")
+                try {
+                    val status = connection.responseCode
+                    if (status in 200..299 || status == 204) {
+                        true to "All other devices signed out"
+                    } else if (status == 401) {
+                        false to UNPAIRED_MESSAGE
+                    } else {
+                        false to "server said $status"
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (e: Exception) {
+                false to (e.message ?: "network error")
+            }
+            main.post { onDone(result.first, result.second) }
+        }.apply { name = "teilen-revoke" }.start()
+    }
+
+    // ------------------------------------------------------------------ multi-sessions
+
+    data class SessionInfo(
+        val id: String,
+        val name: String,
+        val isPersonal: Boolean,
+        val role: String?,
+        val memberCount: Long,
+        val encryptedKey: String? = null
+    ) {
+        companion object {
+            fun parse(json: JSONObject): SessionInfo? {
+                val id = json.optString("id").takeIf { it.isNotBlank() } ?: return null
+                return SessionInfo(
+                    id = id,
+                    name = json.optString("name").ifBlank { "Personal" },
+                    isPersonal = json.optBoolean("isPersonal", false),
+                    role = json.optString("role").takeIf { it.isNotBlank() },
+                    memberCount = json.optLong("memberCount", 1L),
+                    encryptedKey = json.optString("encryptedKey").takeIf { it.isNotBlank() }
+                )
+            }
+        }
+    }
+
+    fun fetchSessions(baseUrl: String, token: String?, onResult: (List<SessionInfo>?, String?) -> Unit) {
+        Thread {
+            val result = try {
+                val connection = open(baseUrl, "/api/sessions", token, "GET")
+                val (status, text) = try {
+                    readBody(connection)
+                } finally {
+                    connection.disconnect()
+                }
+                when {
+                    status in 200..299 -> {
+                        val array = runCatching { JSONArray(text) }.getOrNull() ?: JSONArray()
+                        val list = (0 until array.length()).mapNotNull { i ->
+                            array.optJSONObject(i)?.let { SessionInfo.parse(it) }
+                        }
+                        list to null
+                    }
+                    status == 401 -> null to UNPAIRED_MESSAGE
+                    else -> null to "server said $status"
+                }
+            } catch (e: IOException) {
+                null to unreachable(baseUrl, e)
+            } catch (e: Exception) {
+                null to (e.message ?: e.javaClass.simpleName)
+            }
+            main.post { onResult(result.first, result.second) }
+        }.apply { this.name = "teilen-sessions" }.start()
+    }
+
+    fun createSession(
+        baseUrl: String,
+        token: String?,
+        name: String,
+        encryptedKey: String? = null,
+        onResult: (SessionInfo?, String?) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val body = JSONObject().put("name", name)
+                if (encryptedKey != null) {
+                    body.put("encryptedKey", encryptedKey)
+                }
+                val reply = postBlocking(baseUrl, "/api/sessions", token, body)
+                if (reply.ok && reply.body != null) {
+                    SessionInfo.parse(reply.body) to null
+                } else {
+                    null to reply.message
+                }
+            } catch (e: IOException) {
+                null to unreachable(baseUrl, e)
+            } catch (e: Exception) {
+                null to (e.message ?: e.javaClass.simpleName)
+            }
+            main.post { onResult(result.first, result.second) }
+        }.apply { this.name = "teilen-sessions" }.start()
+    }
+
+    fun generateSessionInvite(
+        baseUrl: String,
+        token: String?,
+        sessionId: String,
+        onResult: (code: String?, error: String?) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val reply = postBlocking(baseUrl, "/api/sessions/$sessionId/invite", token, JSONObject())
+                if (reply.ok && reply.body != null) {
+                    reply.str("inviteCode") to null
+                } else {
+                    null to reply.message
+                }
+            } catch (e: IOException) {
+                null to unreachable(baseUrl, e)
+            } catch (e: Exception) {
+                null to (e.message ?: e.javaClass.simpleName)
+            }
+            main.post { onResult(result.first, result.second) }
+        }.apply { this.name = "teilen-sessions" }.start()
+    }
+
+    fun joinSession(
+        baseUrl: String,
+        token: String?,
+        inviteCode: String,
+        encryptedKey: String? = null,
+        onResult: (SessionInfo?, String?) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val body = JSONObject().put("inviteCode", inviteCode)
+                if (encryptedKey != null) {
+                    body.put("encryptedKey", encryptedKey)
+                }
+                val reply = postBlocking(baseUrl, "/api/sessions/join", token, body)
+                if (reply.ok && reply.body != null) {
+                    SessionInfo.parse(reply.body) to null
+                } else {
+                    null to reply.message
+                }
+            } catch (e: IOException) {
+                null to unreachable(baseUrl, e)
+            } catch (e: Exception) {
+                null to (e.message ?: e.javaClass.simpleName)
+            }
+            main.post { onResult(result.first, result.second) }
+        }.apply { this.name = "teilen-sessions" }.start()
+    }
+
+    fun deleteSession(
+        baseUrl: String,
+        token: String?,
+        sessionId: String,
+        onDone: (ok: Boolean, message: String) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val connection = open(baseUrl, "/api/sessions/$sessionId", token, "DELETE")
+                try {
+                    val status = connection.responseCode
+                    if (status in 200..299 || status == 204) {
+                        true to "Session deleted"
+                    } else if (status == 401) {
+                        false to UNPAIRED_MESSAGE
+                    } else {
+                        false to "server said $status"
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (e: Exception) {
+                false to (e.message ?: "network error")
+            }
+            main.post { onDone(result.first, result.second) }
+        }.apply { name = "teilen-sessions" }.start()
+    }
+
+    fun leaveSession(
+        baseUrl: String,
+        token: String?,
+        sessionId: String,
+        userId: String,
+        onDone: (ok: Boolean, message: String) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val connection = open(baseUrl, "/api/sessions/$sessionId/members/$userId", token, "DELETE")
+                try {
+                    val status = connection.responseCode
+                    if (status in 200..299 || status == 204) {
+                        true to "Left session"
+                    } else if (status == 401) {
+                        false to UNPAIRED_MESSAGE
+                    } else {
+                        false to "server said $status"
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (e: Exception) {
+                false to (e.message ?: "network error")
+            }
+            main.post { onDone(result.first, result.second) }
+        }.apply { name = "teilen-sessions" }.start()
+    }
+
     // ------------------------------------------------------------------ items
 
     /**
@@ -335,10 +551,20 @@ object TeilenApi {
      *
      * @param onResult (items, error), always on the main thread; exactly one of the two is set
      */
-    fun fetchItems(baseUrl: String, token: String?, onResult: (List<FeedItem>?, String?) -> Unit) {
+    fun fetchItems(
+        baseUrl: String,
+        token: String?,
+        sessionId: String? = null,
+        onResult: (List<FeedItem>?, String?) -> Unit
+    ) {
         Thread {
             val result = try {
-                val connection = open(baseUrl, "/api/items", token, "GET")
+                val path = if (!sessionId.isNullOrBlank()) {
+                    "/api/items?sessionId=" + URLEncoder.encode(sessionId, "UTF-8")
+                } else {
+                    "/api/items"
+                }
+                val connection = open(baseUrl, path, token, "GET")
                 val (status, text) = try {
                     readBody(connection)
                 } finally {
@@ -422,6 +648,42 @@ object TeilenApi {
         }.apply { name = "teilen-extend" }.start()
     }
 
+    /**
+     * Sets a custom TTL for a feed item via PUT /api/v1/items/:id/ttl.
+     */
+    fun updateItemTtl(
+        baseUrl: String,
+        token: String?,
+        id: String,
+        ttlSeconds: Long,
+        onDone: (ok: Boolean, message: String) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val connection = open(baseUrl, "/api/v1/items/$id/ttl", token, "PUT")
+                try {
+                    connection.doOutput = true
+                    connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    val body = JSONObject().put("ttlSeconds", ttlSeconds)
+                    connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                    val status = connection.responseCode
+                    if (status in 200..299) {
+                        true to "updated"
+                    } else if (status == 401) {
+                        false to UNPAIRED_MESSAGE
+                    } else {
+                        false to "server said $status"
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (e: Exception) {
+                false to (e.message ?: "network error")
+            }
+            main.post { onDone(result.first, result.second) }
+        }.apply { name = "teilen-ttl" }.start()
+    }
+
     /** @param onResult (ok, message), always on the main thread */
     fun send(
         baseUrl: String,
@@ -429,6 +691,7 @@ object TeilenApi {
         content: String,
         ttlSeconds: Long,
         type: String? = null,
+        sessionId: String? = null,
         onResult: (ok: Boolean, message: String) -> Unit
     ) {
         Thread {
@@ -449,6 +712,9 @@ object TeilenApi {
                         .put("ttlSeconds", ttlSeconds)
                     if (type != null) {
                         body.put("type", type)
+                    }
+                    if (!sessionId.isNullOrBlank()) {
+                        body.put("sessionId", sessionId)
                     }
                     connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
                     finish(connection, "sent")
@@ -483,6 +749,7 @@ object TeilenApi {
         token: String?,
         uris: List<Uri>,
         ttlSeconds: Long,
+        sessionId: String? = null,
         onProgress: (index: Int, count: Int, written: Long, total: Long?) -> Unit,
         onDone: (BatchOutcome) -> Unit
     ) {
@@ -507,6 +774,7 @@ object TeilenApi {
                 uri = uri,
                 displayName = name,
                 ttlSeconds = ttlSeconds,
+                sessionId = sessionId,
                 onProgress = { written, total -> onProgress(index + 1, uris.size, written, total) },
                 onResult = { ok, message ->
                     if (ok) {
@@ -533,12 +801,13 @@ object TeilenApi {
         uri: Uri,
         displayName: String,
         ttlSeconds: Long,
+        sessionId: String? = null,
         onProgress: (written: Long, total: Long?) -> Unit,
         onResult: (ok: Boolean, message: String) -> Unit
     ) {
         Thread {
             val result = try {
-                uploadBlocking(baseUrl, token, sourceOf(context, uri, displayName), ttlSeconds) { written, total ->
+                uploadBlocking(baseUrl, token, sourceOf(context, uri, displayName), ttlSeconds, sessionId) { written, total ->
                     main.post { onProgress(written, total) }
                 }
             } catch (e: TooLargeException) {
@@ -570,6 +839,7 @@ object TeilenApi {
         mimes: List<String>,
         sizes: List<Long?>,
         ttlSeconds: Long,
+        sessionId: String? = null,
         onProgress: (index: Int, count: Int, written: Long, total: Long?) -> Unit,
         onDone: (BatchOutcome) -> Unit
     ) {
@@ -594,6 +864,7 @@ object TeilenApi {
                 mime = mimes.getOrElse(index) { "application/octet-stream" },
                 declaredSize = sizes.getOrNull(index),
                 ttlSeconds = ttlSeconds,
+                sessionId = sessionId,
                 onProgress = { written, total -> onProgress(index + 1, fds.size, written, total) },
                 onResult = { ok, message ->
                     if (ok) {
@@ -617,6 +888,7 @@ object TeilenApi {
         mime: String,
         declaredSize: Long?,
         ttlSeconds: Long,
+        sessionId: String? = null,
         onProgress: (written: Long, total: Long?) -> Unit,
         onResult: (ok: Boolean, message: String) -> Unit
     ) {
@@ -629,6 +901,7 @@ object TeilenApi {
                         ParcelFileDescriptor.AutoCloseInputStream(fd)
                     },
                     ttlSeconds = ttlSeconds,
+                    sessionId = sessionId,
                     onProgress = { written, total ->
                         main.post { onProgress(written, total) }
                     }
@@ -670,6 +943,7 @@ object TeilenApi {
         token: String?,
         source: Source,
         ttlSeconds: Long,
+        sessionId: String? = null,
         onProgress: (Long, Long?) -> Unit
     ): Pair<Boolean, String> {
         val declared = source.declaredSize
@@ -696,6 +970,9 @@ object TeilenApi {
         try {
             connection.outputStream.buffered().use { out ->
                 writePart(out, boundary, "ttlSeconds", ttlSeconds.toString())
+                if (!sessionId.isNullOrBlank()) {
+                    writePart(out, boundary, "sessionId", sessionId)
+                }
                 writeFileHeader(out, boundary, source.name, source.mime)
 
                 source.open().use { input ->

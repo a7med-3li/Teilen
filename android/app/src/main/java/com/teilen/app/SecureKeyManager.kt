@@ -50,6 +50,28 @@ object SecureKeyManager {
         write(context, KEY_MASTER, key)
     }
 
+    // ------------------------------------------------------------ session keys
+
+    fun getSessionKey(context: Context, sessionId: String): ByteArray? =
+        read(context, "session_key_$sessionId")
+
+    fun setSessionKey(context: Context, sessionId: String, key: ByteArray) {
+        write(context, "session_key_$sessionId", key)
+    }
+
+    fun ensureSessionKey(context: Context, sessionId: String?): ByteArray {
+        if (sessionId.isNullOrBlank()) {
+            return ensureMasterKey(context)
+        }
+        val existing = getSessionKey(context, sessionId)
+        if (existing != null) {
+            return existing
+        }
+        val fresh = PairingCrypto.randomBytes(32)
+        setSessionKey(context, sessionId, fresh)
+        return fresh
+    }
+
     // ------------------------------------------------------------- identity
 
     fun getIdentity(context: Context): Identity? =

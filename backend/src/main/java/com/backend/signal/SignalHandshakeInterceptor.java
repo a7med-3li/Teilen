@@ -33,6 +33,15 @@ public class SignalHandshakeInterceptor implements HandshakeInterceptor {
         }
         attributes.put(SignalWebSocketHandler.USER_ID, user.userId());
         attributes.put(SignalWebSocketHandler.DEVICE_ID, user.deviceId());
+        String query = request.getURI().getQuery();
+        if (query != null) {
+            for (String param : query.split("&")) {
+                String[] pair = param.split("=", 2);
+                if (pair.length == 2 && "sessionId".equalsIgnoreCase(pair[0])) {
+                    attributes.put(SignalWebSocketHandler.SESSION_ID, pair[1]);
+                }
+            }
+        }
         return true;
     }
 

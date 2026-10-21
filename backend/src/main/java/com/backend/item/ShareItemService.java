@@ -2,6 +2,7 @@ package com.backend.item;
 
 import com.backend.auth.domain.AuthenticatedUser;
 import com.backend.push.PushService;
+import com.backend.session.SessionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,9 +25,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Everything about a shared item, always in the context of the account that owns it: the owner is
- * passed in, never looked up, so there is no way to read somebody else's feed by forgetting a
- * filter.
+ * Everything about a shared item, scoped to a Session (Personal or Shared Room).
  */
 @Service
 public class ShareItemService {
@@ -42,6 +41,7 @@ public class ShareItemService {
     private final BlobStore blobStore;
     private final BlobLinks blobLinks;
     private final PushService pushService;
+    private final SessionService sessionService;
 
     private final long defaultTtlSeconds;
     private final long minTtlSeconds;
@@ -52,6 +52,7 @@ public class ShareItemService {
                             BlobStore blobStore,
                             BlobLinks blobLinks,
                             PushService pushService,
+                            SessionService sessionService,
                             @Value("${teilen.default-ttl-seconds:3600}") long defaultTtlSeconds,
                             @Value("${teilen.min-ttl-seconds:10}") long minTtlSeconds,
                             @Value("${teilen.max-ttl-seconds:86400}") long maxTtlSeconds) {
@@ -60,6 +61,7 @@ public class ShareItemService {
         this.blobStore = blobStore;
         this.blobLinks = blobLinks;
         this.pushService = pushService;
+        this.sessionService = sessionService;
         this.defaultTtlSeconds = defaultTtlSeconds;
         this.minTtlSeconds = minTtlSeconds;
         this.maxTtlSeconds = maxTtlSeconds;
@@ -70,27 +72,29 @@ public class ShareItemService {
         String content = request.content().strip();
         ShareItemType type = resolveType(request.type(), content);
         Duration ttl = resolveTtl(request.ttlSeconds());
+        UUID sessionId = resolveSessionId(userId, request.sessionId());
 
         Instant now = Instant.now();
-        ShareItem item = new ShareItem(UUID.randomUUID(), userId, type, content, now, now.plus(ttl));
+        ShareItem item = new ShareItem(UUID.randomUUID(), userId, sessionId, type, content, now, now.plus(ttl));
         repository.save(item);
 
-        log.info("{} created {} item {} (expires in {}s)", userId, type, item.getId(), ttl.toSeconds());
-        // no blob on a text item, so there is nothing to sign
-        afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.created(item, null)));
-        afterCommit(() -> pushService.notifyAvailable(userId));
+        log.info("{} created {} item {} in session {} (expires in {}s)", userId, type, item.getId(), sessionId, ttl.toSeconds());
+        broadcastToSession(sessionId, userId, ShareItemEvent.created(item, null));
         return ShareItemResponse.from(item, null);
     }
 
-    /**
-     * A shared file. The blob is written before the row is created, so a failure leaves neither.
-     */
     @Transactional
     public ShareItemResponse upload(UUID userId, MultipartFile file, Long requestedTtl) {
+        return upload(userId, file, requestedTtl, null);
+    }
+
+    @Transactional
+    public ShareItemResponse upload(UUID userId, MultipartFile file, Long requestedTtl, UUID requestedSessionId) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "no file in the upload");
         }
         String fileName = fileNameOf(file.getOriginalFilename());
+        UUID sessionId = resolveSessionId(userId, requestedSessionId);
 
         UUID id = UUID.randomUUID();
         BlobStore.Stored stored;
@@ -101,50 +105,54 @@ public class ShareItemService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "could not read the upload");
         }
 
-        // the client's label is a hint; the bytes decide, and the name is the tie-breaker
         ShareItemType type = ShareItemType.fromMime(file.getContentType(), fileName);
         Duration ttl = resolveTtl(requestedTtl);
 
         Instant now = Instant.now();
-        ShareItem item = new ShareItem(id, userId, type, fileName, stored.storageRef(),
+        ShareItem item = new ShareItem(id, userId, sessionId, type, fileName, stored.storageRef(),
                 file.getContentType(), stored.sizeBytes(), now, now.plus(ttl));
         repository.save(item);
 
-        log.info("{} uploaded {} item {} ({} bytes, expires in {}s)", userId, type, id,
-                stored.sizeBytes(), ttl.toSeconds());
+        log.info("{} uploaded {} item {} in session {} ({} bytes, expires in {}s)", userId, type, id,
+                sessionId, stored.sizeBytes(), ttl.toSeconds());
         String blobUrl = blobLinks.linkFor(id, item.getExpiresAt());
-        afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.created(item, blobUrl)));
-        afterCommit(() -> pushService.notifyAvailable(userId));
+        broadcastToSession(sessionId, userId, ShareItemEvent.created(item, blobUrl));
         return ShareItemResponse.from(item, blobUrl);
     }
 
     @Transactional(readOnly = true)
     public List<ShareItemResponse> listLive(UUID userId) {
-        return repository.findByUserIdAndExpiresAtAfterOrderByCreatedAtDesc(userId, Instant.now()).stream()
+        return listLive(userId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ShareItemResponse> listLive(UUID userId, UUID sessionId) {
+        Instant now = Instant.now();
+        List<ShareItem> items;
+        if (sessionId != null) {
+            if (!sessionService.isMember(sessionId, userId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a member of session " + sessionId);
+            }
+            items = repository.findBySessionIdAndExpiresAtAfterOrderByCreatedAtDesc(sessionId, now);
+        } else {
+            UUID personalSessionId = sessionService.getOrCreatePersonalSession(userId).getId();
+            items = repository.findBySessionIdAndExpiresAtAfterOrderByCreatedAtDesc(personalSessionId, now);
+        }
+        return items.stream()
                 .map(this::response)
                 .toList();
     }
 
-    /**
-     * The bytes behind an item.
-     *
-     * <p>Two ways in, because a browser cannot put a token in an {@code <img src>}: either the
-     * caller's token belongs to the owner, or the call carries a signed link that has not expired.
-     *
-     * <p>A signed link is a bearer credential, but not for somebody who has already said who they
-     * are: a paired stranger is turned away even with a valid link, so a forwarded URL cannot be
-     * opened from an account that should not see the file. Everything else gets the same 404 as an
-     * id that does not exist.
-     */
     @Transactional(readOnly = true)
     public Blob blob(UUID id, String linkToken, AuthenticatedUser caller) {
         ShareItem item = repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id));
-        boolean owner = caller != null && caller.userId().equals(item.getUserId());
-        if (caller != null && !owner) {
+        boolean member = caller != null && (caller.userId().equals(item.getUserId())
+                || sessionService.isMember(item.getSessionId(), caller.userId()));
+        if (caller != null && !member) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id);
         }
-        if (!owner && !blobLinks.isValid(id, linkToken)) {
+        if (!member && !blobLinks.isValid(id, linkToken)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id);
         }
         if (!item.hasBlob() || !blobStore.exists(item.getStorageRef())) {
@@ -157,34 +165,41 @@ public class ShareItemService {
 
     @Transactional
     public void delete(UUID userId, UUID id) {
-        ShareItem item = repository.findByIdAndUserId(id, userId)
+        ShareItem item = repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id));
+
+        boolean canDelete = item.getUserId().equals(userId)
+                || sessionService.isMember(item.getSessionId(), userId);
+        if (!canDelete) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id);
+        }
+
         repository.deleteById(id);
-        log.info("{} deleted item {}", userId, id);
+        log.info("{} deleted item {} from session {}", userId, id, item.getSessionId());
         afterCommit(() -> dropBlob(item.getStorageRef()));
-        afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.deleted(id)));
+        broadcastToSession(item.getSessionId(), userId, ShareItemEvent.deleted(id));
     }
 
-    /**
-     * One-tap extension: the owner pushes an item's deadline out without re-uploading it. Blob
-     * links are signed against the expiry, so the response carries a fresh one.
-     */
     @Transactional
     public ShareItemResponse extend(UUID userId, UUID id, Long requestedSeconds) {
-        ShareItem item = repository.findByIdAndUserId(id, userId)
+        ShareItem item = repository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id));
+
+        boolean canExtend = item.getUserId().equals(userId)
+                || sessionService.isMember(item.getSessionId(), userId);
+        if (!canExtend) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no such item: " + id);
+        }
+
         Duration ttl = resolveTtl(requestedSeconds);
         item.extendTo(Instant.now().plus(ttl));
         repository.save(item);
-        log.info("{} extended item {} by {}s", userId, id, ttl.toSeconds());
+        log.info("{} extended item {} by {}s in session {}", userId, id, ttl.toSeconds(), item.getSessionId());
         ShareItemResponse response = response(item);
-        afterCommit(() -> webSocketHandler.broadcast(userId, ShareItemEvent.extended(item, response.blobUrl())));
+        broadcastToSession(item.getSessionId(), userId, ShareItemEvent.extended(item, response.blobUrl()));
         return response;
     }
 
-    /**
-     * Zero-clutter storage: whatever ran out of time is deleted and its owner's feed is told.
-     */
     @Scheduled(fixedDelayString = "${teilen.reap-interval-ms:5000}")
     @Transactional
     public void reapExpired() {
@@ -196,9 +211,36 @@ public class ShareItemService {
         log.info("reaped {} expired item(s)", expired.size());
         expired.forEach(item -> {
             afterCommit(() -> dropBlob(item.getStorageRef()));
-            afterCommit(() -> webSocketHandler.broadcast(item.getUserId(),
+            List<UUID> targets = sessionService.getMemberUserIds(item.getSessionId());
+            if (targets.isEmpty()) {
+                targets = List.of(item.getUserId());
+            }
+            List<UUID> finalTargets = targets;
+            afterCommit(() -> webSocketHandler.broadcastToUsers(finalTargets,
                     ShareItemEvent.deleted(item.getId())));
         });
+    }
+
+    private UUID resolveSessionId(UUID userId, UUID requestedSessionId) {
+        if (requestedSessionId != null) {
+            if (!sessionService.isMember(requestedSessionId, userId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a member of session " + requestedSessionId);
+            }
+            return requestedSessionId;
+        }
+        return sessionService.getOrCreatePersonalSession(userId).getId();
+    }
+
+    private void broadcastToSession(UUID sessionId, UUID authorId, ShareItemEvent event) {
+        List<UUID> memberIds = sessionService.getMemberUserIds(sessionId);
+        if (memberIds.isEmpty()) {
+            memberIds = List.of(authorId);
+        }
+        List<UUID> targets = memberIds;
+        afterCommit(() -> webSocketHandler.broadcastToUsers(targets, event));
+        for (UUID mId : targets) {
+            afterCommit(() -> pushService.notifyAvailable(mId));
+        }
     }
 
     private ShareItemResponse response(ShareItem item) {
@@ -211,7 +253,6 @@ public class ShareItemService {
         }
     }
 
-    /** a feed must never hear about a row that did not survive the transaction */
     private void afterCommit(Runnable action) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             action.run();
@@ -247,7 +288,6 @@ public class ShareItemService {
         if (original == null || original.isBlank()) {
             return "shared-file";
         }
-        // the name is shown in the feed and echoed in a header, never used as a path
         String cleaned = original.replaceAll("[/\\\\\\r\\n\"]", "_").strip();
         return cleaned.length() > 200 ? cleaned.substring(0, 200) : cleaned;
     }
