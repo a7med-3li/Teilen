@@ -46,6 +46,17 @@ object Server {
 
     fun normalize(url: String): String = url.trim().trimEnd('/')
 
+    /** extracts the clean host/domain name for user-facing pills and banners */
+    fun hostOrDomain(context: Context): String {
+        val url = get(context)
+        return try {
+            val uri = java.net.URI(url)
+            uri.host ?: url.removePrefix("https://").removePrefix("http://").trimEnd('/')
+        } catch (e: Exception) {
+            url.removePrefix("https://").removePrefix("http://").trimEnd('/')
+        }
+    }
+
     /** label for the time-to-live picker: seconds -> "30 min" */
     fun label(seconds: Long): String = when {
         seconds % 3600 == 0L -> "${seconds / 3600} h"

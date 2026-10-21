@@ -124,6 +124,110 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical">
 
+                    <!-- Persistent Web App Companion Discovery Banner (Send Tab) -->
+                    <LinearLayout
+                        android:id="@+id/banner_send_companion"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:orientation="vertical">
+
+                        <!-- Unpaired State: 1 Device only (Prominent Glowing Card) -->
+                        <LinearLayout
+                            android:id="@+id/banner_send_unpaired"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_companion_banner"
+                            android:orientation="vertical"
+                            android:padding="14dp">
+
+                            <TextView
+                                android:id="@+id/banner_send_unpaired_title"
+                                style="@style/Text.Body"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="sans-serif-medium"
+                                android:text="Open on your PC: https://teilen.app"
+                                android:textColor="@color/accent"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                style="@style/Text.Caption"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/companion_banner_subtitle" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:orientation="horizontal">
+
+                                <Button
+                                    android:id="@+id/btn_send_banner_scan_qr"
+                                    style="@style/Button.Primary"
+                                    android:layout_width="0dp"
+                                    android:layout_height="36dp"
+                                    android:layout_weight="1"
+                                    android:minHeight="36dp"
+                                    android:paddingStart="6dp"
+                                    android:paddingEnd="6dp"
+                                    android:text="@string/btn_scan_qr_short"
+                                    android:textSize="12sp" />
+
+                                <Button
+                                    android:id="@+id/btn_send_banner_enter_code"
+                                    style="@style/Button.Outline"
+                                    android:layout_width="0dp"
+                                    android:layout_height="36dp"
+                                    android:layout_marginStart="8dp"
+                                    android:layout_weight="1"
+                                    android:minHeight="36dp"
+                                    android:paddingStart="6dp"
+                                    android:paddingEnd="6dp"
+                                    android:text="@string/btn_enter_code_short"
+                                    android:textSize="12sp" />
+
+                                <Button
+                                    android:id="@+id/btn_send_banner_copy_link"
+                                    style="@style/Button.Outline"
+                                    android:layout_width="0dp"
+                                    android:layout_height="36dp"
+                                    android:layout_marginStart="8dp"
+                                    android:layout_weight="1"
+                                    android:minHeight="36dp"
+                                    android:paddingStart="6dp"
+                                    android:paddingEnd="6dp"
+                                    android:text="@string/btn_copy_link_short"
+                                    android:textSize="12sp" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- Paired State: >= 2 Devices Connected (Compact Status Pill) -->
+                        <LinearLayout
+                            android:id="@+id/banner_send_paired_pill"
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_segmented_container"
+                            android:gravity="center"
+                            android:orientation="horizontal"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:visibility="gone">
+
+                            <TextView
+                                android:id="@+id/txt_send_paired_pill"
+                                style="@style/Text.Caption"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:fontFamily="sans-serif-medium"
+                                android:text="⚡ 2 Devices Connected · teilen.app"
+                                android:textColor="@color/accent"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
                     <!-- Card when Paired -->
                     <LinearLayout
                         android:id="@+id/card_text"
@@ -538,6 +642,110 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
+                <!-- Persistent Web App Companion Discovery Banner (Feed Tab) -->
+                <LinearLayout
+                    android:id="@+id/banner_feed_companion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:orientation="vertical">
+
+                    <!-- Unpaired State: 1 Device only (Prominent Glowing Card) -->
+                    <LinearLayout
+                        android:id="@+id/banner_feed_unpaired"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_companion_banner"
+                        android:orientation="vertical"
+                        android:padding="14dp">
+
+                        <TextView
+                            android:id="@+id/banner_feed_unpaired_title"
+                            style="@style/Text.Body"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="Open on your PC: https://teilen.app"
+                            android:textColor="@color/accent"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            style="@style/Text.Caption"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/companion_banner_subtitle" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/btn_feed_banner_scan_qr"
+                                style="@style/Button.Primary"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_weight="1"
+                                android:minHeight="36dp"
+                                android:paddingStart="6dp"
+                                android:paddingEnd="6dp"
+                                android:text="@string/btn_scan_qr_short"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/btn_feed_banner_enter_code"
+                                style="@style/Button.Outline"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:minHeight="36dp"
+                                android:paddingStart="6dp"
+                                android:paddingEnd="6dp"
+                                android:text="@string/btn_enter_code_short"
+                                android:textSize="12sp" />
+
+                            <Button
+                                android:id="@+id/btn_feed_banner_copy_link"
+                                style="@style/Button.Outline"
+                                android:layout_width="0dp"
+                                android:layout_height="36dp"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:minHeight="36dp"
+                                android:paddingStart="6dp"
+                                android:paddingEnd="6dp"
+                                android:text="@string/btn_copy_link_short"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Paired State: >= 2 Devices Connected (Compact Status Pill) -->
+                    <LinearLayout
+                        android:id="@+id/banner_feed_paired_pill"
+                        android:layout_width="match_parent"
+                        android:layout_height="36dp"
+                        android:background="@drawable/bg_segmented_container"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:id="@+id/txt_feed_paired_pill"
+                            style="@style/Text.Caption"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="⚡ 2 Devices Connected · teilen.app"
+                            android:textColor="@color/accent"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
                 <LinearLayout
                     android:id="@+id/card_feed"
                     android:layout_width="match_parent"
@@ -709,8 +917,9 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical">
 
-                    <!-- Account Box -->
+                    <!-- Permanent "Teilen for Web / Desktop" Companion Card -->
                     <LinearLayout
+                        android:id="@+id/card_web_companion"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:background="@drawable/bg_card"
@@ -721,49 +930,165 @@
                             style="@style/Text.Section"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/section_account" />
+                            android:text="@string/web_companion_title" />
 
-                        <!-- Mode Toggle: Login vs Register -->
+                        <!-- Monospace URL Address Bar Card -->
                         <LinearLayout
-                            android:id="@+id/auth_mode_selector"
                             android:layout_width="match_parent"
-                            android:layout_height="40dp"
+                            android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
-                            android:background="@drawable/bg_segmented_container"
+                            android:background="@drawable/bg_glowing_address_bar"
+                            android:gravity="center_vertical"
                             android:orientation="horizontal"
-                            android:padding="2dp">
+                            android:paddingStart="14dp"
+                            android:paddingTop="12dp"
+                            android:paddingEnd="14dp"
+                            android:paddingBottom="12dp">
 
-                            <Button
-                                android:id="@+id/auth_switch_login"
-                                style="?android:attr/borderlessButtonStyle"
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🌐"
+                                android:textSize="16sp" />
+
+                            <TextView
+                                android:id="@+id/txt_account_web_url"
                                 android:layout_width="0dp"
-                                android:layout_height="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="10dp"
                                 android:layout_weight="1"
-                                android:background="@drawable/bg_segmented_selected"
-                                android:text="@string/tab_login"
-                                android:textColor="@color/accent"
+                                android:fontFamily="monospace"
+                                android:text="https://teilen.app"
+                                android:textColor="#FFFFFF"
                                 android:textSize="13sp"
                                 android:textStyle="bold" />
 
                             <Button
-                                android:id="@+id/auth_switch_register"
+                                android:id="@+id/btn_account_copy_url"
                                 style="?android:attr/borderlessButtonStyle"
-                                android:layout_width="0dp"
-                                android:layout_height="match_parent"
-                                android:layout_weight="1"
-                                android:background="@android:color/transparent"
-                                android:text="@string/tab_register"
-                                android:textColor="@color/text_secondary"
-                                android:textSize="13sp" />
+                                android:layout_width="wrap_content"
+                                android:layout_height="32dp"
+                                android:background="@drawable/bg_scanner_btn"
+                                android:paddingStart="10dp"
+                                android:paddingEnd="10dp"
+                                android:text="@string/btn_copy_url"
+                                android:textColor="@color/electric_sky"
+                                android:textSize="11sp"
+                                android:textStyle="bold" />
                         </LinearLayout>
 
                         <TextView
-                            android:id="@+id/auth_intro"
                             style="@style/Text.Caption"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:text="@string/account_mode_login_hint" />
+                            android:layout_marginTop="10dp"
+                            android:text="@string/web_companion_subtitle" />
+
+                        <Button
+                            android:id="@+id/btn_account_share_link"
+                            style="@style/Button.Outline"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="10dp"
+                            android:minHeight="40dp"
+                            android:text="@string/btn_share_link"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <!-- Replay Interactive Guide Card -->
+                    <LinearLayout
+                        android:id="@+id/card_replay_guide"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_card"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?android:attr/selectableItemBackground"
+                        android:orientation="horizontal"
+                        android:padding="16dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                style="@style/Text.Body"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/replay_guide_title"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                style="@style/Text.Caption"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/replay_guide_subtitle" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_vertical"
+                            android:text="→"
+                            android:textColor="@color/accent"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- Connected Devices Card -->
+                    <LinearLayout
+                        android:id="@+id/card_devices"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_card"
+                        android:orientation="vertical"
+                        android:padding="16dp"
+                        android:visibility="gone">
+
+                        <TextView
+                            style="@style/Text.Section"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/devices_title" />
+
+                        <LinearLayout
+                            android:id="@+id/container_devices_list"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:orientation="vertical" />
+
+                        <Button
+                            android:id="@+id/btn_account_revoke_others"
+                            style="@style/Button.Outline"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:layout_marginTop="10dp"
+                            android:minHeight="40dp"
+                            android:text="Sign Out All Other Devices"
+                            android:textColor="@color/danger"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <!-- Account Box -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/bg_card"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            style="@style/Text.Section"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/section_account" />
 
                         <TextView
                             android:id="@+id/account_who"
@@ -774,60 +1099,142 @@
                             android:textStyle="bold"
                             android:visibility="gone" />
 
-                        <!-- Inputs when Signed Out -->
+                        <!-- Expandable Advanced Section for Power Users -->
                         <LinearLayout
-                            android:id="@+id/account_create"
+                            android:id="@+id/btn_toggle_advanced_auth"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:orientation="vertical">
+                            android:layout_marginTop="12dp"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingTop="6dp"
+                            android:paddingBottom="6dp">
 
-                            <EditText
-                                android:id="@+id/phone"
-                                style="@style/Input.Field"
-                                android:layout_width="match_parent"
+                            <TextView
+                                style="@style/Text.Caption"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:hint="@string/username_hint"
-                                android:inputType="textNoSuggestions"
-                                android:maxLength="32"
-                                android:singleLine="true" />
+                                android:layout_weight="1"
+                                android:text="@string/advanced_auth_title"
+                                android:textColor="@color/accent"
+                                android:textStyle="bold" />
 
-                            <EditText
-                                android:id="@+id/password"
-                                style="@style/Input.Field"
+                            <TextView
+                                android:id="@+id/txt_advanced_chevron"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="▾"
+                                android:textColor="@color/accent"
+                                android:textSize="14sp" />
+                        </LinearLayout>
+
+                        <!-- Collapsible Advanced Auth Container -->
+                        <LinearLayout
+                            android:id="@+id/layout_advanced_auth"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <!-- Mode Toggle: Login vs Register -->
+                            <LinearLayout
+                                android:id="@+id/auth_mode_selector"
+                                android:layout_width="match_parent"
+                                android:layout_height="40dp"
+                                android:layout_marginTop="8dp"
+                                android:background="@drawable/bg_segmented_container"
+                                android:orientation="horizontal"
+                                android:padding="2dp">
+
+                                <Button
+                                    android:id="@+id/auth_switch_login"
+                                    style="?android:attr/borderlessButtonStyle"
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_weight="1"
+                                    android:background="@drawable/bg_segmented_selected"
+                                    android:text="@string/tab_login"
+                                    android:textColor="@color/accent"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+
+                                <Button
+                                    android:id="@+id/auth_switch_register"
+                                    style="?android:attr/borderlessButtonStyle"
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_weight="1"
+                                    android:background="@android:color/transparent"
+                                    android:text="@string/tab_register"
+                                    android:textColor="@color/text_secondary"
+                                    android:textSize="13sp" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/auth_intro"
+                                style="@style/Text.Caption"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="8dp"
-                                android:hint="@string/password_hint"
-                                android:inputType="textPassword"
-                                android:singleLine="true" />
+                                android:text="@string/account_mode_login_hint" />
 
-                            <EditText
-                                android:id="@+id/display_name"
-                                style="@style/Input.Field"
+                            <!-- Inputs when Signed Out -->
+                            <LinearLayout
+                                android:id="@+id/account_create"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="8dp"
-                                android:hint="@string/name_hint"
-                                android:inputType="textPersonName|textCapWords"
-                                android:singleLine="true"
-                                android:visibility="gone" />
+                                android:layout_marginTop="10dp"
+                                android:orientation="vertical">
 
-                            <Button
-                                android:id="@+id/create_account"
-                                style="@style/Button.Primary"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="12dp"
-                                android:text="@string/login_button" />
+                                <EditText
+                                    android:id="@+id/phone"
+                                    style="@style/Input.Field"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:hint="@string/username_hint"
+                                    android:inputType="textNoSuggestions"
+                                    android:maxLength="32"
+                                    android:singleLine="true" />
 
-                            <Button
-                                android:id="@+id/account_pair_start"
-                                style="@style/Button.Outline"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="8dp"
-                                android:text="@string/pair_this_phone" />
+                                <EditText
+                                    android:id="@+id/password"
+                                    style="@style/Input.Field"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:hint="@string/password_hint"
+                                    android:inputType="textPassword"
+                                    android:singleLine="true" />
+
+                                <EditText
+                                    android:id="@+id/display_name"
+                                    style="@style/Input.Field"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:hint="@string/name_hint"
+                                    android:inputType="textPersonName|textCapWords"
+                                    android:singleLine="true"
+                                    android:visibility="gone" />
+
+                                <Button
+                                    android:id="@+id/create_account"
+                                    style="@style/Button.Primary"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="12dp"
+                                    android:text="@string/login_button" />
+
+                                <Button
+                                    android:id="@+id/account_pair_start"
+                                    style="@style/Button.Outline"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="8dp"
+                                    android:text="@string/pair_this_phone" />
+                            </LinearLayout>
                         </LinearLayout>
 
                         <!-- Pairing View (Newcomer Mode) -->
@@ -1393,6 +1800,12 @@
                 android:textSize="12sp" />
         </LinearLayout>
     </FrameLayout>
+
+    <!-- Interactive First-Launch Onboarding Wizard -->
+    <include
+        android:id="@+id/onboarding_overlay"
+        layout="@layout/view_onboarding"
+        android:visibility="gone" />
 
     <!-- Clean, Non-Dismissible "Update Required" Modal Card (Minimum Version Gate) -->
     <FrameLayout

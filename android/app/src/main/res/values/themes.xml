@@ -28,4 +28,11 @@
         <item name="android:backgroundDimEnabled">false</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>
+    <style name="Theme.Teilen.Scanner" parent="Theme.Teilen">
+        <item name="android:windowBackground">@color/obsidian</item>
+        <item name="android:statusBarColor">@color/obsidian</item>
+        <item name="android:navigationBarColor">@color/obsidian</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
 </resources>

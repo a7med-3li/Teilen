@@ -353,6 +353,61 @@ object TeilenApi {
         }.apply { name = "teilen-revoke" }.start()
     }
 
+    data class DeviceInfo(
+        val id: String,
+        val name: String,
+        val deviceType: String,
+        val current: Boolean,
+        val lastSeenAt: String?
+    )
+
+    /**
+     * Lists all registered devices for the current account.
+     */
+    fun getDevices(
+        baseUrl: String,
+        token: String?,
+        onResult: (List<DeviceInfo>?) -> Unit
+    ) {
+        if (token == null) {
+            main.post { onResult(null) }
+            return
+        }
+        Thread {
+            val list = try {
+                val connection = open(baseUrl, "/api/devices", token, "GET")
+                try {
+                    val code = connection.responseCode
+                    if (code in 200..299) {
+                        val body = connection.inputStream.bufferedReader().use { it.readText() }
+                        val array = org.json.JSONArray(body)
+                        val result = mutableListOf<DeviceInfo>()
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            result.add(
+                                DeviceInfo(
+                                    id = obj.optString("id"),
+                                    name = obj.optString("name", "Device"),
+                                    deviceType = obj.optString("deviceType", "WEB"),
+                                    current = obj.optBoolean("current", false),
+                                    lastSeenAt = if (obj.has("lastSeenAt") && !obj.isNull("lastSeenAt")) obj.getString("lastSeenAt") else null
+                                )
+                            )
+                        }
+                        result
+                    } else {
+                        null
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (e: Exception) {
+                null
+            }
+            main.post { onResult(list) }
+        }.apply { name = "teilen-devices" }.start()
+    }
+
     // ------------------------------------------------------------------ multi-sessions
 
     data class SessionInfo(

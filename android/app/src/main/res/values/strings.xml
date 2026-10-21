@@ -217,4 +217,42 @@
     <string name="app_up_to_date">Teilen is up to date</string>
     <string name="checking_for_updates">Checking for updates…</string>
     <string name="app_version_format">Version %1$s (%2$d)</string>
+
+    <!-- QR Scanner UI -->
+    <string name="scanner_title">Scan Pairing QR</string>
+    <string name="scanner_prompt_text">Point camera at QR code on your computer screen</string>
+    <string name="scanner_enter_manual_code">Enter 8-Digit Code Manually</string>
+    <string name="pair_manual_code_desc">Enter the 8-character pairing code shown on your computer or device:</string>
+
+    <!-- Companion Banner & Web Link Prominence -->
+    <string name="companion_banner_title">Open on your PC: %1$s</string>
+    <string name="companion_banner_subtitle">Pair in 3 seconds to send files, text, and clipboard seamlessly.</string>
+    <string name="btn_scan_qr_short">Scan QR</string>
+    <string name="btn_enter_code_short">Enter Code</string>
+    <string name="btn_copy_link_short">Copy Link</string>
+    <string name="web_companion_title">Teilen on Your Computer</string>
+    <string name="web_companion_subtitle">Open this URL in Chrome, Firefox, Safari, or Edge to transfer files, text, and clipboard with end-to-end encryption.</string>
+    <string name="btn_copy_url">Copy URL</string>
+    <string name="btn_share_link">Share Link</string>
+    <string name="devices_connected_pill">⚡ %1$d Devices Connected · %2$s</string>
+    <string name="devices_title">Connected Devices</string>
+    <string name="replay_guide_title">Replay Interactive Guide</string>
+    <string name="replay_guide_subtitle">Take a tour of cross-device sync &amp; OS superpowers</string>
+    <string name="advanced_auth_title">Advanced: Claim Custom Username / Switch Vault</string>
+    <string name="advanced_auth_subtitle">Set a memorable login or switch between different accounts</string>
+
+    <!-- First-Launch Onboarding Wizard -->
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next →</string>
+    <string name="onboarding_slide1_badge">Zero Cloud Tracking · Zero Setup Required</string>
+    <string name="onboarding_slide1_title">Your Devices, Instantly Connected</string>
+    <string name="onboarding_slide1_body">Send text, links, photos, and multi-gigabyte files between your phone and computer. Everything is end-to-end encrypted and self-destructs on your schedule.</string>
+    <string name="onboarding_slide2_title">Connect Your Laptop in 3 Seconds</string>
+    <string name="onboarding_slide2_body">Open Teilen in any browser on your computer. Pair right now by scanning the QR code or typing the 8-digit code.</string>
+    <string name="onboarding_slide2_scan_qr">Scan QR on Computer</string>
+    <string name="onboarding_slide2_enter_code">Enter 8-Digit Code</string>
+    <string name="onboarding_slide3_title">No Need to Even Open the App</string>
+    <string name="onboarding_slide3_body">Highlight text in any browser and tap \"Copy to Teilen\", or use the Android Share Sheet to beam files in the background in under 50ms.</string>
+    <string name="onboarding_slide3_toggle_clip">Enable 1-Tap Clipboard Notification</string>
+    <string name="onboarding_slide3_cta">Enter My Vault →</string>
 </resources>

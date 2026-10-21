@@ -32,6 +32,12 @@
     <color name="ripple">#1F000000</color>
     <color name="ripple_soft">#1F0284C7</color>
 
+    <!-- Dark / Obsidian Palette -->
+    <color name="obsidian">#0B0F17</color>
+    <color name="obsidian_card">#131B2E</color>
+    <color name="obsidian_border">#1E293B</color>
+    <color name="obsidian_mask">#D90B0F17</color>
+
     <!-- Bottom Navigation -->
     <color name="nav_bg">#FFFFFF</color>
     <color name="nav_item_selected">#0284C7</color>

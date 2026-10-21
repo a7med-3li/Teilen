@@ -880,6 +880,72 @@ footer {
     box-shadow: var(--shadow-sm);
 }
 
+.instant-vault-btn {
+    background: linear-gradient(135deg, var(--accent) 0%, #0284c7 100%);
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 14px 20px;
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    width: 100%;
+}
+
+.instant-vault-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(2, 132, 199, 0.4);
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin: 16px 0 8px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+}
+
+.auth-divider span {
+    padding: 0 10px;
+}
+
+.toggle-advanced-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 10px 12px;
+    background: transparent;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 12.5px;
+    cursor: pointer;
+    margin-top: 14px;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.toggle-advanced-btn:hover {
+    color: var(--fg);
+    border-color: var(--accent);
+}
+
+.auth-advanced-section {
+    width: 100%;
+    margin-top: 8px;
+}
+
 #login-container {
     width: 100%;
 }

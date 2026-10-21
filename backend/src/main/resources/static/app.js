@@ -86,6 +86,10 @@
     const pairState = el('pair-state');
     const pairRetry = el('pair-retry');
 
+    const btnInstantVault = el('btn-instant-vault');
+    const btnToggleAuthAdvanced = el('btn-toggle-auth-advanced');
+    const authAdvancedChevron = el('auth-advanced-chevron');
+    const authAdvancedContainer = el('auth-advanced-container');
     const authTabLogin = el('auth-tab-login');
     const authTabRegister = el('auth-tab-register');
     const authTabPair = el('auth-tab-pair');
@@ -1299,6 +1303,7 @@
         deviceSection.hidden = true;
         accountBtn.hidden = true;
         setStatus('offline', 'offline');
+        startPairing();
     }
 
     async function showFeed() {
@@ -1320,34 +1325,99 @@
         await checkUrlForInvite();
     }
 
+    // Instant Zero-Auth Vault Provisioning
+    async function silentProvisionVault() {
+        try {
+            toast('Initializing instant vault…', 'info');
+            await TeilenCrypto.ensureMasterKey();
+            const identity = await TeilenCrypto.ensureIdentity();
+            const randChars = Math.random().toString(36).substring(2, 8).toLowerCase();
+            const username = 'vault-' + randChars;
+            const password = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+            const deviceName = navigator.userAgent.includes('Chrome') ? 'Chrome' :
+                navigator.userAgent.includes('Firefox') ? 'Firefox' :
+                navigator.userAgent.includes('Safari') ? 'Safari' : 'Browser';
+
+            const res = await fetch('/api/auth/account', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    username,
+                    password,
+                    displayName: 'Personal Vault',
+                    deviceName,
+                    deviceType: 'WEB',
+                    devicePublicKey: TeilenCrypto.b64(identity.publicKey)
+                })
+            });
+
+            if (res.ok) {
+                const session = await res.json();
+                token.set(session.token);
+                toast('Instant vault initialized (' + username + ')', 'success');
+                await showFeed();
+                return true;
+            } else {
+                toast('Provisioning failed: ' + (await why(res)), 'error');
+                return false;
+            }
+        } catch (err) {
+            console.error('Silent provisioning error:', err);
+            toast('Failed to create instant vault: ' + err.message, 'error');
+            return false;
+        }
+    }
+
+    if (btnInstantVault) {
+        btnInstantVault.addEventListener('click', () => {
+            silentProvisionVault();
+        });
+    }
+
+    if (btnToggleAuthAdvanced) {
+        btnToggleAuthAdvanced.addEventListener('click', () => {
+            const hidden = authAdvancedContainer.hidden;
+            authAdvancedContainer.hidden = !hidden;
+            if (authAdvancedChevron) authAdvancedChevron.textContent = hidden ? '▴' : '▾';
+        });
+    }
+
     // Tab switching for Auth
-    authTabLogin.addEventListener('click', () => {
-        authTabLogin.classList.add('active');
-        authTabRegister.classList.remove('active');
-        authTabPair.classList.remove('active');
-        loginContainer.hidden = false;
-        registerContainer.hidden = true;
-        pairContainer.hidden = true;
-    });
+    if (authTabLogin) {
+        authTabLogin.addEventListener('click', () => {
+            authTabLogin.classList.add('active');
+            if (authTabRegister) authTabRegister.classList.remove('active');
+            if (authTabPair) authTabPair.classList.remove('active');
+            loginContainer.hidden = false;
+            registerContainer.hidden = true;
+            if (pairContainer) pairContainer.hidden = false; // Pairing stays visible in main body
+        });
+    }
 
-    authTabRegister.addEventListener('click', () => {
-        authTabRegister.classList.add('active');
-        authTabLogin.classList.remove('active');
-        authTabPair.classList.remove('active');
-        registerContainer.hidden = false;
-        loginContainer.hidden = true;
-        pairContainer.hidden = true;
-    });
+    if (authTabRegister) {
+        authTabRegister.addEventListener('click', () => {
+            authTabRegister.classList.add('active');
+            if (authTabLogin) authTabLogin.classList.remove('active');
+            if (authTabPair) authTabPair.classList.remove('active');
+            registerContainer.hidden = false;
+            loginContainer.hidden = true;
+            if (pairContainer) pairContainer.hidden = false; // Pairing stays visible in main body
+        });
+    }
 
-    authTabPair.addEventListener('click', () => {
-        authTabPair.classList.add('active');
-        authTabLogin.classList.remove('active');
-        authTabRegister.classList.remove('active');
-        pairContainer.hidden = false;
-        loginContainer.hidden = true;
-        registerContainer.hidden = true;
-        startPairing();
-    });
+    if (authTabPair) {
+        authTabPair.addEventListener('click', () => {
+            authTabPair.classList.add('active');
+            if (authTabLogin) authTabLogin.classList.remove('active');
+            if (authTabRegister) authTabRegister.classList.remove('active');
+            pairContainer.hidden = false;
+            loginContainer.hidden = true;
+            registerContainer.hidden = true;
+            startPairing();
+        });
+    }
 
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1546,6 +1616,8 @@
     trySilentRefresh().then(async (authenticated) => {
         if (authenticated) {
             await showFeed();
+        } else if (location.hash === '#vault') {
+            await silentProvisionVault();
         } else {
             showPairing();
         }

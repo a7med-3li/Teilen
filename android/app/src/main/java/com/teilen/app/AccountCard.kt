@@ -4,11 +4,14 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
 import android.view.HapticFeedbackConstants
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -23,6 +26,8 @@ import com.journeyapps.barcodescanner.BarcodeEncoder
 class AccountCard(
     private val activity: Activity,
     private val onScanQr: () -> Unit = {},
+    private val onReplayGuide: () -> Unit = {},
+    private val onDevicesCountChanged: (Int) -> Unit = {},
     private val onPaired: () -> Unit
 ) {
 
@@ -48,6 +53,24 @@ class AccountCard(
     private val authSwitchLogin: Button = activity.findViewById(R.id.auth_switch_login)
     private val authSwitchRegister: Button = activity.findViewById(R.id.auth_switch_register)
     private val authIntro: TextView = activity.findViewById(R.id.auth_intro)
+
+    // Permanent Companion Card views
+    private val cardWebCompanion: View = activity.findViewById(R.id.card_web_companion)
+    private val txtAccountWebUrl: TextView = activity.findViewById(R.id.txt_account_web_url)
+    private val btnAccountCopyUrl: Button = activity.findViewById(R.id.btn_account_copy_url)
+    private val btnAccountShareLink: Button = activity.findViewById(R.id.btn_account_share_link)
+
+    // Replay Guide & Connected Devices
+    private val cardReplayGuide: View = activity.findViewById(R.id.card_replay_guide)
+    private val cardDevices: View = activity.findViewById(R.id.card_devices)
+    private val containerDevicesList: LinearLayout = activity.findViewById(R.id.container_devices_list)
+    private val btnAccountRevokeOthers: Button = activity.findViewById(R.id.btn_account_revoke_others)
+
+    // Expandable Advanced Auth Toggle
+    private val btnToggleAdvancedAuth: View = activity.findViewById(R.id.btn_toggle_advanced_auth)
+    private val txtAdvancedChevron: TextView = activity.findViewById(R.id.txt_advanced_chevron)
+    private val layoutAdvancedAuth: View = activity.findViewById(R.id.layout_advanced_auth)
+    private var advancedAuthExpanded = false
 
     // Approver Mode Views
     private val cardPairDevice: View = activity.findViewById(R.id.card_pair_device)
@@ -95,10 +118,58 @@ class AccountCard(
                 .setPositiveButton("Sign Out Others") { _, _ ->
                     TeilenApi.revokeOtherDevices(Server.get(activity), token) { ok, msg ->
                         Toast.makeText(activity, msg, Toast.LENGTH_LONG).show()
+                        loadDevices()
                     }
                 }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
+        }
+
+        btnAccountRevokeOthers.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            val token = Session.token(activity) ?: return@setOnClickListener
+            AlertDialog.Builder(activity)
+                .setTitle("Sign out all other devices?")
+                .setMessage("All other sessions and devices paired with this account will be immediately revoked.")
+                .setPositiveButton("Sign Out Others") { _, _ ->
+                    TeilenApi.revokeOtherDevices(Server.get(activity), token) { ok, msg ->
+                        Toast.makeText(activity, msg, Toast.LENGTH_LONG).show()
+                        loadDevices()
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+
+        txtAccountWebUrl.text = Server.get(activity)
+
+        btnAccountCopyUrl.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            val cm = activity.getSystemService(ClipboardManager::class.java)
+            cm?.setPrimaryClip(ClipData.newPlainText("Teilen Web URL", Server.get(activity)))
+            Toast.makeText(activity, "Web URL copied to clipboard", Toast.LENGTH_SHORT).show()
+        }
+
+        btnAccountShareLink.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, Server.get(activity))
+            }
+            activity.startActivity(Intent.createChooser(shareIntent, activity.getString(R.string.btn_share_link)))
+        }
+
+        cardReplayGuide.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            onReplayGuide()
+        }
+
+        btnToggleAdvancedAuth.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            advancedAuthExpanded = !advancedAuthExpanded
+            layoutAdvancedAuth.visibility = if (advancedAuthExpanded) View.VISIBLE else View.GONE
+            createBox.visibility = if (advancedAuthExpanded) View.VISIBLE else View.GONE
+            txtAdvancedChevron.text = if (advancedAuthExpanded) "▴" else "▾"
         }
 
         updateModeUI()
@@ -151,10 +222,16 @@ class AccountCard(
     private fun renderSignedOut() {
         who.visibility = View.GONE
         createBox.visibility = View.VISIBLE
+        layoutAdvancedAuth.visibility = View.VISIBLE
+        btnToggleAdvancedAuth.visibility = View.GONE
         pairBox.visibility = View.GONE
         pairStart.visibility = View.VISIBLE
         signOut.visibility = View.GONE
         cardPairDevice.visibility = View.GONE
+        cardWebCompanion.visibility = View.VISIBLE
+        txtAccountWebUrl.text = Server.get(activity)
+        cardReplayGuide.visibility = View.VISIBLE
+        cardDevices.visibility = View.GONE
 
         // the last username used is a good guess for this one
         val remembered = Session.phone(activity)
@@ -437,12 +514,49 @@ class AccountCard(
         who.text = Session.phone(activity)?.let {
             activity.getString(R.string.signed_in_as, it)
         } ?: activity.getString(R.string.signed_in)
-        createBox.visibility = View.GONE
+        createBox.visibility = if (advancedAuthExpanded) View.VISIBLE else View.GONE
+        layoutAdvancedAuth.visibility = if (advancedAuthExpanded) View.VISIBLE else View.GONE
+        btnToggleAdvancedAuth.visibility = View.VISIBLE
         pairBox.visibility = View.GONE
         pairStart.visibility = View.GONE
         signOut.visibility = View.VISIBLE
         cardPairDevice.visibility = View.VISIBLE
         approvePairStatus.visibility = View.GONE
+
+        cardWebCompanion.visibility = View.VISIBLE
+        txtAccountWebUrl.text = Server.get(activity)
+        cardReplayGuide.visibility = View.VISIBLE
+        loadDevices()
+    }
+
+    fun loadDevices() {
+        val token = Session.token(activity) ?: return
+        TeilenApi.getDevices(Server.get(activity), token) { devices ->
+            if (devices != null) {
+                cardDevices.visibility = View.VISIBLE
+                containerDevicesList.removeAllViews()
+                val inflater = LayoutInflater.from(activity)
+                for (dev in devices) {
+                    val row = inflater.inflate(R.layout.item_device_row, containerDevicesList, false)
+                    val icon = row.findViewById<ImageView>(R.id.device_item_icon)
+                    val name = row.findViewById<TextView>(R.id.device_item_name)
+                    val currentBadge = row.findViewById<View>(R.id.device_item_current_badge)
+                    val type = row.findViewById<TextView>(R.id.device_item_type)
+
+                    name.text = dev.name
+                    if (dev.current) {
+                        currentBadge.visibility = View.VISIBLE
+                    } else {
+                        currentBadge.visibility = View.GONE
+                    }
+                    val isPhone = dev.deviceType.equals("PHONE", ignoreCase = true)
+                    icon.setImageResource(if (isPhone) R.drawable.ic_tab_send else R.drawable.ic_tab_feed)
+                    type.text = if (isPhone) "Mobile Device" else "Web Browser"
+                    containerDevicesList.addView(row)
+                }
+                onDevicesCountChanged(devices.size)
+            }
+        }
     }
 
     private fun signOut() {

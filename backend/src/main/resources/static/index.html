@@ -24,56 +24,24 @@
     </div>
 </header>
 
-<!-- no token yet: sign in or pair -->
+<!-- no token yet: instant zero-auth or pair -->
 <section id="pair" hidden>
     <div class="panel auth-panel">
         <div class="auth-header">
             <h2 class="auth-title">Welcome to Teilen</h2>
-            <p class="auth-desc">End-to-end encrypted cross-device sync &amp; multi-gigabyte Direct LAN</p>
-        </div>
-        <div class="auth-toggle">
-            <button id="auth-tab-login" type="button" class="auth-btn active">Sign in</button>
-            <button id="auth-tab-register" type="button" class="auth-btn">Create account</button>
-            <button id="auth-tab-pair" type="button" class="auth-btn">Pair with Code / QR</button>
+            <p class="auth-desc">End-to-end encrypted cross-device sync &amp; Direct LAN</p>
         </div>
 
-        <div id="login-container">
-            <form id="login-form" autocomplete="on">
-                <div class="field">
-                    <label for="login-username">Username</label>
-                    <input id="login-username" type="text" pattern="[a-zA-Z0-9]+" minlength="3" maxlength="32" placeholder="Username" required>
-                    <span id="login-username-helper" class="field-helper" hidden>Letters and numbers only, no special characters</span>
-                </div>
-                <div class="field">
-                    <label for="login-password">Password</label>
-                    <input id="login-password" type="password" placeholder="••••••••" required>
-                </div>
-                <button type="submit" class="submit-btn" id="login-submit">Sign in</button>
-            </form>
-            <p id="login-status" class="panel-status" hidden></p>
+        <!-- 1-Tap Instant Anonymous Vault Button -->
+        <button id="btn-instant-vault" type="button" class="instant-vault-btn">
+            ⚡ Start Instant Anonymous Vault
+        </button>
+
+        <div class="auth-divider">
+            <span>or pair with another device</span>
         </div>
 
-        <div id="register-container" hidden>
-            <form id="register-form" autocomplete="on">
-                <div class="field">
-                    <label for="register-username">Username</label>
-                    <input id="register-username" type="text" pattern="[a-zA-Z0-9]+" minlength="3" maxlength="32" placeholder="Letters and numbers only" required>
-                    <span id="register-username-helper" class="field-helper" hidden>Letters and numbers only, no special characters</span>
-                </div>
-                <div class="field">
-                    <label for="register-password">Password</label>
-                    <input id="register-password" type="password" placeholder="At least 6 characters" minlength="6" required>
-                </div>
-                <div class="field">
-                    <label for="register-display-name">Display name (optional)</label>
-                    <input id="register-display-name" type="text" placeholder="e.g. My Laptop" maxlength="50">
-                </div>
-                <button type="submit" class="submit-btn" id="register-submit">Create account</button>
-            </form>
-            <p id="register-status" class="panel-status" hidden></p>
-        </div>
-
-        <div id="pair-container" hidden>
+        <div id="pair-container">
             <p class="panel-lead">Scan with Teilen on your phone, or enter this code:</p>
 
             <div class="qr-wrapper">
@@ -95,6 +63,57 @@
             </div>
 
             <button id="pair-retry" type="button" class="btn-subtle" hidden>Get a new code</button>
+        </div>
+
+        <!-- Expandable Advanced Section for Power Users -->
+        <div class="auth-advanced-section">
+            <button id="btn-toggle-auth-advanced" type="button" class="toggle-advanced-btn">
+                <span>Advanced: Claim Custom Username / Switch Vault</span>
+                <span id="auth-advanced-chevron">▾</span>
+            </button>
+
+            <div id="auth-advanced-container" hidden>
+                <div class="auth-toggle">
+                    <button id="auth-tab-login" type="button" class="auth-btn active">Sign in</button>
+                    <button id="auth-tab-register" type="button" class="auth-btn">Create account</button>
+                </div>
+
+                <div id="login-container">
+                    <form id="login-form" autocomplete="on">
+                        <div class="field">
+                            <label for="login-username">Username</label>
+                            <input id="login-username" type="text" pattern="[a-zA-Z0-9]+" minlength="3" maxlength="32" placeholder="Username" required>
+                            <span id="login-username-helper" class="field-helper" hidden>Letters and numbers only, no special characters</span>
+                        </div>
+                        <div class="field">
+                            <label for="login-password">Password</label>
+                            <input id="login-password" type="password" placeholder="••••••••" required>
+                        </div>
+                        <button type="submit" class="submit-btn" id="login-submit">Sign in</button>
+                    </form>
+                    <p id="login-status" class="panel-status" hidden></p>
+                </div>
+
+                <div id="register-container" hidden>
+                    <form id="register-form" autocomplete="on">
+                        <div class="field">
+                            <label for="register-username">Username</label>
+                            <input id="register-username" type="text" pattern="[a-zA-Z0-9]+" minlength="3" maxlength="32" placeholder="Letters and numbers only" required>
+                            <span id="register-username-helper" class="field-helper" hidden>Letters and numbers only, no special characters</span>
+                        </div>
+                        <div class="field">
+                            <label for="register-password">Password</label>
+                            <input id="register-password" type="password" placeholder="At least 6 characters" minlength="6" required>
+                        </div>
+                        <div class="field">
+                            <label for="register-display-name">Display name (optional)</label>
+                            <input id="register-display-name" type="text" placeholder="e.g. My Laptop" maxlength="50">
+                        </div>
+                        <button type="submit" class="submit-btn" id="register-submit">Create account</button>
+                    </form>
+                    <p id="register-status" class="panel-status" hidden></p>
+                </div>
+            </div>
         </div>
     </div>
 </section>
