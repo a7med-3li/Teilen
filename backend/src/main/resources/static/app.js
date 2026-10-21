@@ -260,28 +260,56 @@
     async function loadSessions() {
         try {
             const response = await api(SESSIONS_API);
-            if (!response.ok) return;
-            availableSessions = await response.json();
-
-            if (availableSessions.length === 0) return;
-
-            if (!currentSessionId || !availableSessions.some(s => s.id === currentSessionId)) {
-                currentSessionId = availableSessions[0].id;
+            if (response.ok) {
+                const sessions = await response.json();
+                if (Array.isArray(sessions) && sessions.length > 0) {
+                    availableSessions = sessions;
+                }
             }
-
-            renderSessionPills();
-            TeilenLan.setSession(currentSessionId);
         } catch (e) {
             console.warn('Failed to load sessions', e);
         }
+
+        if (!availableSessions || availableSessions.length === 0) {
+            availableSessions = [{
+                id: 'personal',
+                name: 'Personal Vault',
+                isPersonal: true,
+                role: 'OWNER',
+                memberCount: 1
+            }];
+        }
+
+        if (!currentSessionId || !availableSessions.some(s => s.id === currentSessionId)) {
+            currentSessionId = availableSessions[0].id;
+        }
+
+        renderSessionPills();
+        TeilenLan.setSession(currentSessionId);
     }
 
     function renderSessionPills() {
+        if (!availableSessions || availableSessions.length === 0) {
+            availableSessions = [{
+                id: 'personal',
+                name: 'Personal Vault',
+                isPersonal: true,
+                role: 'OWNER',
+                memberCount: 1
+            }];
+        }
+
+        const activeSession = availableSessions.find(s => s.id === currentSessionId) || availableSessions[0];
+        if (sessionShareBtn) {
+            sessionShareBtn.hidden = !activeSession || activeSession.isPersonal;
+        }
+
         sessionPills.replaceChildren(...availableSessions.map(session => {
             const pill = document.createElement('button');
             pill.type = 'button';
-            pill.className = 'session-pill' + (session.id === currentSessionId ? ' active' : '');
-            pill.dataset.id = session.id;
+            const isActive = session.id === currentSessionId || (session.isPersonal && (!currentSessionId || currentSessionId === 'personal'));
+            pill.className = 'session-pill' + (isActive ? ' active' : '');
+            pill.dataset.id = session.id || 'personal';
 
             const icon = session.isPersonal ? '🔒' : '👥';
             pill.innerHTML = `<span>${icon}</span> <span>${session.name}</span>` +
@@ -1265,6 +1293,12 @@
             }
         }
 
+        const devCount = devices ? devices.length : 1;
+        const accountLabel = el('account-label');
+        if (accountLabel) {
+            accountLabel.textContent = `Devices (${devCount})`;
+        }
+
         deviceList.replaceChildren(...devices.map(device => {
             const row = document.createElement('li');
             row.className = 'device';
@@ -1620,6 +1654,9 @@
 
     if (btnHeaderPair) {
         btnHeaderPair.addEventListener('click', () => {
+            if (pairUserCode) {
+                if (modalPairCode) modalPairCode.textContent = pairUserCode;
+            }
             openModal(modalPairPhone);
             startPairing();
         });
@@ -1725,6 +1762,7 @@
     // Initialize SPA
     initLaunchScreen();
     initServiceWorkerAutoUpdate();
+    renderSessionPills();
     refresh();
 
     async function initApp() {

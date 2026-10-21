@@ -49,9 +49,9 @@ class QrCodesTest {
         assertThat(svg).startsWith("<?xml")
                 .contains("<svg")
                 .contains("viewBox=\"0 0 " + side + " " + side + "\"")
-                .contains("fill=\"#ffffff\"")
+                .containsIgnoringCase("fill=\"#ffffff\"")
                 .contains("<path")
-                .contains("fill=\"#000000\"");
+                .contains("fill=\"#0B0F17\"");
         // crisp edges and no strokes: the browser scales it to any size without blurring
         assertThat(svg).contains("shape-rendering=\"crispEdges\"").doesNotContain("stroke");
     }

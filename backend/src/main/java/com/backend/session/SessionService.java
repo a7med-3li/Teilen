@@ -51,9 +51,13 @@ public class SessionService {
                 });
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<SessionDto> listSessions(UUID userId) {
         List<SessionMember> memberships = memberRepository.findByUserId(userId);
+        if (memberships.isEmpty()) {
+            getOrCreatePersonalSession(userId);
+            memberships = memberRepository.findByUserId(userId);
+        }
         if (memberships.isEmpty()) {
             return List.of();
         }

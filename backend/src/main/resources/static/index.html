@@ -11,25 +11,46 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-    <div class="head-left">
-        <h1 class="logo">Teilen</h1>
-    </div>
-    <div class="head-right">
-        <button id="btn-header-pair" class="btn-header-pair" type="button" title="Pair phone or second device">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-            </svg>
-            <span>Pair Phone / QR</span>
-        </button>
-        <div id="status" class="status offline">
-            <span class="status-dot"></span>
-            <span id="status-text">connecting…</span>
+<header class="app-header">
+    <div class="header-inner">
+        <div class="head-left">
+            <div class="brand-wrap">
+                <svg class="brand-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#38BDF8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+                <div class="brand-text-col">
+                    <span class="brand-title">TEILEN</span>
+                    <span class="brand-badge">Zero-Knowledge Sync</span>
+                </div>
+            </div>
         </div>
-        <button id="account" class="ghost" type="button" hidden aria-expanded="false">…</button>
+        <div class="head-right">
+            <div id="status" class="status-pill status offline">
+                <span class="status-dot"></span>
+                <span id="status-text">connecting…</span>
+            </div>
+            <button id="btn-header-pair" class="btn-header-pair" type="button" title="Pair phone or second device">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                </svg>
+                <span>Pair Phone / QR</span>
+            </button>
+            <button id="account" class="btn-header-account" type="button" hidden aria-expanded="false">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                    <rect x="9" y="9" width="6" height="6"></rect>
+                    <line x1="9" y1="1" x2="9" y2="4"></line>
+                    <line x1="15" y1="1" x2="15" y2="4"></line>
+                    <line x1="9" y1="20" x2="9" y2="23"></line>
+                    <line x1="15" y1="20" x2="15" y2="23"></line>
+                </svg>
+                <span id="account-label">Devices</span>
+            </button>
+        </div>
     </div>
 </header>
 
@@ -58,12 +79,13 @@
             </div>
 
             <div class="pair-code-row">
-                <p id="pair-code" class="pair-code">····-····</p>
-                <button id="pair-code-copy" type="button" class="btn-copy-code" title="Copy code">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <span id="pair-code" class="pair-code-text">····-····</span>
+                <button id="pair-code-copy" type="button" class="btn-copy-code-styled" title="Copy code">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#F1F5F9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                     </svg>
+                    <span>Copy</span>
                 </button>
             </div>
             <div class="pair-state-wrap">
@@ -172,13 +194,14 @@
                 <div class="hero-qr-wrap">
                     <img id="hero-qr" alt="Pairing QR Code" width="160" height="160">
                 </div>
-                <div class="hero-code-row">
-                    <span id="hero-pair-code" class="hero-pair-code">····-····</span>
-                    <button id="hero-code-copy" type="button" class="btn-copy-code" title="Copy code">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <div class="pair-code-row">
+                    <span id="hero-pair-code" class="pair-code-text">····-····</span>
+                    <button id="hero-code-copy" type="button" class="btn-copy-code-styled" title="Copy code">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#F1F5F9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                         </svg>
+                        <span>Copy</span>
                     </button>
                 </div>
                 <p id="hero-pair-status" class="hero-pair-status">Waiting for phone…</p>
@@ -198,43 +221,49 @@
         </div>
     </div>
 
-    <!-- Multi-Session Rooms (Spaces) Bar -->
-    <div class="session-container">
+    <!-- Session (Room) Switcher Bar -->
+    <div class="session-bar">
         <div class="session-bar-scroll">
-            <div id="session-pills" class="session-pills"></div>
+            <div id="session-pills" class="session-pills">
+                <button type="button" class="session-pill active" data-id="personal">
+                    <span>🔒</span> <span>Personal Vault</span>
+                </button>
+            </div>
         </div>
         <div class="session-actions">
-            <button id="session-share-btn" type="button" class="btn-pill-action" title="Share session">
+            <button id="session-share-btn" type="button" class="btn-room-action" title="Share room" hidden>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
                     <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
                 </svg>
                 <span>Share Room</span>
             </button>
-            <button id="session-create-btn" type="button" class="btn-pill-action" title="Create room">+ Room</button>
-            <button id="session-join-btn" type="button" class="btn-pill-action" title="Join room">Join</button>
+            <button id="session-create-btn" type="button" class="btn-room-action" title="Create room">+ New Room</button>
+            <button id="session-join-btn" type="button" class="btn-room-action" title="Join room">Join</button>
         </div>
     </div>
 
     <!-- Unified Multimodal Composer with Unlimited Scrollable Text -->
     <div class="composer-card">
-        <form id="compose" autocomplete="off">
-            <textarea id="compose-input" placeholder="Type or paste unlimited text / URL… (Shift+Enter for newline, Enter to send)" rows="2"></textarea>
+        <form id="compose" class="compose-form" autocomplete="off">
+            <textarea id="compose-input" placeholder="Type or paste unlimited text, links, or code… (Shift+Enter for newline, Enter to send)" rows="3"></textarea>
 
             <div class="composer-toolbar">
-                <div class="ttl-pills-group" id="ttl-pills">
+                <div class="ttl-control-group">
                     <span class="ttl-label">Expires in:</span>
-                    <button type="button" class="ttl-pill" data-ttl="600">10m</button>
-                    <button type="button" class="ttl-pill" data-ttl="1800">30m</button>
-                    <button type="button" class="ttl-pill active" data-ttl="3600">1h</button>
-                    <button type="button" class="ttl-pill" data-ttl="14400">4h</button>
-                    <button type="button" class="ttl-pill" data-ttl="86400">24h</button>
-                    <button type="button" class="ttl-pill" id="ttl-custom-pill">Custom</button>
+                    <div class="ttl-segmented-pills" id="ttl-pills">
+                        <button type="button" class="ttl-pill" data-ttl="600">10m</button>
+                        <button type="button" class="ttl-pill" data-ttl="1800">30m</button>
+                        <button type="button" class="ttl-pill active" data-ttl="3600">1h</button>
+                        <button type="button" class="ttl-pill" data-ttl="14400">4h</button>
+                        <button type="button" class="ttl-pill" data-ttl="86400">24h</button>
+                        <button type="button" class="ttl-pill" id="ttl-custom-pill">Custom</button>
+                    </div>
                 </div>
 
-                <div class="composer-buttons">
+                <div class="composer-actions">
                     <label class="btn-attach" for="upload-input" title="Attach files (Multi-GB supported via Direct LAN)">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                         </svg>
                         <span>Attach File</span>
@@ -282,18 +311,20 @@
 </main>
 
 <footer id="foot" hidden>
-    <span id="count">0 items</span>
-    <button id="clear" class="btn-delete-all" type="button" hidden>
-        <span class="btn-icon">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                <line x1="10" y1="11" x2="10" y2="17"></line>
-                <line x1="14" y1="11" x2="14" y2="17"></line>
-            </svg>
-        </span>
-        Delete All
-    </button>
+    <div class="footer-inner">
+        <span id="count">0 items</span>
+        <button id="clear" class="btn-delete-all" type="button" hidden>
+            <span class="btn-icon">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+            </span>
+            Delete All
+        </button>
+    </div>
 </footer>
 
 <!-- Modal: Create New Session -->
@@ -356,39 +387,41 @@
     </div>
 </div>
 
-<!-- Modal: Pair Phone / Second Device -->
-<div id="modal-pair-phone" class="modal-veil" hidden>
-    <div class="modal-panel modal-pair-panel">
-        <div class="modal-pair-header">
-            <h3>Pair Phone / Second Device</h3>
-            <button type="button" class="btn-subtle modal-close">✕</button>
+<!-- Modal: Pair Device -->
+<div id="modal-pair-phone" class="modal-veil modal-backdrop" hidden>
+    <div class="modal-card modal-pair-card">
+        <div class="modal-header">
+            <h3 class="modal-title">Pair Device</h3>
+            <button type="button" class="modal-close-btn modal-close" title="Close">✕</button>
         </div>
-        <p class="modal-desc">Scan with Teilen on your phone, or enter its 8-character code:</p>
-        <div class="modal-pair-grid">
-            <div class="modal-pair-col">
-                <div class="qr-wrapper">
-                    <img id="modal-qr" class="qr" alt="Pairing QR Code" width="180" height="180">
-                </div>
-                <div class="pair-code-row">
-                    <p id="modal-pair-code" class="pair-code">····-····</p>
-                    <button id="modal-pair-code-copy" type="button" class="btn-copy-code" title="Copy code">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                        </svg>
-                    </button>
-                </div>
-                <p id="modal-pair-status" class="panel-status">Waiting for phone…</p>
+        <p class="modal-subtitle">Scan with Teilen on your phone or tablet:</p>
+
+        <div class="modal-qr-container">
+            <div class="qr-wrapper">
+                <img id="modal-qr" class="qr" alt="Pairing QR Code" width="180" height="180">
             </div>
-            <div class="modal-pair-col">
-                <form id="modal-approve-form" autocomplete="off" style="width: 100%;">
-                    <label for="modal-approve-code" style="font-size: 12px; margin-bottom: 6px; display: block; text-align: left;">Or enter phone code:</label>
-                    <input id="modal-approve-code" type="text" class="hero-code-input" placeholder="K7PM-3XQD" maxlength="9" autocapitalize="characters" spellcheck="false" required style="width: 100%; box-sizing: border-box; margin-bottom: 10px;">
-                    <button type="submit" class="submit-btn" style="width: 100%;">Connect Device</button>
-                </form>
-                <p id="modal-approve-status" class="panel-status" hidden></p>
+            <div class="pair-code-row">
+                <span id="modal-pair-code" class="pair-code-text">····-····</span>
+                <button id="modal-pair-code-copy" type="button" class="btn-copy-code-styled" title="Copy code">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#F1F5F9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span>Copy</span>
+                </button>
             </div>
+            <p id="modal-pair-status" class="pair-status-text">Waiting for phone…</p>
         </div>
+
+        <div class="modal-divider">
+            <span>OR ENTER CODE FROM PHONE</span>
+        </div>
+
+        <form id="modal-approve-form" class="modal-approve-row" autocomplete="off">
+            <input id="modal-approve-code" type="text" class="modal-code-input" placeholder="XXXX-XXXX" maxlength="9" autocapitalize="characters" spellcheck="false" required>
+            <button type="submit" class="btn-connect-device">Connect Device</button>
+        </form>
+        <p id="modal-approve-status" class="panel-status" hidden></p>
     </div>
 </div>
 

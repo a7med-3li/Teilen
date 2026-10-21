@@ -134,10 +134,12 @@ public class AuthController {
 
     @GetMapping(value = "/api/auth/device/qr.svg", produces = "image/svg+xml")
     public ResponseEntity<String> qr(@RequestParam String code) {
-        auth.pendingByCode(code);
+        String uri = (code.startsWith("teilen://") || code.startsWith("http://") || code.startsWith("https://"))
+                ? code
+                : auth.pairingUri(code);
         return ResponseEntity.ok()
                 .header("Cache-Control", "no-store")
-                .body(qrCodes.svg(auth.pairingUri(code)));
+                .body(qrCodes.svg(uri));
     }
 
     @GetMapping("/api/auth/device/pending")

@@ -49,8 +49,8 @@ public class QrCodes {
                 <?xml version="1.0" encoding="UTF-8"?>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %1$d %1$d" \
                 shape-rendering="crispEdges" role="img" aria-label="pairing code">
-                <rect width="%1$d" height="%1$d" fill="#ffffff"/>
-                <path d="%2$s" fill="#000000"/>
+                <rect width="100%%" height="100%%" fill="#FFFFFF"/>
+                <path d="%2$s" fill="#0B0F17"/>
                 </svg>
                 """.formatted(size, path);
     }
