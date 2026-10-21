@@ -16,6 +16,15 @@
         <h1 class="logo">Teilen</h1>
     </div>
     <div class="head-right">
+        <button id="btn-header-pair" class="btn-header-pair" type="button" title="Pair phone or second device">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+            </svg>
+            <span>Pair Phone / QR</span>
+        </button>
         <div id="status" class="status offline">
             <span class="status-dot"></span>
             <span id="status-text">connecting…</span>
@@ -144,6 +153,51 @@
 </section>
 
 <main id="app" hidden>
+    <!-- Hero Pairing Card (prominent phone connection for single-device vault) -->
+    <div id="hero-pairing-card" class="hero-pairing-card" hidden>
+        <div class="hero-pairing-header">
+            <div class="hero-pairing-title-wrap">
+                <span class="hero-pairing-icon">📱</span>
+                <div>
+                    <h2 class="hero-pairing-title">Pair Your Phone</h2>
+                    <p class="hero-pairing-subtitle">Connect your Android app in 3 seconds to sync text, links, and multi-gigabyte files</p>
+                </div>
+            </div>
+            <button id="hero-pairing-dismiss" class="btn-subtle hero-dismiss-btn" type="button" title="Dismiss">✕</button>
+        </div>
+        <div class="hero-pairing-body">
+            <div class="hero-pairing-side">
+                <span class="hero-step-badge">Option A: Scan QR</span>
+                <p class="hero-step-desc">Open Teilen on your phone &amp; scan:</p>
+                <div class="hero-qr-wrap">
+                    <img id="hero-qr" alt="Pairing QR Code" width="160" height="160">
+                </div>
+                <div class="hero-code-row">
+                    <span id="hero-pair-code" class="hero-pair-code">····-····</span>
+                    <button id="hero-code-copy" type="button" class="btn-copy-code" title="Copy code">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                    </button>
+                </div>
+                <p id="hero-pair-status" class="hero-pair-status">Waiting for phone…</p>
+            </div>
+            <div class="hero-pairing-divider">
+                <span>OR</span>
+            </div>
+            <div class="hero-pairing-side">
+                <span class="hero-step-badge">Option B: Enter Code</span>
+                <p class="hero-step-desc">Enter the 8-character code shown on your phone:</p>
+                <form id="hero-approve-form" class="hero-approve-form" autocomplete="off">
+                    <input id="hero-approve-code" type="text" class="hero-code-input" placeholder="e.g. K7PM-3XQD" maxlength="9" autocapitalize="characters" spellcheck="false" required>
+                    <button type="submit" class="submit-btn hero-connect-btn">Connect Phone</button>
+                </form>
+                <p id="hero-approve-status" class="hero-approve-status" hidden></p>
+            </div>
+        </div>
+    </div>
+
     <!-- Multi-Session Rooms (Spaces) Bar -->
     <div class="session-container">
         <div class="session-bar-scroll">
@@ -302,18 +356,54 @@
     </div>
 </div>
 
+<!-- Modal: Pair Phone / Second Device -->
+<div id="modal-pair-phone" class="modal-veil" hidden>
+    <div class="modal-panel modal-pair-panel">
+        <div class="modal-pair-header">
+            <h3>Pair Phone / Second Device</h3>
+            <button type="button" class="btn-subtle modal-close">✕</button>
+        </div>
+        <p class="modal-desc">Scan with Teilen on your phone, or enter its 8-character code:</p>
+        <div class="modal-pair-grid">
+            <div class="modal-pair-col">
+                <div class="qr-wrapper">
+                    <img id="modal-qr" class="qr" alt="Pairing QR Code" width="180" height="180">
+                </div>
+                <div class="pair-code-row">
+                    <p id="modal-pair-code" class="pair-code">····-····</p>
+                    <button id="modal-pair-code-copy" type="button" class="btn-copy-code" title="Copy code">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                    </button>
+                </div>
+                <p id="modal-pair-status" class="panel-status">Waiting for phone…</p>
+            </div>
+            <div class="modal-pair-col">
+                <form id="modal-approve-form" autocomplete="off" style="width: 100%;">
+                    <label for="modal-approve-code" style="font-size: 12px; margin-bottom: 6px; display: block; text-align: left;">Or enter phone code:</label>
+                    <input id="modal-approve-code" type="text" class="hero-code-input" placeholder="K7PM-3XQD" maxlength="9" autocapitalize="characters" spellcheck="false" required style="width: 100%; box-sizing: border-box; margin-bottom: 10px;">
+                    <button type="submit" class="submit-btn" style="width: 100%;">Connect Device</button>
+                </form>
+                <p id="modal-approve-status" class="panel-status" hidden></p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal: Custom TTL Input -->
 <div id="modal-custom-ttl" class="modal-veil" hidden>
     <div class="modal-panel">
         <h3 id="custom-ttl-title">Set Expiration Timer (TTL)</h3>
-        <p class="modal-desc">Enter custom lifespan for this item:</p>
+        <p class="modal-desc">Enter custom lifespan for this item (maximum 24 hours):</p>
         <form id="form-custom-ttl">
             <div class="row">
-                <input id="custom-ttl-number" type="number" min="1" max="1440" value="60" required style="width: 100px;">
+                <input id="custom-ttl-number" type="number" min="1" max="1440" value="1" required style="width: 100px;">
                 <select id="custom-ttl-unit">
+                    <option value="1">Seconds</option>
                     <option value="60">Minutes</option>
                     <option value="3600" selected>Hours</option>
-                    <option value="86400">Days</option>
                 </select>
             </div>
             <div class="modal-actions">

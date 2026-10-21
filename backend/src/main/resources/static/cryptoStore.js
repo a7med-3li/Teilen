@@ -43,34 +43,77 @@ window.TeilenCrypto = (() => {
         return (code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     }
 
-    // ---------- IndexedDB, one store, key/value ----------
+    // ---------- IndexedDB, one store, key/value with in-memory fallback ----------
+
+    const memStore = new Map();
+    let idbDisabled = false;
 
     function openDb() {
+        if (idbDisabled || typeof indexedDB === 'undefined') {
+            return Promise.reject(new Error('IndexedDB disabled or unavailable'));
+        }
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, 1);
-            request.onupgradeneeded = () => request.result.createObjectStore(STORE);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+            try {
+                const request = indexedDB.open(DB_NAME, 1);
+                request.onupgradeneeded = () => {
+                    try {
+                        request.result.createObjectStore(STORE);
+                    } catch (e) {}
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => {
+                    idbDisabled = true;
+                    reject(request.error || new Error('IndexedDB open error'));
+                };
+            } catch (err) {
+                idbDisabled = true;
+                reject(err);
+            }
         });
     }
 
     async function idbGet(key) {
-        const db = await openDb();
-        return new Promise((resolve, reject) => {
-            const request = db.transaction(STORE, 'readonly').objectStore(STORE).get(key);
-            request.onsuccess = () => resolve(request.result || null);
-            request.onerror = () => reject(request.error);
-        });
+        if (!idbDisabled && typeof indexedDB !== 'undefined') {
+            try {
+                const db = await openDb();
+                return await new Promise((resolve) => {
+                    try {
+                        const tx = db.transaction(STORE, 'readonly');
+                        const request = tx.objectStore(STORE).get(key);
+                        request.onsuccess = () => resolve(request.result !== undefined ? request.result : (memStore.get(key) || null));
+                        request.onerror = () => resolve(memStore.get(key) || null);
+                    } catch (e) {
+                        idbDisabled = true;
+                        resolve(memStore.get(key) || null);
+                    }
+                });
+            } catch (e) {
+                idbDisabled = true;
+            }
+        }
+        return memStore.get(key) || null;
     }
 
     async function idbPut(key, value) {
-        const db = await openDb();
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(STORE, 'readwrite');
-            tx.objectStore(STORE).put(value, key);
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-        });
+        memStore.set(key, value);
+        if (!idbDisabled && typeof indexedDB !== 'undefined') {
+            try {
+                const db = await openDb();
+                await new Promise((resolve) => {
+                    try {
+                        const tx = db.transaction(STORE, 'readwrite');
+                        tx.objectStore(STORE).put(value, key);
+                        tx.oncomplete = () => resolve();
+                        tx.onerror = () => resolve();
+                    } catch (e) {
+                        idbDisabled = true;
+                        resolve();
+                    }
+                });
+            } catch (e) {
+                idbDisabled = true;
+            }
+        }
     }
 
     // ---------- HKDF-SHA256 (RFC 5869), hand-rolled over libsodium's HMAC ----------
@@ -254,15 +297,21 @@ window.TeilenCrypto = (() => {
 
     async function signRequest(method, path) {
         await ready;
-        const identity = await ensureIdentity();
-        const timestamp = Date.now().toString();
-        const payload = (method || 'GET').toUpperCase() + '|' + (path || '/') + '|' + timestamp;
-        const sig = sodium.crypto_sign_detached(sodium.from_string(payload), identity.privateKey);
-        return {
-            signature: b64(sig),
-            timestamp: timestamp,
-            publicKey: b64(identity.publicKey)
-        };
+        try {
+            const identity = await ensureIdentity();
+            if (!identity || !identity.privateKey) return null;
+            const timestamp = Date.now().toString();
+            const payload = (method || 'GET').toUpperCase() + '|' + (path || '/') + '|' + timestamp;
+            const sig = sodium.crypto_sign_detached(sodium.from_string(payload), identity.privateKey);
+            return {
+                signature: b64(sig),
+                timestamp: timestamp,
+                publicKey: b64(identity.publicKey)
+            };
+        } catch (e) {
+            console.warn('signRequest error, falling back:', e);
+            return null;
+        }
     }
 
     return {

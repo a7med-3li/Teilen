@@ -3,8 +3,18 @@
  * leaking — the notification says only that the feed has something new; the feed itself is read
  * with the account token when the tab is focused.
  */
+const CACHE_NAME = 'teilen-v10';
+
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((keys) => {
+            return Promise.all(
+                keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+            );
+        }).then(() => self.clients.claim())
+    );
+});
 
 self.addEventListener('push', (event) => {
     event.waitUntil(self.registration.showNotification('Teilen', {

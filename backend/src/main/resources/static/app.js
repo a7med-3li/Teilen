@@ -6,6 +6,16 @@
 (() => {
     'use strict';
 
+    // Immediate guaranteed dismissal for launch veil (never traps user on black screen)
+    setTimeout(() => {
+        const veil = document.getElementById('launch-veil');
+        if (veil) {
+            veil.classList.add('dismissed');
+            veil.hidden = true;
+            try { veil.remove(); } catch (e) {}
+        }
+    }, 1400);
+
     const API = '/api/items';
     const AUTH = '/api/auth';
     const SESSIONS_API = '/api/sessions';
@@ -122,6 +132,29 @@
     const app = el('app');
     const foot = el('foot');
     const dropVeil = el('drop-veil');
+
+    // Header Pair & Modal Pair Elements
+    const btnHeaderPair = el('btn-header-pair');
+    const modalPairPhone = el('modal-pair-phone');
+    const modalQr = el('modal-qr');
+    const modalPairCode = el('modal-pair-code');
+    const modalPairCodeCopy = el('modal-pair-code-copy');
+    const modalPairStatus = el('modal-pair-status');
+    const modalApproveForm = el('modal-approve-form');
+    const modalApproveCode = el('modal-approve-code');
+    const modalApproveStatus = el('modal-approve-status');
+
+    // Hero Pairing Card Elements
+    const heroPairingCard = el('hero-pairing-card');
+    const heroQr = el('hero-qr');
+    const heroPairCode = el('hero-pair-code');
+    const heroCodeCopy = el('hero-code-copy');
+    const heroPairStatus = el('hero-pair-status');
+    const heroApproveForm = el('hero-approve-form');
+    const heroApproveCode = el('hero-approve-code');
+    const heroApproveStatus = el('hero-approve-status');
+    const heroPairingDismiss = el('hero-pairing-dismiss');
+    let heroPairingDismissed = false;
 
     const uploadInput = el('upload-input');
     const uploadStatus = el('upload-status');
@@ -273,15 +306,22 @@
 
     // Modal helpers
     function openModal(modal) {
+        if (!modal) return;
         modal.hidden = false;
     }
     function closeModal(modal) {
+        if (!modal) return;
         modal.hidden = true;
     }
     document.querySelectorAll('.modal-close').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const veil = e.target.closest('.modal-veil');
             if (veil) closeModal(veil);
+        });
+    });
+    document.querySelectorAll('.modal-veil').forEach(veil => {
+        veil.addEventListener('click', (e) => {
+            if (e.target === veil) closeModal(veil);
         });
     });
 
@@ -465,9 +505,11 @@
 
     formCustomTtl.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const count = parseInt(customTtlNumber.value, 10) || 60;
-        const multiplier = parseInt(customTtlUnit.value, 10) || 60;
-        const totalSec = count * multiplier;
+        const count = parseInt(customTtlNumber.value, 10) || 1;
+        const multiplier = parseInt(customTtlUnit.value, 10) || 3600;
+        let totalSec = count * multiplier;
+        // Clamp between 10s and 86400s (backend valid TTL limits)
+        totalSec = Math.max(10, Math.min(86400, totalSec));
 
         closeModal(modalCustomTtl);
 
@@ -1212,6 +1254,17 @@
     // ---------- Devices & Account Section ----------
 
     function renderDevices(devices) {
+        // Hero Pairing Card: show when user has <= 1 connected device, hide when >= 2 connected devices
+        if (heroPairingCard) {
+            const hasMultiple = devices && devices.length > 1;
+            if (hasMultiple || heroPairingDismissed) {
+                heroPairingCard.hidden = true;
+            } else {
+                heroPairingCard.hidden = false;
+                startPairing();
+            }
+        }
+
         deviceList.replaceChildren(...devices.map(device => {
             const row = document.createElement('li');
             row.className = 'device';
@@ -1315,6 +1368,15 @@
         await loadSessions();
         await load();
         connect();
+
+        try {
+            const devRes = await api('/api/devices');
+            if (devRes.ok) {
+                renderDevices(await devRes.json());
+            }
+        } catch (e) {
+            console.warn('Could not load devices:', e);
+        }
 
         // Start LAN WebRTC engine with session scoping and telemetry handler
         TeilenLan.start(token.get(), (lanItem) => {
@@ -1502,26 +1564,43 @@
             if (!res.ok) return;
             const data = await res.json();
             pairUserCode = data.userCode;
-            pairCode.textContent = data.userCode;
-            qr.src = data.qrCodeUrl;
-            pairState.textContent = 'Scan or approve code on phone…';
+
+            // Update main pair section
+            if (pairCode) pairCode.textContent = data.userCode;
+            if (qr) qr.src = data.qrCodeUrl;
+            if (pairState) pairState.textContent = 'Scan or approve code on phone…';
+
+            // Update hero card
+            if (heroQr) heroQr.src = data.qrCodeUrl;
+            if (heroPairCode) heroPairCode.textContent = data.userCode;
+            if (heroPairStatus) heroPairStatus.textContent = 'Scan with phone or enter code below…';
+
+            // Update modal
+            if (modalQr) modalQr.src = data.qrCodeUrl;
+            if (modalPairCode) modalPairCode.textContent = data.userCode;
+            if (modalPairStatus) modalPairStatus.textContent = 'Scan with phone or enter code below…';
 
             pairTimer = setInterval(async () => {
-                const claimRes = await fetch('/api/auth/device/token', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    credentials: 'same-origin',
-                    body: JSON.stringify({deviceCode: data.deviceCode})
-                });
-                if (claimRes.status === 200) {
-                    clearInterval(pairTimer);
-                    const claim = await claimRes.json();
-                    if (claim.keyPackage && pairKey) {
-                        await TeilenCrypto.openFromApprover(claim.keyPackage, pairKey.privateKey, pairUserCode);
+                try {
+                    const claimRes = await fetch('/api/auth/device/token', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        credentials: 'same-origin',
+                        body: JSON.stringify({deviceCode: data.deviceCode})
+                    });
+                    if (claimRes.status === 200) {
+                        clearInterval(pairTimer);
+                        const claim = await claimRes.json();
+                        if (claim.keyPackage && pairKey) {
+                            await TeilenCrypto.openFromApprover(claim.keyPackage, pairKey.privateKey, pairUserCode);
+                        }
+                        token.set(claim.token);
+                        toast('Pairing successful!', 'success');
+                        closeModal(modalPairPhone);
+                        await showFeed();
                     }
-                    token.set(claim.token);
-                    toast('Pairing successful!', 'success');
-                    await showFeed();
+                } catch (e) {
+                    console.warn('Pairing poll error:', e);
                 }
             }, data.pollIntervalSeconds * 1000);
         } catch (e) {
@@ -1529,27 +1608,40 @@
         }
     }
 
-    if (pairCodeCopy) {
-        pairCodeCopy.addEventListener('click', async () => {
-            if (pairUserCode) {
-                await navigator.clipboard.writeText(pairUserCode);
-                toast('Pairing code copied', 'success');
-            }
+    const copyPairCode = async () => {
+        if (pairUserCode) {
+            await navigator.clipboard.writeText(pairUserCode);
+            toast('Pairing code copied', 'success');
+        }
+    };
+    if (pairCodeCopy) pairCodeCopy.addEventListener('click', copyPairCode);
+    if (heroCodeCopy) heroCodeCopy.addEventListener('click', copyPairCode);
+    if (modalPairCodeCopy) modalPairCodeCopy.addEventListener('click', copyPairCode);
+
+    if (btnHeaderPair) {
+        btnHeaderPair.addEventListener('click', () => {
+            openModal(modalPairPhone);
+            startPairing();
         });
     }
 
-    approveForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const code = approveCode.value.trim();
+    if (heroPairingDismiss) {
+        heroPairingDismiss.addEventListener('click', () => {
+            heroPairingDismissed = true;
+            if (heroPairingCard) heroPairingCard.hidden = true;
+        });
+    }
+
+    async function handleApprove(code, statusEl, inputEl) {
         if (!code) return;
-
-        deviceStatus.hidden = false;
-        deviceStatus.textContent = 'Approving device…';
-
+        if (statusEl) {
+            statusEl.hidden = false;
+            statusEl.textContent = 'Approving device…';
+        }
         try {
             const pendingRes = await api('/api/auth/device/pending?code=' + encodeURIComponent(code));
             if (!pendingRes.ok) {
-                deviceStatus.textContent = 'Invalid code: ' + (await why(pendingRes));
+                if (statusEl) statusEl.textContent = 'Invalid code: ' + (await why(pendingRes));
                 return;
             }
             const preview = await pendingRes.json();
@@ -1564,18 +1656,38 @@
             });
 
             if (approveRes.ok) {
-                approveCode.value = '';
-                deviceStatus.textContent = 'Device approved!';
-                toast('Device approved', 'success');
+                if (inputEl) inputEl.value = '';
+                if (statusEl) statusEl.textContent = 'Device connected!';
+                toast('Phone successfully paired!', 'success');
                 const devRes = await api('/api/devices');
                 if (devRes.ok) renderDevices(await devRes.json());
+                closeModal(modalPairPhone);
             } else {
-                deviceStatus.textContent = 'Approval failed: ' + (await why(approveRes));
+                if (statusEl) statusEl.textContent = 'Approval failed: ' + (await why(approveRes));
             }
         } catch (err) {
-            deviceStatus.textContent = 'Error: ' + err.message;
+            if (statusEl) statusEl.textContent = 'Error: ' + err.message;
         }
+    }
+
+    approveForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await handleApprove(approveCode.value.trim(), deviceStatus, approveCode);
     });
+
+    if (heroApproveForm && heroApproveCode) {
+        heroApproveForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await handleApprove(heroApproveCode.value.trim(), heroApproveStatus, heroApproveCode);
+        });
+    }
+
+    if (modalApproveForm && modalApproveCode) {
+        modalApproveForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await handleApprove(modalApproveCode.value.trim(), modalApproveStatus, modalApproveCode);
+        });
+    }
 
     // Brand launch animation
     function initLaunchScreen() {
@@ -1593,7 +1705,10 @@
         }, 650);
         setTimeout(() => {
             veil.classList.add('dismissed');
-            setTimeout(() => veil.remove(), 300);
+            veil.hidden = true;
+            setTimeout(() => {
+                try { veil.remove(); } catch (e) {}
+            }, 300);
         }, 1200);
     }
 
@@ -1612,14 +1727,24 @@
     initServiceWorkerAutoUpdate();
     refresh();
 
-    // Start with silent auth refresh via HttpOnly cookie (no localStorage bearer token!)
-    trySilentRefresh().then(async (authenticated) => {
-        if (authenticated) {
-            await showFeed();
-        } else if (location.hash === '#vault') {
-            await silentProvisionVault();
-        } else {
+    async function initApp() {
+        try {
+            const authenticated = await trySilentRefresh();
+            if (authenticated) {
+                await showFeed();
+                return;
+            }
+            // Auto silent-provision a zero-auth vault
+            const provisioned = await silentProvisionVault();
+            if (!provisioned) {
+                showPairing();
+            }
+        } catch (err) {
+            console.error('Startup initialization error:', err);
+            token.set(null);
             showPairing();
         }
-    });
+    }
+
+    initApp();
 })();
