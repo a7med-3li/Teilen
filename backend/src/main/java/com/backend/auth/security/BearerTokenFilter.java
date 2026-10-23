@@ -25,6 +25,7 @@ public class BearerTokenFilter extends OncePerRequestFilter {
     public static final String SESSION_COOKIE_NAME = "teilen_session";
     public static final String SIGNATURE_HEADER = "X-Teilen-Signature";
     public static final String TIMESTAMP_HEADER = "X-Teilen-Timestamp";
+    public static final String PUBLIC_KEY_HEADER = "X-Teilen-Public-Key";
 
     private final AuthService auth;
     private final Ed25519Verifier verifier;
@@ -57,13 +58,30 @@ public class BearerTokenFilter extends OncePerRequestFilter {
                         return;
                     }
 
-                    if (user.devicePublicKey() != null && !user.devicePublicKey().isBlank()) {
-                        String payload = request.getMethod().toUpperCase() + "|" + request.getRequestURI() + "|" + ts;
-                        boolean valid = verifier.verify(user.devicePublicKey(), payload.getBytes(StandardCharsets.UTF_8), signature);
-                        if (!valid) {
-                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Device signature verification failed");
-                            return;
+                    String payload = request.getMethod().toUpperCase() + "|" + request.getRequestURI() + "|" + ts;
+                    byte[] payloadBytes = payload.getBytes(StandardCharsets.UTF_8);
+
+                    String storedKey = user.devicePublicKey();
+                    boolean valid = false;
+
+                    // 1. Try verifying against the stored device public key
+                    if (storedKey != null && !storedKey.isBlank()) {
+                        valid = verifier.verify(storedKey, payloadBytes, signature);
+                    }
+
+                    // 2. Self-healing / Trust-On-First-Use: if stored key was missing or mismatched (e.g. legacy X25519 key),
+                    // allow verification with presented public key and update the device's public key in database.
+                    String presentedKey = request.getHeader(PUBLIC_KEY_HEADER);
+                    if (!valid && presentedKey != null && !presentedKey.isBlank()) {
+                        if (verifier.verify(presentedKey, payloadBytes, signature)) {
+                            valid = true;
+                            auth.updateDevicePublicKey(user.deviceId(), presentedKey);
                         }
+                    }
+
+                    if (!valid && storedKey != null && !storedKey.isBlank()) {
+                        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Device signature verification failed");
+                        return;
                     }
                 }
 

@@ -204,6 +204,9 @@
             if (sigInfo) {
                 headers['X-Teilen-Signature'] = sigInfo.signature;
                 headers['X-Teilen-Timestamp'] = sigInfo.timestamp;
+                if (sigInfo.publicKey) {
+                    headers['X-Teilen-Public-Key'] = sigInfo.publicKey;
+                }
             }
         } catch (e) {
             // Key not initialized yet during initial handshake
@@ -1585,6 +1588,7 @@
         clearInterval(pairTimer);
         try {
             pairKey = await TeilenCrypto.newPairingKey();
+            const identity = await TeilenCrypto.ensureIdentity();
             const res = await fetch('/api/auth/device/code', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -1592,7 +1596,8 @@
                     deviceName: 'Browser',
                     deviceType: 'WEB',
                     platform: navigator.platform || 'Web',
-                    publicKey: pairKey && pairKey.publicKey ? TeilenCrypto.b64(pairKey.publicKey) : undefined
+                    publicKey: pairKey && pairKey.publicKey ? TeilenCrypto.b64(pairKey.publicKey) : undefined,
+                    devicePublicKey: identity && identity.publicKey ? TeilenCrypto.b64(identity.publicKey) : undefined
                 })
             });
             if (!res.ok) {

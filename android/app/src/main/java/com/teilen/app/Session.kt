@@ -49,12 +49,16 @@ object Session {
             .putString(KEY_TOKEN, token)
             .putString(KEY_PHONE, phone)
             .putString(KEY_DEVICE, deviceName)
+            .remove(KEY_ACTIVE_SESSION)
             .apply()
     }
 
     /** forget the credential; the number stays, so signing back in is one tap less typing */
     fun clear(context: Context) {
-        prefs(context).edit().remove(KEY_TOKEN).apply()
+        prefs(context).edit()
+            .remove(KEY_TOKEN)
+            .remove(KEY_ACTIVE_SESSION)
+            .apply()
     }
 
     private fun read(context: Context, key: String): String? =

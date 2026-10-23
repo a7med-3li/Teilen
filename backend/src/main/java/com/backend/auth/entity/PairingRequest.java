@@ -45,6 +45,13 @@ public class PairingRequest {
     private String newcomerPublicKey;
 
     /**
+     * The newcomer's persistent Ed25519 identity key, base64. Stored on the new Device row
+     * upon approval to verify DPoP (X-Teilen-Signature) headers.
+     */
+    @Column(name = "device_public_key", length = 200)
+    private String devicePublicKey;
+
+    /**
      * The approver's sealed account-key bundle, opaque to this server. Left here until the newcomer
      * collects it with its token, then the row is swept like any other spent pairing request.
      */
@@ -160,6 +167,14 @@ public class PairingRequest {
 
     public void setNewcomerPublicKey(String newcomerPublicKey) {
         this.newcomerPublicKey = newcomerPublicKey;
+    }
+
+    public String getDevicePublicKey() {
+        return devicePublicKey;
+    }
+
+    public void setDevicePublicKey(String devicePublicKey) {
+        this.devicePublicKey = devicePublicKey;
     }
 
     public String getKeyPackage() {

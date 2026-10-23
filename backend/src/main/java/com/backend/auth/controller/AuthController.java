@@ -129,7 +129,7 @@ public class AuthController {
     @ResponseStatus(HttpStatus.CREATED)
     public PairingStartResponse startPairing(@Valid @RequestBody StartPairingRequest request) {
         return auth.startPairing(request.deviceName(), request.deviceType(), request.platform(),
-                request.publicKey());
+                request.publicKey(), request.devicePublicKey());
     }
 
     @GetMapping(value = "/api/auth/device/qr.svg", produces = "image/svg+xml")

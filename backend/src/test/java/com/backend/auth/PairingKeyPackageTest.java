@@ -54,5 +54,16 @@ class PairingKeyPackageTest {
 
         assertThat(request.getKeyPackage()).isNull();
         assertThat(request.getNewcomerPublicKey()).isNull();
+        assertThat(request.getDevicePublicKey()).isNull();
+    }
+
+    @Test
+    void pairingPreservesDeviceIdentityPublicKeySeparatelyFromNewcomerExchangeKey() {
+        PairingRequest request = request();
+        request.setNewcomerPublicKey("e2ee-x25519-wrapping-key");
+        request.setDevicePublicKey("dpop-ed25519-signing-key");
+
+        assertThat(request.getNewcomerPublicKey()).isEqualTo("e2ee-x25519-wrapping-key");
+        assertThat(request.getDevicePublicKey()).isEqualTo("dpop-ed25519-signing-key");
     }
 }

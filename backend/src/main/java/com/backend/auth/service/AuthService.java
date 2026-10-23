@@ -194,6 +194,12 @@ public class AuthService {
     @Transactional
     public PairingStartResponse startPairing(String rawDeviceName, String requestedType, String platform,
                                              String publicKey) {
+        return startPairing(rawDeviceName, requestedType, platform, publicKey, null);
+    }
+
+    @Transactional
+    public PairingStartResponse startPairing(String rawDeviceName, String requestedType, String platform,
+                                             String publicKey, String devicePublicKey) {
         DeviceType type = DeviceType.parse(requestedType);
         Instant now = Instant.now();
 
@@ -212,6 +218,7 @@ public class AuthService {
                         now,
                         now.plus(pairingTtl));
                 request.setNewcomerPublicKey(clean(publicKey, 200));
+                request.setDevicePublicKey(clean(devicePublicKey, 200));
                 pairings.save(request);
                 break;
             } catch (DataIntegrityViolationException e) {
@@ -248,7 +255,7 @@ public class AuthService {
         User owner = findUser(userId);
         String token = Tokens.newToken();
         Device device = new Device(UUID.randomUUID(), owner.getId(), request.getDeviceType(),
-                request.getDeviceName(), Tokens.hash(token), request.getNewcomerPublicKey(),
+                request.getDeviceName(), Tokens.hash(token), request.getDevicePublicKey(),
                 null, request.getPlatform(), now);
         devices.save(device);
         request.approve(device.getId(), token, now);
@@ -360,6 +367,18 @@ public class AuthService {
     public void touch(UUID deviceId) {
         Instant now = Instant.now();
         devices.touch(deviceId, now, now.minus(Duration.ofMinutes(5)));
+    }
+
+    @Transactional
+    public void updateDevicePublicKey(UUID deviceId, String devicePublicKey) {
+        if (deviceId == null || devicePublicKey == null || devicePublicKey.isBlank()) {
+            return;
+        }
+        devices.findById(deviceId).ifPresent(device -> {
+            device.setDevicePublicKey(clean(devicePublicKey, 200));
+            devices.save(device);
+            log.info("Updated device public key for device {}", deviceId);
+        });
     }
 
     // ------------------------------------------------------------------ helpers

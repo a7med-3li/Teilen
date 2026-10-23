@@ -22,5 +22,15 @@ public record StartPairingRequest(
          * take part in the key exchange sends nothing, and pairing is unchanged.
          */
         @Size(max = 200, message = "publicKey must be at most 200 characters")
-        String publicKey) {
+        String publicKey,
+
+        /**
+         * The newcomer's hardware/WebCrypto Ed25519 identity key, base64 for DPoP verification.
+         */
+        @Size(max = 200, message = "devicePublicKey must be at most 200 characters")
+        String devicePublicKey) {
+
+    public StartPairingRequest(String deviceName, String deviceType, String platform, String publicKey) {
+        this(deviceName, deviceType, platform, publicKey, null);
+    }
 }
