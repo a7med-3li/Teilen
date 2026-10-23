@@ -1428,7 +1428,7 @@
             await TeilenCrypto.ensureMasterKey();
             const identity = await TeilenCrypto.ensureIdentity();
             const randChars = Math.random().toString(36).substring(2, 8).toLowerCase();
-            const username = 'vault-' + randChars;
+            const username = 'vault' + randChars;
             const password = Array.from(crypto.getRandomValues(new Uint8Array(16)))
                 .map(b => b.toString(16).padStart(2, '0')).join('');
             const deviceName = navigator.userAgent.includes('Chrome') ? 'Chrome' :
@@ -1583,8 +1583,8 @@
 
     async function startPairing() {
         clearInterval(pairTimer);
-        pairKey = TeilenCrypto.newPairingKey();
         try {
+            pairKey = await TeilenCrypto.newPairingKey();
             const res = await fetch('/api/auth/device/code', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -1592,26 +1592,36 @@
                     deviceName: 'Browser',
                     deviceType: 'WEB',
                     platform: navigator.platform || 'Web',
-                    publicKey: TeilenCrypto.b64(pairKey.publicKey)
+                    publicKey: pairKey && pairKey.publicKey ? TeilenCrypto.b64(pairKey.publicKey) : undefined
                 })
             });
-            if (!res.ok) return;
+            if (!res.ok) {
+                console.error('Pairing code fetch failed with HTTP', res.status);
+                return;
+            }
             const data = await res.json();
-            pairUserCode = data.userCode;
+            console.log('Pairing code API response:', data);
+
+            // Extract whatever key the backend provided, or fallback to previously stored user code
+            const codeVal = data.userCode || data.code || pairUserCode;
+            pairUserCode = codeVal;
+
+            // Only construct the QR URL if codeVal or qrCodeUrl exists; never allow undefined
+            const qrSrc = data.qrCodeUrl || (codeVal ? `/api/auth/device/qr.svg?code=${encodeURIComponent(codeVal)}` : null);
 
             // Update main pair section
-            if (pairCode) pairCode.textContent = data.userCode;
-            if (qr) qr.src = data.qrCodeUrl;
+            if (pairCode && codeVal) pairCode.textContent = codeVal;
+            if (qr && qrSrc) qr.src = qrSrc;
             if (pairState) pairState.textContent = 'Scan or approve code on phone…';
 
             // Update hero card
-            if (heroQr) heroQr.src = data.qrCodeUrl;
-            if (heroPairCode) heroPairCode.textContent = data.userCode;
+            if (heroQr && qrSrc) heroQr.src = qrSrc;
+            if (heroPairCode && codeVal) heroPairCode.textContent = codeVal;
             if (heroPairStatus) heroPairStatus.textContent = 'Scan with phone or enter code below…';
 
             // Update modal
-            if (modalQr) modalQr.src = data.qrCodeUrl;
-            if (modalPairCode) modalPairCode.textContent = data.userCode;
+            if (modalQr && qrSrc) modalQr.src = qrSrc;
+            if (modalPairCode && codeVal) modalPairCode.textContent = codeVal;
             if (modalPairStatus) modalPairStatus.textContent = 'Scan with phone or enter code below…';
 
             pairTimer = setInterval(async () => {
@@ -1636,12 +1646,11 @@
                 } catch (e) {
                     console.warn('Pairing poll error:', e);
                 }
-            }, data.pollIntervalSeconds * 1000);
+            }, (data.pollIntervalSeconds || 3) * 1000);
         } catch (e) {
             console.warn('Pairing failed', e);
         }
     }
-
     const copyPairCode = async () => {
         if (pairUserCode) {
             await navigator.clipboard.writeText(pairUserCode);
