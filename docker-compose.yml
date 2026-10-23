@@ -4,18 +4,15 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: teilen
-      POSTGRES_USER: teilen
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U teilen -d teilen"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d teilen"]
       interval: 5s
       retries: 10
 
   app:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
     image: ghcr.io/a7med-3li/teilen:latest
     restart: unless-stopped
     depends_on:
@@ -26,9 +23,9 @@ services:
       DB_PORT: 5432
       DB_NAME: teilen
       DB_USER: teilen
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
       TEILEN_BLOB_LINK_SECRET: ${TEILEN_BLOB_LINK_SECRET}
-      # Web Push (Phase 3). Leave unset to keep push silently disabled.
+    # Web Push (Phase 3). Leave unset to keep push silently disabled.
       TEILEN_VAPID_PUBLIC_KEY: ${TEILEN_VAPID_PUBLIC_KEY:-}
       TEILEN_VAPID_PRIVATE_KEY: ${TEILEN_VAPID_PRIVATE_KEY:-}
       TEILEN_VAPID_SUBJECT: ${TEILEN_VAPID_SUBJECT:-mailto:admin@teilen.app}
@@ -44,8 +41,4 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
-volumes:
-  pgdata:
-  blobs:
-  caddy_data:
-  caddy_config:
+volumes: { pgdata: , uploads: , caddy_data: , caddy_config: }
