@@ -26,6 +26,7 @@ import com.backend.auth.dto.DevicePairResponse;
 import com.backend.item.ShareItemEvent;
 import com.backend.item.ShareItemWebSocketHandler;
 import com.backend.session.SessionService;
+import jakarta.persistence.EntityManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,10 +60,11 @@ public class AuthService {
     private final SessionService sessionService;
     private final VaultMergeService vaultMergeService;
     private final ShareItemWebSocketHandler webSocketHandler;
-    jakarta.persistence.EntityManager entityManager;
+    private final EntityManager entityManager;
 
     @Autowired
     public AuthService(UserRepository users,
+                       EntityManager entityManager,
                        DeviceRepository devices,
                        PairingRequestRepository pairings,
                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
@@ -82,15 +84,17 @@ public class AuthService {
         this.webSocketHandler = webSocketHandler;
         this.pairingTtl = Duration.ofSeconds(pairingTtlSeconds);
         this.pollInterval = Duration.ofSeconds(pollIntervalSeconds);
+        this.entityManager = entityManager;
     }
 
     public AuthService(UserRepository users,
                        DeviceRepository devices,
+                       EntityManager entityManager,
                        PairingRequestRepository pairings,
                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                        long pairingTtlSeconds,
                        long pollIntervalSeconds) {
-        this(users, devices, pairings, passwordEncoder, null, null, null, null, pairingTtlSeconds, pollIntervalSeconds);
+        this(users,  entityManager, devices, pairings, passwordEncoder, null, null, null, null, pairingTtlSeconds, pollIntervalSeconds);
     }
 
     // ------------------------------------------------------------------ accounts
