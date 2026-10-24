@@ -78,7 +78,22 @@ object TeilenApi {
         val deviceName: String,
         val deviceType: String,
         val platform: String?,
-        val publicKey: String?
+        val publicKey: String?,
+        val mode: String = "NEWCOMER_REQUEST"
+    )
+
+    data class HostInviteOffer(
+        val userCode: String,
+        val deviceCode: String,
+        val qrSvgUrl: String,
+        val expiresInSeconds: Long
+    )
+
+    data class ClaimInviteResult(
+        val ok: Boolean,
+        val signedIn: SignedIn? = null,
+        val encryptedKeyBundle: String? = null,
+        val error: String? = null
     )
 
     /**
@@ -274,7 +289,8 @@ object TeilenApi {
                         deviceName = reply.str("deviceName") ?: "a device",
                         deviceType = reply.str("deviceType") ?: "WEB",
                         platform = reply.str("platform"),
-                        publicKey = reply.str("publicKey")
+                        publicKey = reply.str("publicKey"),
+                        mode = reply.str("mode") ?: "NEWCOMER_REQUEST"
                     )
                 } else {
                     null
@@ -325,6 +341,127 @@ object TeilenApi {
             }
             main.post { onResult(result.first, result.second) }
         }.apply { name = "teilen-auth" }.start()
+    }
+
+    /**
+     * Creates a Host Invite so other devices can join this vault without logging in.
+     */
+    fun createHostInvite(
+        baseUrl: String,
+        token: String,
+        userCode: String?,
+        encryptedKeyBundle: String,
+        deviceName: String,
+        platform: String = "Android ${android.os.Build.VERSION.RELEASE}",
+        onResult: (HostInviteOffer?) -> Unit
+    ) {
+        Thread {
+            val offer = try {
+                val body = JSONObject()
+                    .put("encryptedKeyBundle", encryptedKeyBundle)
+                    .put("deviceName", deviceName)
+                    .put("platform", platform)
+                if (userCode != null) {
+                    body.put("userCode", userCode)
+                }
+                val reply = postBlocking(baseUrl, "/api/auth/device/host-invite", token, body)
+                if (reply.ok) {
+                    HostInviteOffer(
+                        userCode = reply.str("userCode").orEmpty(),
+                        deviceCode = reply.str("deviceCode").orEmpty(),
+                        qrSvgUrl = reply.str("qrSvgUrl").orEmpty(),
+                        expiresInSeconds = reply.num("expiresInSeconds", 300L)
+                    )
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                null
+            }
+            main.post { onResult(offer) }
+        }.apply { name = "teilen-host-invite" }.start()
+    }
+
+    /**
+     * Claims a Host Invite without any existing account or login.
+     */
+    fun claimHostInvite(
+        baseUrl: String,
+        userCode: String,
+        deviceName: String,
+        deviceType: String = "PHONE",
+        devicePublicKey: String? = null,
+        platform: String = "Android ${android.os.Build.VERSION.RELEASE}",
+        onResult: (ClaimInviteResult) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val body = JSONObject()
+                    .put("userCode", userCode)
+                    .put("deviceName", deviceName)
+                    .put("deviceType", deviceType)
+                    .put("platform", platform)
+                if (devicePublicKey != null) {
+                    body.put("devicePublicKey", devicePublicKey)
+                }
+                val reply = postBlocking(baseUrl, "/api/auth/device/claim-invite", token = null, body)
+                if (reply.ok) {
+                    val token = reply.str("token").orEmpty()
+                    val signedIn = SignedIn(
+                        token = token,
+                        phone = reply.str("username") ?: reply.str("deviceName").orEmpty(),
+                        deviceName = reply.str("deviceName").orEmpty(),
+                        deviceId = reply.str("deviceId")
+                    )
+                    ClaimInviteResult(
+                        ok = true,
+                        signedIn = signedIn,
+                        encryptedKeyBundle = reply.str("encryptedKeyBundle")
+                    )
+                } else {
+                    ClaimInviteResult(ok = false, error = reply.message)
+                }
+            } catch (e: IOException) {
+                ClaimInviteResult(ok = false, error = unreachable(baseUrl, e))
+            } catch (e: Exception) {
+                ClaimInviteResult(ok = false, error = e.message ?: e.javaClass.simpleName)
+            }
+            main.post { onResult(result) }
+        }.apply { name = "teilen-claim-invite" }.start()
+    }
+
+    /**
+     * Polls until a pairing request settles (is approved/claimed or fails).
+     */
+    fun pollForSettlement(
+        baseUrl: String,
+        deviceCode: String,
+        pollIntervalMillis: Long = 3000L,
+        onSettled: (Boolean) -> Unit
+    ) {
+        Thread {
+            val reply = try {
+                postBlocking(
+                    baseUrl,
+                    "/api/auth/device/token",
+                    token = null,
+                    JSONObject().put("deviceCode", deviceCode)
+                )
+            } catch (e: Exception) {
+                null
+            }
+            main.post {
+                if (reply != null && reply.status != 202 && reply.ok) {
+                    onSettled(true)
+                } else if (reply != null && reply.status == 202) {
+                    main.postDelayed({
+                        pollForSettlement(baseUrl, deviceCode, pollIntervalMillis, onSettled)
+                    }, pollIntervalMillis)
+                } else {
+                    onSettled(false)
+                }
+            }
+        }.apply { name = "teilen-poll-settle" }.start()
     }
 
     /**

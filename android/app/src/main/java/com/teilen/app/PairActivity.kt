@@ -10,9 +10,7 @@ import android.widget.Toast
 /**
  * The far end of pairing: the phone's camera opens {@code teilen://pair?code=…} and lands here.
  *
- * Everything about this screen is a security decision, so it is deliberately dull: one dialog,
- * naming the device that is asking, saying plainly what allowing it means, and two buttons. No
- * deep view hierarchy to get lost in, and nothing is granted until the user says so.
+ * Supports both Host Invites (Zero-Auth Claim) and Newcomer Approvals.
  */
 class PairActivity : Activity() {
 
@@ -28,52 +26,112 @@ class PairActivity : Activity() {
 
         val code = codeOf(intent?.data)
         if (code == null) {
-            // a bare teilen:// link, or a stale one from another app: nothing to approve
             Toast.makeText(this, R.string.pair_no_code, Toast.LENGTH_LONG).show()
             finish()
             return
         }
 
-        val token = Session.token(this)
-        if (token == null) {
-            // approving needs a token of its own, so this phone has to be paired first
-            promptNotPaired()
-            return
-        }
-
-        // the code is the secret, so ask the server what it is asking for before asking the user
         TeilenApi.describePairing(Server.get(this), code) { preview ->
-            // whatever the server could tell us, the decision is the same dialog
-            show(code, token, preview)
+            if (preview == null) {
+                showStale(code)
+                return@describePairing
+            }
+
+            if (preview.mode == "HOST_INVITE") {
+                handleHostInvite(code, preview)
+            } else {
+                handleNewcomerApproval(code, preview)
+            }
         }
     }
 
-    /**
-     * @param preview what the server says about the code, or null when it has none — unknown,
-     *                already spent, or out of time. In that case there is nothing to approve, so
-     *                the allow button is not offered rather than offered and then refused.
-     */
-    private fun show(code: String, token: String, preview: TeilenApi.PairingPreview?) {
-        if (isFinishing) {
-            return
-        }
-        val builder = AlertDialog.Builder(this)
+    private fun handleHostInvite(code: String, preview: TeilenApi.PairingPreview) {
+        val devName = listOfNotNull(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
+            .joinToString(" ")
+            .ifBlank { "Android Device" }
+
+        AlertDialog.Builder(this)
             .setTitle(R.string.pair_title)
+            .setMessage(getString(R.string.pair_ask_named, preview.deviceName, "Vault"))
+            .setPositiveButton(R.string.pair_allow) { _, _ ->
+                Toast.makeText(this, "Connecting…", Toast.LENGTH_SHORT).show()
+                TeilenApi.claimHostInvite(Server.get(this), code, devName) { result ->
+                    if (result.ok && result.signedIn != null) {
+                        if (result.encryptedKeyBundle != null) {
+                            PairingCrypto.openHostInvite(this, result.encryptedKeyBundle, code)
+                        }
+                        Session.save(this, result.signedIn.token, result.signedIn.phone, result.signedIn.deviceName)
+                        Toast.makeText(this, "Connected to ${preview.deviceName}!", Toast.LENGTH_SHORT).show()
+                        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK))
+                        finish()
+                    } else {
+                        Toast.makeText(this, result.error ?: "Connection failed", Toast.LENGTH_LONG).show()
+                        finish()
+                    }
+                }
+            }
+            .setNegativeButton(R.string.pair_deny) { _, _ -> finish() }
+            .setOnCancelListener { finish() }
+            .show()
+    }
 
-        if (preview == null) {
-            builder
-                .setMessage(getString(R.string.pair_code_stale, code))
-                .setPositiveButton(R.string.pair_close) { _, _ -> finish() }
-                .setOnCancelListener { finish() }
-                .show()
-            return
+    private fun handleNewcomerApproval(code: String, preview: TeilenApi.PairingPreview) {
+        val token = Session.token(this)
+        if (token != null) {
+            showApprovalDialog(code, token, preview)
+        } else {
+            ensureSessionThenApprove(code, preview)
         }
+    }
 
+    private fun ensureSessionThenApprove(code: String, preview: TeilenApi.PairingPreview) {
+        SecureKeyManager.ensureMasterKey(this)
+        val rand = java.util.UUID.randomUUID().toString().replace("-", "").take(10)
+        val handle = "vault$rand"
+        val password = java.util.UUID.randomUUID().toString().replace("-", "")
+        val devName = listOf(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
+            .filterNot { it.isNullOrBlank() }
+            .joinToString(" ")
+            .ifBlank { "Android Device" }
+
+        TeilenApi.createAccount(
+            baseUrl = Server.get(this),
+            phone = handle,
+            password = password,
+            displayName = "Personal Vault",
+            deviceName = devName
+        ) { result ->
+            when (result) {
+                is TeilenApi.CreateResult.Created -> {
+                    Session.save(this, result.signedIn.token, handle, devName)
+                    showApprovalDialog(code, result.signedIn.token, preview)
+                }
+                else -> {
+                    Toast.makeText(this, R.string.pair_failed, Toast.LENGTH_LONG).show()
+                    finish()
+                }
+            }
+        }
+    }
+
+    private fun showStale(code: String) {
+        if (isFinishing) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.pair_title)
+            .setMessage(getString(R.string.pair_code_stale, code))
+            .setPositiveButton(R.string.pair_close) { _, _ -> finish() }
+            .setOnCancelListener { finish() }
+            .show()
+    }
+
+    private fun showApprovalDialog(code: String, token: String, preview: TeilenApi.PairingPreview) {
+        if (isFinishing) return
         val kind = when (preview.deviceType) {
             "PHONE" -> getString(R.string.pair_kind_phone)
             else -> getString(R.string.pair_kind_web)
         }
-        builder
+        AlertDialog.Builder(this)
+            .setTitle(R.string.pair_title)
             .setMessage(getString(R.string.pair_ask_named, preview.deviceName, kind))
             .setPositiveButton(R.string.pair_allow) { _, _ ->
                 decide(code, token, allow = true, newcomerPublicKey = preview.publicKey)
@@ -81,7 +139,6 @@ class PairActivity : Activity() {
             .setNegativeButton(R.string.pair_deny) { _, _ ->
                 decide(code, token, allow = false, newcomerPublicKey = null)
             }
-            // backing out is a "no": the code just stays pending until it runs out
             .setOnCancelListener { finish() }
             .show()
     }
@@ -92,8 +149,6 @@ class PairActivity : Activity() {
         )
         Toast.makeText(this, pending, Toast.LENGTH_SHORT).show()
 
-        // seal this phone's account key to the newcomer's key, if it offered one. If that fails the
-        // pairing still goes through; the newcomer just has no key to read sealed content with.
         var keyPackage: String? = null
         if (allow && newcomerPublicKey != null) {
             keyPackage = try {
@@ -114,31 +169,9 @@ class PairActivity : Activity() {
         }
     }
 
-    private fun promptNotPaired() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.pair_title)
-            .setMessage(R.string.pair_not_paired)
-            .setPositiveButton(R.string.pair_open_app) { _, _ ->
-                startActivity(
-                    Intent(this, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                )
-                finish()
-            }
-            .setNegativeButton(R.string.pair_deny) { _, _ -> finish() }
-            .setOnCancelListener { finish() }
-            .show()
-    }
-
     companion object {
-
-        /**
-         * Exactly the alphabet the server draws codes from: no I or O (they read as 1 and 0), no 0
-         * or 1 either. Kept in step with {@code Tokens.CODE_ALPHABET} on the backend.
-         */
         val CODE_LETTERS = ('A'..'Z').filterNot { it == 'I' || it == 'O' }.toSet() + ('2'..'9').toSet()
 
-        /** {@code teilen://pair?code=K7PM-3XQD} */
         fun codeOf(data: Uri?): String? {
             if (data == null ||
                 !data.scheme.equals("teilen", ignoreCase = true) ||
@@ -151,7 +184,6 @@ class PairActivity : Activity() {
             return compact.takeIf { it.length == 8 }
         }
 
-        /** Parses either raw 8-digit code or a teilen://pair?code=... URI */
         fun cleanCode(raw: String): String? {
             val trimmed = raw.trim()
             if (trimmed.startsWith("teilen://", ignoreCase = true)) {

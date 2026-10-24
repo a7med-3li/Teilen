@@ -16,10 +16,12 @@ public record PairingPreview(
         String platform,
         /** the newcomer's single-use X25519 public key to wrap the account key to, or null */
         String publicKey,
-        Instant expiresAt) {
+        Instant expiresAt,
+        String mode) {
 
     public static PairingPreview of(PairingRequest request) {
+        String mode = request.isHostInvite() ? "HOST_INVITE" : "NEWCOMER_REQUEST";
         return new PairingPreview(request.getDeviceName(), request.getDeviceType(),
-                request.getPlatform(), request.getNewcomerPublicKey(), request.getExpiresAt());
+                request.getPlatform(), request.getNewcomerPublicKey(), request.getExpiresAt(), mode);
     }
 }

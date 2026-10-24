@@ -122,22 +122,29 @@ public class ShareItemService {
 
     @Transactional(readOnly = true)
     public List<ShareItemResponse> listLive(UUID userId) {
-        return listLive(userId, null);
+        return listLivePersonal(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ShareItemResponse> listLivePersonal(UUID userId) {
+        Instant now = Instant.now();
+        UUID personalSessionId = sessionService.getOrCreatePersonalSession(userId).getId();
+        List<ShareItem> items = repository.findPersonalItems(userId, personalSessionId, now);
+        return items.stream()
+                .map(this::response)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public List<ShareItemResponse> listLive(UUID userId, UUID sessionId) {
-        Instant now = Instant.now();
-        List<ShareItem> items;
-        if (sessionId != null) {
-            if (!sessionService.isMember(sessionId, userId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a member of session " + sessionId);
-            }
-            items = repository.findBySessionIdAndExpiresAtAfterOrderByCreatedAtDesc(sessionId, now);
-        } else {
-            UUID personalSessionId = sessionService.getOrCreatePersonalSession(userId).getId();
-            items = repository.findBySessionIdAndExpiresAtAfterOrderByCreatedAtDesc(personalSessionId, now);
+        if (sessionId == null) {
+            return listLivePersonal(userId);
         }
+        Instant now = Instant.now();
+        if (!sessionService.isMember(sessionId, userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a member of session " + sessionId);
+        }
+        List<ShareItem> items = repository.findBySessionIdAndExpiresAtAfterOrderByCreatedAtDesc(sessionId, now);
         return items.stream()
                 .map(this::response)
                 .toList();

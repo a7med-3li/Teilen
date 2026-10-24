@@ -30,14 +30,17 @@ import android.widget.BaseAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -157,9 +160,6 @@ class MainActivity : Activity() {
     private lateinit var cardFeed: View
     private lateinit var cardClipboard: View
 
-    private lateinit var gateBannerText: View
-    private lateinit var gateBannerFeed: View
-
     // Bottom Navigation Bar
     private lateinit var navTabSend: LinearLayout
     private lateinit var navTabFeed: LinearLayout
@@ -179,11 +179,9 @@ class MainActivity : Activity() {
         override fun onAvailable(network: Network) {
             main.post {
                 updateRouteBadge()
-                if (!Session.isPaired(this@MainActivity)) {
-                    provisionSilentVault()
-                } else {
+                ensureAuthenticated(onSuccess = {
                     fetchDevicesAndUpdateBanners()
-                }
+                })
             }
         }
         override fun onLost(network: Network) {
@@ -207,7 +205,7 @@ class MainActivity : Activity() {
         setupFeedTab()
         setupAccountTab()
         setupUpdateComponents()
-        setupCompanionBanners()
+        setupUniversalPairing()
 
         connectivityManager = getSystemService(ConnectivityManager::class.java)
 
@@ -219,11 +217,10 @@ class MainActivity : Activity() {
         ) { applyGating() }
         account.render()
 
-        if (!Session.isPaired(this)) {
-            provisionSilentVault()
-        } else {
+        ensureAuthenticated(onSuccess = {
             fetchDevicesAndUpdateBanners()
-        }
+            refreshFeed(silent = true)
+        })
 
         takeHandedOverText(intent)
         checkDeepLink(intent)
@@ -445,9 +442,6 @@ class MainActivity : Activity() {
         cardFeed = findViewById(R.id.card_feed)
         cardClipboard = findViewById(R.id.card_clipboard)
 
-        gateBannerText = findViewById(R.id.gate_banner_text)
-        gateBannerFeed = findViewById(R.id.gate_banner_feed)
-
         navTabSend = findViewById(R.id.nav_tab_send)
         navTabFeed = findViewById(R.id.nav_tab_feed)
         navTabAccount = findViewById(R.id.nav_tab_account)
@@ -476,9 +470,6 @@ class MainActivity : Activity() {
             performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
             selectTab(Tab.ACCOUNT)
         }
-
-        findViewById<Button>(R.id.go_to_account_text).setOnClickListener { selectTab(Tab.ACCOUNT) }
-        findViewById<Button>(R.id.go_to_account_feed).setOnClickListener { selectTab(Tab.ACCOUNT) }
 
         findViewById<Button>(R.id.open_feed).setOnClickListener {
             startActivity(Intent(this, FeedActivity::class.java))
@@ -891,27 +882,33 @@ class MainActivity : Activity() {
         val activeSession = Session.activeSessionId(this)
 
         setBusy(true)
-        TeilenApi.send(url, Session.token(this), text, selectedTtlSeconds, itemType, activeSession) { ok, message ->
-            setBusy(false)
-            when {
-                ok -> {
-                    content.setText("")
-                    status.text = getString(R.string.sent, message)
-                    Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
-                    if (currentTab == Tab.FEED) refreshFeed()
-                }
-                message == TeilenApi.UNPAIRED_MESSAGE -> {
-                    Session.clear(this)
-                    account.render()
-                    applyGating()
-                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-                }
-                else -> {
-                    status.text = message
-                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        ensureAuthenticated(onSuccess = { token ->
+            TeilenApi.send(url, token, text, selectedTtlSeconds, itemType, activeSession) { ok, message ->
+                setBusy(false)
+                when {
+                    ok -> {
+                        content.setText("")
+                        status.text = getString(R.string.sent, message)
+                        Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
+                        if (currentTab == Tab.FEED) refreshFeed()
+                    }
+                    message == TeilenApi.UNPAIRED_MESSAGE -> {
+                        Session.clear(this)
+                        account.render()
+                        applyGating()
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                    }
+                    else -> {
+                        status.text = message
+                        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                    }
                 }
             }
-        }
+        }, onError = { err ->
+            setBusy(false)
+            status.text = err
+            Toast.makeText(this, err, Toast.LENGTH_LONG).show()
+        })
     }
 
     private fun submitFiles() {
@@ -973,59 +970,66 @@ class MainActivity : Activity() {
         fileProgress.visibility = View.VISIBLE
         fileProgress.progress = 0
 
-        TeilenApi.uploadAll(
-            context = this,
-            baseUrl = url,
-            token = Session.token(this),
-            uris = ArrayList(selectedFiles),
-            ttlSeconds = selectedTtlSeconds,
-            sessionId = activeSession,
-            onProgress = { index, count, written, total ->
-                if (total != null && total > 0) {
-                    fileProgress.progress = ((written * 100) / total).toInt()
-                    showFileStatus(
-                        getString(
-                            R.string.uploading_n,
-                            count,
-                            index,
-                            count
-                        ) + " · " + getString(
-                            R.string.uploading_bytes,
-                            TeilenApi.humanSize(written)
-                        ),
-                        false
-                    )
-                } else if (written > 0) {
-                    showFileStatus(
-                        getString(R.string.uploading_bytes, TeilenApi.humanSize(written)),
-                        false
-                    )
-                }
-            },
-            onDone = { outcome ->
-                setBusy(false)
-                fileProgress.visibility = View.GONE
-                if (outcome.lastError == TeilenApi.UNPAIRED_MESSAGE) {
-                    Session.clear(this)
-                    account.render()
-                    applyGating()
-                }
-                if (outcome.failed == 0) {
-                    val message = if (outcome.sent == 1) {
-                        getString(R.string.file_sent, selectedFiles.first().let { TeilenApi.displayName(this, it) })
-                    } else {
-                        getString(R.string.files_sent, outcome.sent)
+        ensureAuthenticated(onSuccess = { token ->
+            TeilenApi.uploadAll(
+                context = this,
+                baseUrl = url,
+                token = token,
+                uris = ArrayList(selectedFiles),
+                ttlSeconds = selectedTtlSeconds,
+                sessionId = activeSession,
+                onProgress = { index, count, written, total ->
+                    if (total != null && total > 0) {
+                        fileProgress.progress = ((written * 100) / total).toInt()
+                        showFileStatus(
+                            getString(
+                                R.string.uploading_n,
+                                count,
+                                index,
+                                count
+                            ) + " · " + getString(
+                                R.string.uploading_bytes,
+                                TeilenApi.humanSize(written)
+                            ),
+                            false
+                        )
+                    } else if (written > 0) {
+                        showFileStatus(
+                            getString(R.string.uploading_bytes, TeilenApi.humanSize(written)),
+                            false
+                        )
                     }
-                    showFileStatus(message, false)
-                    Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
-                    clearSelectedFiles()
-                    if (currentTab == Tab.FEED) refreshFeed()
-                } else {
-                    showFileStatus(getString(R.string.file_failed, outcome.lastError ?: ""), true)
-                    performErrorHaptic(fileStatus)
+                },
+                onDone = { outcome ->
+                    setBusy(false)
+                    fileProgress.visibility = View.GONE
+                    if (outcome.lastError == TeilenApi.UNPAIRED_MESSAGE) {
+                        Session.clear(this)
+                        account.render()
+                        applyGating()
+                    }
+                    if (outcome.failed == 0) {
+                        val message = if (outcome.sent == 1) {
+                            getString(R.string.file_sent, selectedFiles.first().let { TeilenApi.displayName(this, it) })
+                        } else {
+                            getString(R.string.files_sent, outcome.sent)
+                        }
+                        showFileStatus(message, false)
+                        Toast.makeText(this, R.string.sent_toast, Toast.LENGTH_SHORT).show()
+                        clearSelectedFiles()
+                        if (currentTab == Tab.FEED) refreshFeed()
+                    } else {
+                        showFileStatus(getString(R.string.file_failed, outcome.lastError ?: ""), true)
+                        performErrorHaptic(fileStatus)
+                    }
                 }
-            }
-        )
+            )
+        }, onError = { err ->
+            setBusy(false)
+            fileProgress.visibility = View.GONE
+            showFileStatus(err, true)
+            performErrorHaptic(fileStatus)
+        })
     }
 
     private fun showFileStatus(text: String, isError: Boolean) {
@@ -1060,7 +1064,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun refreshFeed(silent: Boolean = false) {
+    fun refreshFeed(silent: Boolean = false) {
         if (feedLoading || !Session.isPaired(this)) return
         feedLoading = true
         if (!silent && feedAdapter.count == 0) {
@@ -1339,13 +1343,9 @@ class MainActivity : Activity() {
     private fun applyGating() {
         val paired = Session.isPaired(this)
 
-        cardText.visibility = if (paired) View.VISIBLE else View.GONE
-        gateBannerText.visibility = if (paired) View.GONE else View.VISIBLE
-
-        cardFeed.visibility = if (paired) View.VISIBLE else View.GONE
-        gateBannerFeed.visibility = if (paired) View.GONE else View.VISIBLE
-
-        cardClipboard.visibility = if (paired) View.VISIBLE else View.GONE
+        cardText.visibility = View.VISIBLE
+        cardFeed.visibility = View.VISIBLE
+        cardClipboard.visibility = View.VISIBLE
 
         sessionScrollView.visibility = if (paired) View.VISIBLE else View.GONE
         if (paired) {
@@ -1389,9 +1389,30 @@ class MainActivity : Activity() {
         return bytes.map { chars[(it.toInt() and 0xFF) % chars.length] }.joinToString("")
     }
 
-    private fun provisionSilentVault(onDone: (() -> Unit)? = null) {
-        if (Session.isPaired(this) || isProvisioningVault) {
-            onDone?.invoke()
+    fun ensureAuthenticated(onSuccess: (String) -> Unit, onError: ((String) -> Unit)? = null) {
+        val existing = Session.token(this)
+        if (!existing.isNullOrBlank()) {
+            onSuccess(existing)
+            return
+        }
+        provisionSilentVault(
+            onSuccess = onSuccess,
+            onError = onError
+        )
+    }
+
+    private fun provisionSilentVault(onSuccess: ((String) -> Unit)? = null, onError: ((String) -> Unit)? = null) {
+        val existing = Session.token(this)
+        if (!existing.isNullOrBlank()) {
+            onSuccess?.invoke(existing)
+            return
+        }
+        if (isProvisioningVault) {
+            main.postDelayed({
+                val token = Session.token(this)
+                if (!token.isNullOrBlank()) onSuccess?.invoke(token)
+                else onError?.invoke("Vault provisioning in progress")
+            }, 500)
             return
         }
         isProvisioningVault = true
@@ -1400,9 +1421,9 @@ class MainActivity : Activity() {
         SecureKeyManager.ensureMasterKey(this)
         SecureKeyManager.ensureIdentity(this)
 
-        // 2. Random anonymous workspace handle & cryptographic password
-        val randomChars = randomAlphanumeric(6).lowercase()
-        val handle = "vault-$randomChars"
+        // 2. Random anonymous workspace handle & cryptographic password (alphanumeric, no hyphens!)
+        val randomChars = randomAlphanumeric(10).lowercase()
+        val handle = "vault$randomChars"
         val password = randomAlphanumeric(24)
         val devName = listOf(Build.MANUFACTURER, Build.MODEL)
             .filterNot { it.isNullOrBlank() }
@@ -1423,15 +1444,16 @@ class MainActivity : Activity() {
                     account.render()
                     applyGating()
                     fetchDevicesAndUpdateBanners()
-                    onDone?.invoke()
+                    onSuccess?.invoke(result.signedIn.token)
                 }
                 is TeilenApi.CreateResult.Taken -> {
                     // Retry once with a new random handle
-                    provisionSilentVault(onDone)
+                    provisionSilentVault(onSuccess, onError)
                 }
                 is TeilenApi.CreateResult.Failed -> {
-                    Log.w("MainActivity", "Silent provisioning deferred: ${result.message}")
-                    onDone?.invoke()
+                    Log.w("MainActivity", "Silent provisioning failed: ${result.message}")
+                    Toast.makeText(this, "Silent vault setup error: ${result.message}", Toast.LENGTH_LONG).show()
+                    onError?.invoke(result.message)
                 }
             }
         }
@@ -1581,69 +1603,267 @@ class MainActivity : Activity() {
         updateSlideUI(1)
     }
 
-    private fun setupCompanionBanners() {
-        val serverUrl = Server.get(this)
-        findViewById<TextView>(R.id.banner_send_unpaired_title)?.text = getString(R.string.companion_banner_title, serverUrl)
-        findViewById<TextView>(R.id.banner_feed_unpaired_title)?.text = getString(R.string.companion_banner_title, serverUrl)
-
-        findViewById<View>(R.id.btn_send_banner_scan_qr)?.setOnClickListener { startQrScanner() }
-        findViewById<View>(R.id.btn_send_banner_enter_code)?.setOnClickListener { promptManualPairCode() }
-        findViewById<View>(R.id.btn_send_banner_copy_link)?.setOnClickListener {
-            val cm = getSystemService(ClipboardManager::class.java)
-            cm?.setPrimaryClip(ClipData.newPlainText("Teilen Web URL", Server.get(this)))
-            Toast.makeText(this, "Web URL copied to clipboard", Toast.LENGTH_SHORT).show()
+    private fun setupUniversalPairing() {
+        findViewById<View>(R.id.header_btn_pair)?.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            showUniversalPairingDialog()
         }
-
-        findViewById<View>(R.id.btn_feed_banner_scan_qr)?.setOnClickListener { startQrScanner() }
-        findViewById<View>(R.id.btn_feed_banner_enter_code)?.setOnClickListener { promptManualPairCode() }
-        findViewById<View>(R.id.btn_feed_banner_copy_link)?.setOnClickListener {
-            val cm = getSystemService(ClipboardManager::class.java)
-            cm?.setPrimaryClip(ClipData.newPlainText("Teilen Web URL", Server.get(this)))
-            Toast.makeText(this, "Web URL copied to clipboard", Toast.LENGTH_SHORT).show()
-        }
-
-        findViewById<View>(R.id.banner_send_paired_pill)?.setOnClickListener { selectTab(Tab.ACCOUNT) }
-        findViewById<View>(R.id.banner_feed_paired_pill)?.setOnClickListener { selectTab(Tab.ACCOUNT) }
     }
 
     private fun updateCompanionBanners(deviceCount: Int) {
-        val serverUrl = Server.get(this)
-        val domain = Server.hostOrDomain(this)
-        val titleText = getString(R.string.companion_banner_title, serverUrl)
-
-        val bannerSendUnpaired = findViewById<View>(R.id.banner_send_unpaired)
-        val bannerSendPill = findViewById<View>(R.id.banner_send_paired_pill)
-        val txtSendPill = findViewById<TextView>(R.id.txt_send_paired_pill)
-        findViewById<TextView>(R.id.banner_send_unpaired_title)?.text = titleText
-
-        val bannerFeedUnpaired = findViewById<View>(R.id.banner_feed_unpaired)
-        val bannerFeedPill = findViewById<View>(R.id.banner_feed_paired_pill)
-        val txtFeedPill = findViewById<TextView>(R.id.txt_feed_paired_pill)
-        findViewById<TextView>(R.id.banner_feed_unpaired_title)?.text = titleText
-
-        if (deviceCount >= 2) {
-            bannerSendUnpaired?.visibility = View.GONE
-            bannerSendPill?.visibility = View.VISIBLE
-            txtSendPill?.text = getString(R.string.devices_connected_pill, deviceCount, domain)
-
-            bannerFeedUnpaired?.visibility = View.GONE
-            bannerFeedPill?.visibility = View.VISIBLE
-            txtFeedPill?.text = getString(R.string.devices_connected_pill, deviceCount, domain)
-        } else {
-            bannerSendUnpaired?.visibility = View.VISIBLE
-            bannerSendPill?.visibility = View.GONE
-
-            bannerFeedUnpaired?.visibility = View.VISIBLE
-            bannerFeedPill?.visibility = View.GONE
-        }
+        val count = deviceCount.coerceAtLeast(1)
+        findViewById<TextView>(R.id.header_device_count)?.text = "● $count"
     }
 
-    private fun fetchDevicesAndUpdateBanners() {
+    fun fetchDevicesAndUpdateBanners() {
         val token = Session.token(this) ?: return
         TeilenApi.getDevices(Server.get(this), token) { devices ->
             val count = devices?.size ?: 1
-            updateCompanionBanners(count)
+            main.post {
+                updateCompanionBanners(count)
+            }
         }
+    }
+
+    private fun showUniversalPairingDialog() {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_universal_pair, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val btnClose = dialogView.findViewById<View>(R.id.dialog_pair_close)
+        val tabScanQr = dialogView.findViewById<TextView>(R.id.tab_scan_qr)
+        val tabMyCode = dialogView.findViewById<TextView>(R.id.tab_my_code)
+        val viewScanQr = dialogView.findViewById<View>(R.id.view_scan_qr)
+        val viewMyCode = dialogView.findViewById<View>(R.id.view_my_code)
+
+        val btnOpenCam = dialogView.findViewById<View>(R.id.btn_open_camera_scanner)
+        val inputCode = dialogView.findViewById<EditText>(R.id.input_manual_pair_code)
+        val btnSubmitCode = dialogView.findViewById<View>(R.id.btn_submit_manual_code)
+        val statusManual = dialogView.findViewById<TextView>(R.id.status_manual_pair)
+
+        val pairQr = dialogView.findViewById<ImageView>(R.id.dialog_pair_qr)
+        val pairSpinner = dialogView.findViewById<View>(R.id.dialog_pair_spinner)
+        val pairCode = dialogView.findViewById<TextView>(R.id.dialog_pair_code)
+        val btnCopyCode = dialogView.findViewById<View>(R.id.dialog_btn_copy_code)
+        val pairStatus = dialogView.findViewById<TextView>(R.id.dialog_pair_status)
+
+        btnClose.setOnClickListener { dialog.dismiss() }
+
+        fun setTab(isScan: Boolean) {
+            if (isScan) {
+                tabScanQr.setBackgroundResource(R.drawable.bg_segmented_selected)
+                tabScanQr.setTextColor(getColor(R.color.accent))
+                tabScanQr.setTypeface(null, Typeface.BOLD)
+
+                tabMyCode.background = null
+                tabMyCode.setTextColor(getColor(R.color.text_secondary))
+                tabMyCode.setTypeface(null, Typeface.NORMAL)
+
+                viewScanQr.visibility = View.VISIBLE
+                viewMyCode.visibility = View.GONE
+            } else {
+                tabMyCode.setBackgroundResource(R.drawable.bg_segmented_selected)
+                tabMyCode.setTextColor(getColor(R.color.accent))
+                tabMyCode.setTypeface(null, Typeface.BOLD)
+
+                tabScanQr.background = null
+                tabScanQr.setTextColor(getColor(R.color.text_secondary))
+                tabScanQr.setTypeface(null, Typeface.NORMAL)
+
+                viewScanQr.visibility = View.GONE
+                viewMyCode.visibility = View.VISIBLE
+
+                loadMyPairingCode(pairQr, pairSpinner, pairCode, btnCopyCode, pairStatus, dialog)
+            }
+        }
+
+        tabScanQr.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            setTab(true)
+        }
+        tabMyCode.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            setTab(false)
+        }
+
+        btnOpenCam.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            dialog.dismiss()
+            startQrScanner()
+        }
+
+        btnSubmitCode.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            val code = PairActivity.cleanCode(inputCode.text.toString())
+            if (code == null) {
+                statusManual.visibility = View.VISIBLE
+                statusManual.text = getString(R.string.pair_no_code)
+                statusManual.setTextColor(getColor(R.color.danger))
+                return@setOnClickListener
+            }
+            statusManual.visibility = View.VISIBLE
+            statusManual.text = getString(R.string.pair_approving)
+            statusManual.setTextColor(getColor(R.color.text_secondary))
+
+            TeilenApi.describePairing(Server.get(this), code) { preview ->
+                if (preview == null) {
+                    statusManual.text = getString(R.string.pair_code_stale, code)
+                    statusManual.setTextColor(getColor(R.color.danger))
+                    return@describePairing
+                }
+
+                if (preview.mode == "HOST_INVITE") {
+                    val devName = listOfNotNull(Build.MANUFACTURER, Build.MODEL)
+                        .joinToString(" ")
+                        .ifBlank { "Android Device" }
+                    AlertDialog.Builder(this)
+                        .setTitle(R.string.pair_title)
+                        .setMessage("Connect to ${preview.deviceName}?")
+                        .setPositiveButton(R.string.pair_allow) { _, _ ->
+                            statusManual.text = "Connecting…"
+                            TeilenApi.claimHostInvite(Server.get(this), code, devName) { result ->
+                                if (result.ok && result.signedIn != null) {
+                                    if (result.encryptedKeyBundle != null) {
+                                        PairingCrypto.openHostInvite(this, result.encryptedKeyBundle, code)
+                                    }
+                                    Session.save(this, result.signedIn.token, result.signedIn.phone, result.signedIn.deviceName)
+                                    dialog.dismiss()
+                                    Toast.makeText(this, "Connected to ${preview.deviceName}!", Toast.LENGTH_SHORT).show()
+                                    account.render()
+                                    applyGating()
+                                    fetchDevicesAndUpdateBanners()
+                                    refreshFeed()
+                                } else {
+                                    val err = result.error ?: "Claim failed"
+                                    statusManual.text = err
+                                    statusManual.setTextColor(getColor(R.color.danger))
+                                }
+                            }
+                        }
+                        .setNegativeButton(R.string.pair_deny, null)
+                        .show()
+                    return@describePairing
+                }
+
+                ensureAuthenticated(onSuccess = { token ->
+                    val kind = if (preview.deviceType == "PHONE") getString(R.string.pair_kind_phone) else getString(R.string.pair_kind_web)
+                    AlertDialog.Builder(this)
+                        .setTitle(R.string.pair_title)
+                        .setMessage(getString(R.string.pair_ask_named, preview.deviceName, kind))
+                        .setPositiveButton(R.string.pair_allow) { _, _ ->
+                            val keyPackage = try {
+                                if (preview.publicKey != null) {
+                                    PairingCrypto.sealForNewcomer(this, PairingCrypto.unb64(preview.publicKey), code)
+                                } else null
+                            } catch (e: Exception) { null }
+
+                            TeilenApi.decidePairing(Server.get(this), token, code, true, keyPackage) { ok, msg ->
+                                if (ok) {
+                                    dialog.dismiss()
+                                    Toast.makeText(this, getString(R.string.pair_allowed, msg), Toast.LENGTH_LONG).show()
+                                    fetchDevicesAndUpdateBanners()
+                                    refreshFeed()
+                                } else {
+                                    statusManual.text = getString(R.string.pair_failed_reason, msg)
+                                    statusManual.setTextColor(getColor(R.color.danger))
+                                }
+                            }
+                        }
+                        .setNegativeButton(R.string.pair_deny) { _, _ ->
+                            TeilenApi.decidePairing(Server.get(this), token, code, false, null) { _, _ -> }
+                        }
+                        .show()
+                }, onError = { err ->
+                    statusManual.text = err
+                    statusManual.setTextColor(getColor(R.color.danger))
+                })
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun loadMyPairingCode(
+        pairQr: ImageView,
+        pairSpinner: View,
+        pairCode: TextView,
+        btnCopyCode: View,
+        pairStatus: TextView,
+        dialog: AlertDialog
+    ) {
+        val url = Server.get(this)
+        val devName = listOfNotNull(Build.MANUFACTURER, Build.MODEL)
+            .joinToString(" ")
+            .ifBlank { "Android Device" }
+
+        pairSpinner.visibility = View.VISIBLE
+        pairQr.setImageDrawable(null)
+        pairCode.text = ""
+
+        ensureAuthenticated(onSuccess = { token ->
+            val alphabet = PairActivity.CODE_LETTERS.toList()
+            val rawCode = (1..8).map { alphabet.random() }.joinToString("")
+            val bundle = PairingCrypto.sealHostInvite(this, rawCode)
+
+            TeilenApi.createHostInvite(
+                baseUrl = url,
+                token = token,
+                userCode = rawCode,
+                encryptedKeyBundle = bundle,
+                deviceName = devName
+            ) { offer ->
+                if (!dialog.isShowing) return@createHostInvite
+                if (offer == null) {
+                    pairSpinner.visibility = View.GONE
+                    pairStatus.text = getString(R.string.pair_failed)
+                    return@createHostInvite
+                }
+
+                val code = offer.userCode
+                pairCode.text = code
+                pairStatus.text = getString(R.string.pair_waiting)
+
+                try {
+                    val barcodeEncoder = BarcodeEncoder()
+                    val bitmap = barcodeEncoder.encodeBitmap(
+                        "teilen://pair?code=$code",
+                        BarcodeFormat.QR_CODE,
+                        400,
+                        400
+                    )
+                    pairQr.setImageBitmap(bitmap)
+                    pairSpinner.visibility = View.GONE
+                } catch (e: Exception) {
+                    pairSpinner.visibility = View.GONE
+                }
+
+                btnCopyCode.setOnClickListener {
+                    val cm = getSystemService(ClipboardManager::class.java)
+                    cm?.setPrimaryClip(ClipData.newPlainText("Teilen Pairing Code", code))
+                    performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
+                    Toast.makeText(this, R.string.code_copied, Toast.LENGTH_SHORT).show()
+                }
+
+                TeilenApi.pollForSettlement(url, offer.deviceCode) { settled ->
+                    if (!dialog.isShowing) return@pollForSettlement
+                    if (settled) {
+                        dialog.dismiss()
+                        Toast.makeText(this, "Companion device connected!", Toast.LENGTH_SHORT).show()
+                        account.render()
+                        fetchDevicesAndUpdateBanners()
+                        refreshFeed()
+                    }
+                }
+            }
+        }, onError = { err ->
+            if (dialog.isShowing) {
+                pairSpinner.visibility = View.GONE
+                pairStatus.text = err
+            }
+        })
     }
 
     fun promptManualPairCode() {
@@ -1668,6 +1888,61 @@ class MainActivity : Activity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    // ------------------------------------------------------------- Image Clipboard Copy
+
+    private fun copyImageToClipboard(item: FeedItem) {
+        val url = item.blobUrl(Server.get(this)) ?: return
+        val rawExt = item.content.substringAfterLast('.', "png").lowercase()
+        val ext = if (rawExt in listOf("png", "jpg", "jpeg", "webp", "gif")) rawExt else "png"
+        val fileName = "teilen_${item.id}.$ext"
+
+        Toast.makeText(this, "Copying image to clipboard...", Toast.LENGTH_SHORT).show()
+
+        Thread {
+            try {
+                val imagesDir = java.io.File(cacheDir, "shared_images").apply { mkdirs() }
+                val targetFile = java.io.File(imagesDir, fileName)
+
+                val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 10_000
+                    readTimeout = 30_000
+                    instanceFollowRedirects = true
+                }
+                if (connection.responseCode in 200..299) {
+                    targetFile.outputStream().use { out ->
+                        connection.inputStream.use { input ->
+                            input.copyTo(out)
+                        }
+                    }
+                }
+                connection.disconnect()
+
+                if (targetFile.exists() && targetFile.length() > 0) {
+                    val contentUri = FileProvider.getUriForFile(
+                        this,
+                        "${packageName}.fileprovider",
+                        targetFile
+                    )
+                    main.post {
+                        val cm = getSystemService(ClipboardManager::class.java)
+                        val clip = ClipData.newUri(contentResolver, "Image", contentUri)
+                        cm?.setPrimaryClip(clip)
+                        performHaptic(window.decorView, HapticFeedbackConstants.CONFIRM)
+                        Toast.makeText(this, "Image copied to clipboard", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    main.post {
+                        Toast.makeText(this, "Failed to copy image", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                main.post {
+                    Toast.makeText(this, "Error copying image: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }.apply { name = "teilen-copy-image" }.start()
     }
 
     // ------------------------------------------------------------- Inline Feed Adapter
@@ -1700,13 +1975,9 @@ class MainActivity : Activity() {
             val titleText = view.findViewById<TextView>(R.id.feed_title)
             val thumb = view.findViewById<ImageView>(R.id.feed_thumb)
 
-            val btnExtend = view.findViewById<Button>(R.id.feed_action_extend)
             val btnCopy = view.findViewById<Button>(R.id.feed_action_copy)
-            val btnDownload = view.findViewById<Button>(R.id.feed_action_download)
-            val btnOpen = view.findViewById<Button>(R.id.feed_action_open)
-            val btnCode = view.findViewById<Button>(R.id.feed_action_code)
-            val btnExpand = view.findViewById<Button>(R.id.feed_action_expand)
-            val btnDelete = view.findViewById<Button>(R.id.feed_action_delete)
+            val btnDownload = view.findViewById<ImageButton>(R.id.feed_action_download)
+            val btnMore = view.findViewById<ImageButton>(R.id.feed_action_more)
 
             kindBadge.text = item.kind.uppercase()
             metaText.text = item.meta()
@@ -1736,26 +2007,11 @@ class MainActivity : Activity() {
 
             // Code Mode toggle (<>)
             val isCode = codeModes[item.id] == true
-            if (item.type == "TEXT") {
-                btnCode.visibility = View.VISIBLE
-                if (isCode) {
-                    titleText.typeface = Typeface.MONOSPACE
-                    titleText.setBackgroundResource(R.drawable.bg_input)
-                    titleText.setPadding(16, 12, 16, 12)
-                    btnCode.setTextColor(getColor(R.color.accent))
-                } else {
-                    titleText.typeface = Typeface.DEFAULT
-                    titleText.background = null
-                    titleText.setPadding(0, 0, 0, 0)
-                    btnCode.setTextColor(getColor(R.color.text_secondary))
-                }
-                btnCode.setOnClickListener {
-                    performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
-                    codeModes[item.id] = !isCode
-                    notifyDataSetChanged()
-                }
+            if (item.type == "TEXT" && isCode) {
+                titleText.typeface = Typeface.MONOSPACE
+                titleText.setBackgroundResource(R.drawable.bg_input)
+                titleText.setPadding(16, 12, 16, 12)
             } else {
-                btnCode.visibility = View.GONE
                 titleText.typeface = Typeface.DEFAULT
                 titleText.background = null
                 titleText.setPadding(0, 0, 0, 0)
@@ -1764,31 +2020,25 @@ class MainActivity : Activity() {
             // Expand / Full View toggle
             val isLong = item.type == "TEXT" && (item.content.length > 200 || item.content.lines().size > 4)
             val isExpanded = expandedModes[item.id] == true
-            if (isLong) {
-                btnExpand.visibility = View.VISIBLE
-                if (isExpanded) {
-                    titleText.maxLines = Integer.MAX_VALUE
-                    titleText.ellipsize = null
-                    btnExpand.text = "Fold"
-                } else {
-                    titleText.maxLines = 6
-                    titleText.ellipsize = android.text.TextUtils.TruncateAt.END
-                    btnExpand.text = "Full"
-                }
-                btnExpand.setOnClickListener {
-                    performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
-                    expandedModes[item.id] = !isExpanded
-                    notifyDataSetChanged()
-                }
+            if (isLong && !isExpanded) {
+                titleText.maxLines = 6
+                titleText.ellipsize = android.text.TextUtils.TruncateAt.END
             } else {
-                btnExpand.visibility = View.GONE
                 titleText.maxLines = Integer.MAX_VALUE
                 titleText.ellipsize = null
             }
 
-            // Copy Action (Text and Links)
-            if (!item.hasBlob) {
+            // Primary 1: Copy Action (Text, Link, Image)
+            if (item.isImage) {
                 btnCopy.visibility = View.VISIBLE
+                btnCopy.text = "Copy"
+                btnCopy.setOnClickListener {
+                    performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
+                    copyImageToClipboard(item)
+                }
+            } else if (!item.hasBlob) {
+                btnCopy.visibility = View.VISIBLE
+                btnCopy.text = "Copy"
                 btnCopy.setOnClickListener {
                     performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
                     val cm = getSystemService(ClipboardManager::class.java)
@@ -1799,7 +2049,7 @@ class MainActivity : Activity() {
                 btnCopy.visibility = View.GONE
             }
 
-            // Download Action (Files, Images, PDFs, Audio)
+            // Primary 2: Download Action (Files, Images, PDFs, Audio)
             if (item.hasBlob) {
                 btnDownload.visibility = View.VISIBLE
                 btnDownload.setOnClickListener {
@@ -1810,57 +2060,69 @@ class MainActivity : Activity() {
                 btnDownload.visibility = View.GONE
             }
 
-            // Open Action (Links and Blobs)
-            if (item.hasBlob || item.type == "LINK") {
-                btnOpen.visibility = View.VISIBLE
-                btnOpen.setOnClickListener {
-                    performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-                    openItem(item)
-                }
-            } else {
-                btnOpen.visibility = View.GONE
-            }
+            // Quick Actions Overflow Menu (⋮)
+            btnMore.setOnClickListener { anchor ->
+                performHaptic(anchor, HapticFeedbackConstants.CLOCK_TICK)
+                val popup = PopupMenu(this@MainActivity, anchor)
+                popup.menu.add(0, 1, 0, "+1 Hour Expiration")
+                popup.menu.add(0, 2, 1, "Custom Expiration (TTL)...")
 
-            // Extend Action (+1h on tap, Custom TTL on long-click)
-            btnExtend.setOnClickListener {
-                performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
-                btnExtend.isEnabled = false
-                TeilenApi.extendItem(Server.get(this@MainActivity), Session.token(this@MainActivity), item.id) { ok, msg ->
-                    btnExtend.isEnabled = true
-                    if (ok) {
-                        Toast.makeText(this@MainActivity, "Extended +1 hour", Toast.LENGTH_SHORT).show()
-                        refreshFeed()
-                    } else {
-                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                if (item.hasBlob || item.type == "LINK") {
+                    popup.menu.add(0, 3, 2, "Open / Share")
+                }
+
+                if (item.type == "TEXT") {
+                    popup.menu.add(0, 4, 3, if (isCode) "Normal Font View" else "Code View (<>)")
+                    if (isLong) {
+                        popup.menu.add(0, 5, 4, if (isExpanded) "Fold View" else "Full View")
                     }
                 }
-            }
-            btnExtend.setOnLongClickListener {
-                performHaptic(it, HapticFeedbackConstants.LONG_PRESS)
-                showItemCustomTtlDialog(item)
-                true
-            }
 
-            // Delete Action
-            btnDelete.setOnClickListener {
-                performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Delete item?")
-                    .setMessage("This item will be deleted immediately.")
-                    .setPositiveButton("Delete") { _, _ ->
-                        btnDelete.isEnabled = false
-                        TeilenApi.deleteItem(Server.get(this@MainActivity), Session.token(this@MainActivity), item.id) { ok, msg ->
-                            btnDelete.isEnabled = true
-                            if (ok) {
-                                Toast.makeText(this@MainActivity, "Deleted", Toast.LENGTH_SHORT).show()
-                                refreshFeed()
-                            } else {
-                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                popup.menu.add(0, 6, 5, "Delete")
+
+                popup.setOnMenuItemClickListener { menuItem ->
+                    when (menuItem.itemId) {
+                        1 -> {
+                            TeilenApi.extendItem(Server.get(this@MainActivity), Session.token(this@MainActivity), item.id) { ok, msg ->
+                                if (ok) {
+                                    Toast.makeText(this@MainActivity, "Extended +1 hour", Toast.LENGTH_SHORT).show()
+                                    refreshFeed()
+                                } else {
+                                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
+                        2 -> showItemCustomTtlDialog(item)
+                        3 -> openItem(item)
+                        4 -> {
+                            codeModes[item.id] = !isCode
+                            notifyDataSetChanged()
+                        }
+                        5 -> {
+                            expandedModes[item.id] = !isExpanded
+                            notifyDataSetChanged()
+                        }
+                        6 -> {
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("Delete item?")
+                                .setMessage("This item will be deleted immediately.")
+                                .setPositiveButton("Delete") { _, _ ->
+                                    TeilenApi.deleteItem(Server.get(this@MainActivity), Session.token(this@MainActivity), item.id) { ok, msg ->
+                                        if (ok) {
+                                            Toast.makeText(this@MainActivity, "Deleted", Toast.LENGTH_SHORT).show()
+                                            refreshFeed()
+                                        } else {
+                                            Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                                .setNegativeButton(R.string.cancel, null)
+                                .show()
+                        }
                     }
-                    .setNegativeButton(R.string.cancel, null)
-                    .show()
+                    true
+                }
+                popup.show()
             }
 
             return view

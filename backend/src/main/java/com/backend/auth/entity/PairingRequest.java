@@ -51,11 +51,17 @@ public class PairingRequest {
     @Column(name = "device_public_key", length = 200)
     private String devicePublicKey;
 
+    @Column(name = "user_id")
+    private UUID userId;
+
+    @Column(name = "is_host_invite", nullable = false)
+    private boolean hostInvite;
+
     /**
      * The approver's sealed account-key bundle, opaque to this server. Left here until the newcomer
      * collects it with its token, then the row is swept like any other spent pairing request.
      */
-    @Column(name = "key_package", length = 4000)
+    @Column(name = "key_package", length = 16000)
     private String keyPackage;
 
     @Column(name = "device_name", nullable = false, length = 120)
@@ -211,6 +217,22 @@ public class PairingRequest {
 
     public Instant getExpiresAt() {
         return expiresAt;
+    }
+
+    public UUID getUserId() {
+        return userId;
+    }
+
+    public void setUserId(UUID userId) {
+        this.userId = userId;
+    }
+
+    public boolean isHostInvite() {
+        return hostInvite;
+    }
+
+    public void setHostInvite(boolean hostInvite) {
+        this.hostInvite = hostInvite;
     }
 
     public Instant getResolvedAt() {

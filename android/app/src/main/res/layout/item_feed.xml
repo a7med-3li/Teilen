@@ -4,10 +4,11 @@
     android:layout_height="wrap_content"
     android:background="@drawable/bg_card"
     android:baselineAligned="false"
+    android:descendantFocusability="afterDescendants"
     android:orientation="vertical"
     android:padding="12dp">
 
-    <!-- Top Sticky Header Bar: Left: Type & Meta; Right: All Action Buttons -->
+    <!-- Top Sticky Header Bar: Left: Type & Meta; Right: Compact Action Buttons -->
     <LinearLayout
         android:id="@+id/feed_header_bar"
         android:layout_width="match_parent"
@@ -15,7 +16,7 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <!-- Left: Badge & Meta -->
+        <!-- Left: Badge, Countdown Ring, & Meta -->
         <TextView
             android:id="@+id/feed_kind"
             style="@style/Text.Section"
@@ -30,6 +31,13 @@
             android:textSize="10sp"
             android:textStyle="bold" />
 
+        <!-- Countdown Ring -->
+        <com.teilen.app.CountdownRingView
+            android:id="@+id/feed_ring"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="6dp" />
+
         <TextView
             android:id="@+id/feed_meta"
             style="@style/Text.Tabular"
@@ -42,127 +50,62 @@
             android:textColor="@color/text_secondary"
             android:textSize="11sp" />
 
-        <!-- Right: Action Buttons Toolbar -->
+        <!-- Right: Compact Action Buttons Toolbar (Strictly non-overflowing) -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <!-- Countdown Ring -->
-            <com.teilen.app.CountdownRingView
-                android:id="@+id/feed_ring"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
-                android:layout_marginEnd="4dp" />
-
-            <!-- +1h / Edit TTL Button -->
-            <Button
-                android:id="@+id/feed_action_extend"
-                style="@style/Button.Outline"
-                android:layout_width="wrap_content"
-                android:layout_height="26dp"
-                android:layout_marginEnd="4dp"
-                android:minHeight="26dp"
-                android:paddingStart="6dp"
-                android:paddingEnd="6dp"
-                android:text="+1h"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp" />
-
-            <!-- Copy Button -->
+            <!-- Primary 1: Copy Button (Text, Link, Image) -->
             <Button
                 android:id="@+id/feed_action_copy"
                 style="@style/Button.Outline"
                 android:layout_width="wrap_content"
-                android:layout_height="26dp"
-                android:layout_marginEnd="4dp"
-                android:minHeight="26dp"
-                android:paddingStart="6dp"
-                android:paddingEnd="6dp"
+                android:layout_height="30dp"
+                android:layout_marginEnd="6dp"
+                android:minWidth="0dp"
+                android:minHeight="30dp"
+                android:paddingStart="8dp"
+                android:paddingTop="0dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="0dp"
+                android:drawableStart="@drawable/ic_copy"
+                android:drawablePadding="4dp"
+                android:drawableTint="@color/accent"
                 android:text="Copy"
                 android:textColor="@color/accent"
                 android:textSize="11sp" />
 
-            <!-- Download Button -->
-            <Button
+            <!-- Primary 2: Download Button (Image, File, PDF, Audio) -->
+            <ImageButton
                 android:id="@+id/feed_action_download"
-                style="@style/Button.Outline"
-                android:layout_width="wrap_content"
-                android:layout_height="26dp"
-                android:layout_marginEnd="4dp"
-                android:minHeight="26dp"
-                android:paddingStart="6dp"
-                android:paddingEnd="6dp"
-                android:drawableStart="@drawable/ic_download"
-                android:drawablePadding="2dp"
-                android:drawableTint="@color/accent"
-                android:text="DL"
-                android:textColor="@color/accent"
-                android:textSize="11sp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginEnd="6dp"
+                android:background="@drawable/bg_icon_btn"
+                android:padding="6dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_download"
+                android:tint="@color/accent"
+                android:contentDescription="Download"
                 android:visibility="gone" />
 
-            <!-- Open Button (for links) -->
-            <Button
-                android:id="@+id/feed_action_open"
-                style="@style/Button.Outline"
-                android:layout_width="wrap_content"
-                android:layout_height="26dp"
-                android:layout_marginEnd="4dp"
-                android:minHeight="26dp"
-                android:paddingStart="6dp"
-                android:paddingEnd="6dp"
-                android:text="Open"
-                android:textColor="@color/accent"
-                android:textSize="11sp"
-                android:visibility="gone" />
-
-            <!-- Code / Monospace Toggle Button -->
-            <Button
-                android:id="@+id/feed_action_code"
-                style="@style/Button.Outline"
-                android:layout_width="wrap_content"
-                android:layout_height="26dp"
-                android:layout_marginEnd="4dp"
-                android:minHeight="26dp"
-                android:paddingStart="6dp"
-                android:paddingEnd="6dp"
-                android:text="&lt;&gt;"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp"
-                android:visibility="gone" />
-
-            <!-- Expand / Full View Toggle Button -->
-            <Button
-                android:id="@+id/feed_action_expand"
-                style="@style/Button.Outline"
-                android:layout_width="wrap_content"
-                android:layout_height="26dp"
-                android:layout_marginEnd="4dp"
-                android:minHeight="26dp"
-                android:paddingStart="6dp"
-                android:paddingEnd="6dp"
-                android:text="Full"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp"
-                android:visibility="gone" />
-
-            <!-- Delete Button -->
-            <Button
-                android:id="@+id/feed_action_delete"
-                style="@style/Button.Outline"
-                android:layout_width="28dp"
-                android:layout_height="26dp"
-                android:minWidth="28dp"
-                android:minHeight="26dp"
-                android:padding="4dp"
-                android:drawableStart="@drawable/ic_trash"
-                android:drawableTint="@color/danger"
-                android:contentDescription="@string/delete_item" />
+            <!-- Quick Actions Overflow Menu Button (⋮) -->
+            <ImageButton
+                android:id="@+id/feed_action_more"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_icon_btn"
+                android:padding="6dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_more_vert"
+                android:tint="@color/text_secondary"
+                android:contentDescription="More options" />
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Card Body: Image preview and/or scrollable text content -->
+    <!-- Card Body: Image preview and/or selectable text content -->
     <LinearLayout
         android:id="@+id/feed_body_container"
         android:layout_width="match_parent"
@@ -188,7 +131,12 @@
             android:layout_weight="1"
             android:lineSpacingMultiplier="1.18"
             android:textColor="@color/text_primary"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            android:textIsSelectable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:autoLink="web"
+            android:linksClickable="true" />
     </LinearLayout>
 
 </LinearLayout>

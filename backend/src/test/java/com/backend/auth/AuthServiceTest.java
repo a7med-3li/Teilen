@@ -132,4 +132,38 @@ class AuthServiceTest {
         assertThrows(ResponseStatusException.class, () ->
                 authService.login("unknownuser", "anyPassword", "New Device", "PHONE"));
     }
+
+    @Test
+    void createAndClaimHostInvite() {
+        UUID userId = UUID.randomUUID();
+        User user = new User(userId, "ahmed123", "Ahmed", "hash", Instant.now());
+        when(users.findById(userId)).thenReturn(Optional.of(user));
+
+        com.backend.auth.dto.HostInviteResponse invite = authService.createHostInvite(
+                userId, "{\"wrapped\":\"bundle\"}", "RC689N4S", "Web Browser", "Web"
+        );
+
+        assertNotNull(invite);
+        assertEquals("RC68-9N4S", invite.userCode());
+
+        ArgumentCaptor<com.backend.auth.entity.PairingRequest> captor =
+                ArgumentCaptor.forClass(com.backend.auth.entity.PairingRequest.class);
+        verify(pairings).save(captor.capture());
+        com.backend.auth.entity.PairingRequest savedRequest = captor.getValue();
+        assertTrue(savedRequest.isHostInvite());
+        assertEquals("{\"wrapped\":\"bundle\"}", savedRequest.getKeyPackage());
+
+        when(pairings.findByUserCodeHash(anyString())).thenReturn(Optional.of(savedRequest));
+
+        com.backend.auth.dto.ClaimInviteResponse claim = authService.claimHostInvite(
+                new com.backend.auth.dto.ClaimInviteRequest("RC68-9N4S", "Phone Device", "PHONE", null, "Android")
+        );
+
+        assertNotNull(claim);
+        assertNotNull(claim.token());
+        assertEquals("{\"wrapped\":\"bundle\"}", claim.encryptedKeyBundle());
+        assertEquals("ahmed123", claim.username());
+        assertEquals(userId, claim.userId());
+        verify(devices).save(any(Device.class));
+    }
 }

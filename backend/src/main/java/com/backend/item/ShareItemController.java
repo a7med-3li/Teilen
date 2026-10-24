@@ -58,8 +58,15 @@ public class ShareItemController {
 
     @GetMapping
     public List<ShareItemResponse> list(@AuthenticationPrincipal AuthenticatedUser caller,
-                                        @RequestParam(value = "sessionId", required = false) UUID sessionId) {
-        return service.listLive(caller.userId(), sessionId);
+                                        @RequestParam(value = "sessionId", required = false) String sessionId) {
+        if (sessionId == null || sessionId.isBlank() || "personal".equalsIgnoreCase(sessionId) || "null".equalsIgnoreCase(sessionId)) {
+            return service.listLivePersonal(caller.userId());
+        }
+        try {
+            return service.listLive(caller.userId(), UUID.fromString(sessionId));
+        } catch (IllegalArgumentException e) {
+            return service.listLivePersonal(caller.userId());
+        }
     }
 
     @PutMapping("/{id}/ttl")

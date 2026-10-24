@@ -576,6 +576,61 @@
         return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
     }
 
+    async function copyImageToClipboard(item, href, btn) {
+        try {
+            const resp = await api(href);
+            if (!resp.ok) {
+                toast('Failed to load image', 'error');
+                return;
+            }
+            const blob = await resp.blob();
+
+            let pngBlob = blob;
+            if (blob.type !== 'image/png') {
+                pngBlob = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.naturalWidth || img.width;
+                        canvas.height = img.naturalHeight || img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        canvas.toBlob((b) => {
+                            if (b) resolve(b);
+                            else reject(new Error('Canvas conversion failed'));
+                        }, 'image/png');
+                    };
+                    img.onerror = () => reject(new Error('Image decode error'));
+                    img.src = URL.createObjectURL(blob);
+                });
+            }
+
+            await navigator.clipboard.write([
+                new ClipboardItem({ 'image/png': pngBlob })
+            ]);
+
+            if (btn) {
+                btn.classList.add('copied');
+                const orig = btn.innerHTML;
+                btn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>Copied</span>`;
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.innerHTML = orig;
+                }, 1500);
+            }
+            toast('Image copied to clipboard', 'success');
+        } catch (err) {
+            console.error('Image clipboard copy error:', err);
+            try {
+                await navigator.clipboard.writeText(href);
+                toast('Image link copied to clipboard', 'info');
+            } catch (e) {
+                toast('Could not copy image: ' + err.message, 'error');
+            }
+        }
+    }
+
     function upsert(item, isNew) {
         if (cards.has(item.id)) return;
 
@@ -612,7 +667,7 @@
 
         headLeft.append(badge, titleSnippet, routePill, at);
 
-        // Right Header: All Action Buttons (TTL, +1h/Edit, Copy/Download, Expand, Delete)
+        // Right Header: Compact Action Toolbar + ⋮ Overflow Menu
         const headRight = document.createElement('div');
         headRight.className = 'card-head-right';
 
@@ -639,89 +694,146 @@
         const ttlText = document.createElement('span');
         ttlText.className = 'ttl-text';
         clock.append(ring, ttlText);
-
-        // 2. +1h / Edit Timer Button
-        const extendBtn = document.createElement('button');
-        extendBtn.type = 'button';
-        extendBtn.className = 'btn-head-action';
-        extendBtn.title = 'Click for +1h, right-click/long-press for custom TTL';
-        extendBtn.textContent = '+1h';
-        extendBtn.hidden = isLan;
-        extendBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            extendItem(item.id);
-        });
-        extendBtn.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            activeCustomTtlItemId = item.id;
-            customTtlTitle.textContent = 'Edit Timer (TTL)';
-            openModal(modalCustomTtl);
-        });
-
-        // 3. Copy (for TEXT/LINK) or Download (for BLOB)
-        let mainActionBtn = document.createElement('button');
-        mainActionBtn.type = 'button';
-        mainActionBtn.className = 'btn-head-action';
+        headRight.append(clock);
 
         const href = item.blobUrl || (API + '/' + item.id + '/blob');
+        let textContainer = null;
 
-        if (BLOB_TYPES.has(item.type)) {
-            mainActionBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> <span>Download</span>`;
-            mainActionBtn.addEventListener('click', (e) => {
+        // Primary Action Buttons
+        if (item.type === 'IMAGE') {
+            // IMAGE: [ 📋 Copy ] and [ ⬇ Save ]
+            const copyImgBtn = document.createElement('button');
+            copyImgBtn.type = 'button';
+            copyImgBtn.className = 'btn-head-action';
+            copyImgBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span>Copy</span>`;
+            copyImgBtn.title = 'Copy image to clipboard';
+            copyImgBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                copyImageToClipboard(item, href, copyImgBtn);
+            });
+
+            const dlBtn = document.createElement('button');
+            dlBtn.type = 'button';
+            dlBtn.className = 'btn-head-action';
+            dlBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> <span>Save</span>`;
+            dlBtn.title = 'Download / Save file';
+            dlBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 triggerBlobDownload(item, href);
             });
+
+            headRight.append(copyImgBtn, dlBtn);
+        } else if (BLOB_TYPES.has(item.type)) {
+            // FILE / PDF / AUDIO: [ ⬇ Save ]
+            const dlBtn = document.createElement('button');
+            dlBtn.type = 'button';
+            dlBtn.className = 'btn-head-action';
+            dlBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> <span>Save</span>`;
+            dlBtn.title = 'Download / Save file';
+            dlBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerBlobDownload(item, href);
+            });
+            headRight.append(dlBtn);
         } else {
-            mainActionBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span>Copy</span>`;
-            mainActionBtn.addEventListener('click', async (e) => {
+            // TEXT / LINK: ONLY [ 📋 Copy ]
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'btn-head-action';
+            copyBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span>Copy</span>`;
+            copyBtn.title = 'Copy to clipboard';
+            copyBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 await navigator.clipboard.writeText(item.content);
-                mainActionBtn.classList.add('copied');
+                copyBtn.classList.add('copied');
                 toast('Copied to clipboard', 'success');
-                setTimeout(() => mainActionBtn.classList.remove('copied'), 1500);
+                setTimeout(() => copyBtn.classList.remove('copied'), 1500);
             });
+            headRight.append(copyBtn);
         }
 
-        // 4. Code Toggle & Expand Toggle (for TEXT)
-        let codeToggleBtn = null;
-        let expandBtn = null;
-        let textContainer = null;
+        // Quick Actions Overflow Menu (⋮)
+        const menuContainer = document.createElement('div');
+        menuContainer.className = 'card-menu-container';
 
-        if (item.type === 'TEXT') {
-            codeToggleBtn = document.createElement('button');
-            codeToggleBtn.type = 'button';
-            codeToggleBtn.className = 'btn-head-action';
-            codeToggleBtn.title = 'Toggle Monospace / Code view';
-            codeToggleBtn.textContent = '<> Code';
-            codeToggleBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (textContainer) {
-                    textContainer.classList.toggle('code-mode');
-                }
-            });
+        const moreBtn = document.createElement('button');
+        moreBtn.type = 'button';
+        moreBtn.className = 'btn-card-more';
+        moreBtn.title = 'More options';
+        moreBtn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>`;
 
-            expandBtn = document.createElement('button');
-            expandBtn.type = 'button';
-            expandBtn.className = 'btn-head-action';
-            expandBtn.title = 'Toggle Full View';
-            expandBtn.textContent = '⤢ Expand';
-            expandBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (textContainer) {
-                    textContainer.classList.toggle('expanded');
-                    expandBtn.textContent = textContainer.classList.contains('expanded') ? '⤡ Shrink' : '⤢ Expand';
-                }
-            });
-        }
+        const dropdown = document.createElement('div');
+        dropdown.className = 'card-menu-dropdown';
+        dropdown.hidden = true;
 
-        // 5. Share Button
-        const shareBtn = document.createElement('button');
-        shareBtn.type = 'button';
-        shareBtn.className = 'btn-head-action';
-        shareBtn.title = 'Share item';
-        shareBtn.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>`;
-        shareBtn.addEventListener('click', async (e) => {
+        moreBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            const wasHidden = dropdown.hidden;
+            document.querySelectorAll('.card-menu-dropdown').forEach(d => d.hidden = true);
+            dropdown.hidden = !wasHidden;
+        });
+
+        // 1. Extend +1h & Custom TTL
+        if (!isLan) {
+            const optExtend = document.createElement('button');
+            optExtend.type = 'button';
+            optExtend.className = 'card-menu-item';
+            optExtend.innerHTML = `<span>⏳</span> <span>+1 Hour Expiration</span>`;
+            optExtend.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdown.hidden = true;
+                extendItem(item.id);
+            });
+            dropdown.append(optExtend);
+
+            const optCustomTtl = document.createElement('button');
+            optCustomTtl.type = 'button';
+            optCustomTtl.className = 'card-menu-item';
+            optCustomTtl.innerHTML = `<span>⏱</span> <span>Custom Timer (TTL)…</span>`;
+            optCustomTtl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdown.hidden = true;
+                activeCustomTtlItemId = item.id;
+                customTtlTitle.textContent = 'Edit Timer (TTL)';
+                openModal(modalCustomTtl);
+            });
+            dropdown.append(optCustomTtl);
+        }
+
+        // 2. Code toggle & Full View (for TEXT)
+        if (item.type === 'TEXT') {
+            const optCode = document.createElement('button');
+            optCode.type = 'button';
+            optCode.className = 'card-menu-item';
+            optCode.innerHTML = `<span>&lt;&gt;</span> <span>Toggle Code Font</span>`;
+            optCode.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdown.hidden = true;
+                if (textContainer) textContainer.classList.toggle('code-mode');
+            });
+
+            const optFull = document.createElement('button');
+            optFull.type = 'button';
+            optFull.className = 'card-menu-item';
+            optFull.innerHTML = `<span>⤢</span> <span>Toggle Full View</span>`;
+            optFull.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdown.hidden = true;
+                if (textContainer) textContainer.classList.toggle('expanded');
+            });
+
+            dropdown.append(optCode, optFull);
+        }
+
+        // 3. Share link
+        const optShare = document.createElement('button');
+        optShare.type = 'button';
+        optShare.className = 'card-menu-item';
+        optShare.innerHTML = `<span>🔗</span> <span>Share Link</span>`;
+        optShare.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            dropdown.hidden = true;
+            const shareUrl = BLOB_TYPES.has(item.type) ? href : item.content;
             if (navigator.share) {
                 try {
                     await navigator.share({
@@ -732,19 +844,19 @@
                     return;
                 } catch (err) {}
             }
-            await navigator.clipboard.writeText(BLOB_TYPES.has(item.type) ? href : item.content);
+            await navigator.clipboard.writeText(shareUrl);
             toast('Share link copied to clipboard', 'success');
         });
+        dropdown.append(optShare);
 
-        // 6. Delete Button (✕)
-        const deleteBtn = document.createElement('button');
-        deleteBtn.type = 'button';
-        deleteBtn.className = 'btn-card-delete';
-        deleteBtn.title = 'Delete this item';
-        deleteBtn.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#EF4444" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
-        deleteBtn.addEventListener('click', async (e) => {
+        // 4. Delete
+        const optDelete = document.createElement('button');
+        optDelete.type = 'button';
+        optDelete.className = 'card-menu-item danger';
+        optDelete.innerHTML = `<span>🗑</span> <span>Delete</span>`;
+        optDelete.addEventListener('click', async (e) => {
             e.stopPropagation();
-            deleteBtn.disabled = true;
+            dropdown.hidden = true;
             if (isLan) {
                 remove(item.id);
                 toast('Item deleted', 'info');
@@ -756,19 +868,16 @@
                     remove(item.id);
                     toast('Item deleted', 'info');
                 } else {
-                    deleteBtn.disabled = false;
                     toast('Could not delete: ' + (await why(response)), 'error');
                 }
             } catch (err) {
-                deleteBtn.disabled = false;
                 toast('Network error deleting item', 'error');
             }
         });
+        dropdown.append(optDelete);
 
-        headRight.append(clock, extendBtn, mainActionBtn);
-        if (codeToggleBtn) headRight.append(codeToggleBtn);
-        if (expandBtn) headRight.append(expandBtn);
-        headRight.append(shareBtn, deleteBtn);
+        menuContainer.append(moreBtn, dropdown);
+        headRight.append(menuContainer);
         head.append(headLeft, headRight);
 
         // Card Body (Unlimited Scrollable Container - ZERO buttons at bottom!)
@@ -1297,6 +1406,10 @@
         }
 
         const devCount = devices ? devices.length : 1;
+        const headerDeviceBadge = el('header-device-badge');
+        if (headerDeviceBadge) {
+            headerDeviceBadge.textContent = `● ${devCount}`;
+        }
         const accountLabel = el('account-label');
         if (accountLabel) {
             accountLabel.textContent = `Devices (${devCount})`;
@@ -1584,74 +1697,138 @@
         }
     });
 
+    const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    function generateUserCode() {
+        let s = '';
+        for (let i = 0; i < 8; i++) {
+            s += CODE_ALPHABET.charAt(Math.floor(Math.random() * CODE_ALPHABET.length));
+        }
+        return s;
+    }
+
     async function startPairing() {
         clearInterval(pairTimer);
         try {
-            pairKey = await TeilenCrypto.newPairingKey();
-            const identity = await TeilenCrypto.ensureIdentity();
-            const res = await fetch('/api/auth/device/code', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
+            const hasAuth = !!token.get();
+            let data, codeVal, qrSrc;
+
+            if (hasAuth) {
+                // Host Invite Mode: We already have an active vault and messages!
+                // Seal our keys to an ephemeral userCode so scanning devices claim without overwriting.
+                const hostCode = generateUserCode();
+                const bundle = await TeilenCrypto.sealHostInvite(hostCode);
+                const res = await postJson('/api/auth/device/host-invite', {
+                    userCode: hostCode,
+                    encryptedKeyBundle: bundle,
                     deviceName: 'Browser',
-                    deviceType: 'WEB',
-                    platform: navigator.platform || 'Web',
-                    publicKey: pairKey && pairKey.publicKey ? TeilenCrypto.b64(pairKey.publicKey) : undefined,
-                    devicePublicKey: identity && identity.publicKey ? TeilenCrypto.b64(identity.publicKey) : undefined
-                })
-            });
-            if (!res.ok) {
-                console.error('Pairing code fetch failed with HTTP', res.status);
-                return;
-            }
-            const data = await res.json();
-            console.log('Pairing code API response:', data);
-
-            // Extract whatever key the backend provided, or fallback to previously stored user code
-            const codeVal = data.userCode || data.code || pairUserCode;
-            pairUserCode = codeVal;
-
-            // Only construct the QR URL if codeVal or qrCodeUrl exists; never allow undefined
-            const qrSrc = data.qrCodeUrl || (codeVal ? `/api/auth/device/qr.svg?code=${encodeURIComponent(codeVal)}` : null);
-
-            // Update main pair section
-            if (pairCode && codeVal) pairCode.textContent = codeVal;
-            if (qr && qrSrc) qr.src = qrSrc;
-            if (pairState) pairState.textContent = 'Scan or approve code on phone…';
-
-            // Update hero card
-            if (heroQr && qrSrc) heroQr.src = qrSrc;
-            if (heroPairCode && codeVal) heroPairCode.textContent = codeVal;
-            if (heroPairStatus) heroPairStatus.textContent = 'Scan with phone or enter code below…';
-
-            // Update modal
-            if (modalQr && qrSrc) modalQr.src = qrSrc;
-            if (modalPairCode && codeVal) modalPairCode.textContent = codeVal;
-            if (modalPairStatus) modalPairStatus.textContent = 'Scan with phone or enter code below…';
-
-            pairTimer = setInterval(async () => {
-                try {
-                    const claimRes = await fetch('/api/auth/device/token', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        credentials: 'same-origin',
-                        body: JSON.stringify({deviceCode: data.deviceCode})
-                    });
-                    if (claimRes.status === 200) {
-                        clearInterval(pairTimer);
-                        const claim = await claimRes.json();
-                        if (claim.keyPackage && pairKey) {
-                            await TeilenCrypto.openFromApprover(claim.keyPackage, pairKey.privateKey, pairUserCode);
-                        }
-                        token.set(claim.token);
-                        toast('Pairing successful!', 'success');
-                        closeModal(modalPairPhone);
-                        await showFeed();
-                    }
-                } catch (e) {
-                    console.warn('Pairing poll error:', e);
+                    platform: navigator.platform || 'Web'
+                });
+                if (!res.ok) {
+                    console.error('Host invite creation failed with HTTP', res.status);
+                    return;
                 }
-            }, (data.pollIntervalSeconds || 3) * 1000);
+                data = await res.json();
+                codeVal = data.userCode || hostCode;
+                qrSrc = data.qrCodeUrl || `/api/auth/device/qr.svg?code=${encodeURIComponent(codeVal)}`;
+                pairUserCode = codeVal;
+
+                if (pairCode) pairCode.textContent = codeVal;
+                if (qr) qr.src = qrSrc;
+                if (pairState) pairState.textContent = 'Scan with phone or enter code…';
+
+                if (heroQr) heroQr.src = qrSrc;
+                if (heroPairCode) heroPairCode.textContent = codeVal;
+                if (heroPairStatus) heroPairStatus.textContent = 'Scan with phone or enter code below…';
+
+                if (modalQr) modalQr.src = qrSrc;
+                if (modalPairCode) modalPairCode.textContent = codeVal;
+                if (modalPairStatus) modalPairStatus.textContent = 'Scan with phone or enter code below…';
+
+                pairTimer = setInterval(async () => {
+                    try {
+                        const claimRes = await fetch('/api/auth/device/token', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            credentials: 'same-origin',
+                            body: JSON.stringify({deviceCode: data.deviceCode})
+                        });
+                        if (claimRes.status === 200) {
+                            clearInterval(pairTimer);
+                            toast('Companion device connected!', 'success');
+                            closeModal(modalPairPhone);
+                            const devRes = await api('/api/devices');
+                            if (devRes.ok) renderDevices(await devRes.json());
+                            await showFeed();
+                        }
+                    } catch (e) {
+                        console.warn('Pairing poll error:', e);
+                    }
+                }, (data.pollIntervalSeconds || 3) * 1000);
+
+            } else {
+                pairKey = await TeilenCrypto.newPairingKey();
+                const identity = await TeilenCrypto.ensureIdentity();
+                const res = await fetch('/api/auth/device/code', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        deviceName: 'Browser',
+                        deviceType: 'WEB',
+                        platform: navigator.platform || 'Web',
+                        publicKey: pairKey && pairKey.publicKey ? TeilenCrypto.b64(pairKey.publicKey) : undefined,
+                        devicePublicKey: identity && identity.publicKey ? TeilenCrypto.b64(identity.publicKey) : undefined
+                    })
+                });
+                if (!res.ok) {
+                    console.error('Pairing code fetch failed with HTTP', res.status);
+                    return;
+                }
+                data = await res.json();
+                console.log('Pairing code API response:', data);
+
+                codeVal = data.userCode || data.code || pairUserCode;
+                pairUserCode = codeVal;
+
+                qrSrc = data.qrCodeUrl || (codeVal ? `/api/auth/device/qr.svg?code=${encodeURIComponent(codeVal)}` : null);
+
+                if (pairCode && codeVal) pairCode.textContent = codeVal;
+                if (qr && qrSrc) qr.src = qrSrc;
+                if (pairState) pairState.textContent = 'Scan or approve code on phone…';
+
+                if (heroQr && qrSrc) heroQr.src = qrSrc;
+                if (heroPairCode && codeVal) heroPairCode.textContent = codeVal;
+                if (heroPairStatus) heroPairStatus.textContent = 'Scan with phone or enter code below…';
+
+                if (modalQr && qrSrc) modalQr.src = qrSrc;
+                if (modalPairCode && codeVal) modalPairCode.textContent = codeVal;
+                if (modalPairStatus) modalPairStatus.textContent = 'Scan with phone or enter code below…';
+
+                pairTimer = setInterval(async () => {
+                    try {
+                        const claimRes = await fetch('/api/auth/device/token', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            credentials: 'same-origin',
+                            body: JSON.stringify({deviceCode: data.deviceCode})
+                        });
+                        if (claimRes.status === 200) {
+                            clearInterval(pairTimer);
+                            const claim = await claimRes.json();
+                            if (claim.keyPackage && pairKey) {
+                                await TeilenCrypto.openFromApprover(claim.keyPackage, pairKey.privateKey, pairUserCode);
+                            }
+                            token.set(claim.token);
+                            toast('Pairing successful!', 'success');
+                            closeModal(modalPairPhone);
+                            connectSignalWs();
+                            connectWs();
+                            await showFeed();
+                        }
+                    } catch (e) {
+                        console.warn('Pairing poll error:', e);
+                    }
+                }, (data.pollIntervalSeconds || 3) * 1000);
+            }
         } catch (e) {
             console.warn('Pairing failed', e);
         }
@@ -1687,7 +1864,7 @@
         if (!code) return;
         if (statusEl) {
             statusEl.hidden = false;
-            statusEl.textContent = 'Approving device…';
+            statusEl.textContent = 'Connecting…';
         }
         try {
             const pendingRes = await api('/api/auth/device/pending?code=' + encodeURIComponent(code));
@@ -1696,6 +1873,42 @@
                 return;
             }
             const preview = await pendingRes.json();
+
+            if (preview.mode === 'HOST_INVITE') {
+                if (statusEl) statusEl.textContent = 'Connecting to ' + preview.deviceName + '…';
+                const identity = await TeilenCrypto.ensureIdentity();
+                const claimRes = await fetch('/api/auth/device/claim-invite', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        userCode: code,
+                        deviceName: 'Browser',
+                        deviceType: 'WEB',
+                        platform: navigator.platform || 'Web',
+                        devicePublicKey: identity && identity.publicKey ? TeilenCrypto.b64(identity.publicKey) : undefined
+                    })
+                });
+                if (!claimRes.ok) {
+                    if (statusEl) statusEl.textContent = 'Claim failed: ' + (await why(claimRes));
+                    return;
+                }
+                const claim = await claimRes.json();
+                if (claim.encryptedKeyBundle) {
+                    await TeilenCrypto.openHostInvite(claim.encryptedKeyBundle, code);
+                }
+                token.set(claim.token);
+                if (inputEl) inputEl.value = '';
+                if (statusEl) statusEl.textContent = 'Connected!';
+                toast('Connected to ' + (claim.username || preview.deviceName) + '!', 'success');
+                closeModal(modalPairPhone);
+                connectSignalWs();
+                connectWs();
+                const devRes = await api('/api/devices');
+                if (devRes.ok) renderDevices(await devRes.json());
+                await showFeed();
+                return;
+            }
+
             let keyPkg = null;
             if (preview.publicKey) {
                 keyPkg = await TeilenCrypto.sealForNewcomer(preview.publicKey, code);
@@ -1709,10 +1922,11 @@
             if (approveRes.ok) {
                 if (inputEl) inputEl.value = '';
                 if (statusEl) statusEl.textContent = 'Device connected!';
-                toast('Phone successfully paired!', 'success');
+                toast('Device successfully paired!', 'success');
                 const devRes = await api('/api/devices');
                 if (devRes.ok) renderDevices(await devRes.json());
                 closeModal(modalPairPhone);
+                await showFeed();
             } else {
                 if (statusEl) statusEl.textContent = 'Approval failed: ' + (await why(approveRes));
             }
@@ -1778,6 +1992,10 @@
     initServiceWorkerAutoUpdate();
     renderSessionPills();
     refresh();
+
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.card-menu-dropdown').forEach(d => d.hidden = true);
+    });
 
     async function initApp() {
         try {

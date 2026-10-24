@@ -1,6 +1,8 @@
 package com.backend.item;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
@@ -14,6 +16,10 @@ public interface ShareItemRepository extends JpaRepository<ShareItem, UUID> {
 
     /** scoped feed: items belonging to a particular session */
     List<ShareItem> findBySessionIdAndExpiresAtAfterOrderByCreatedAtDesc(UUID sessionId, Instant now);
+
+    /** personal feed: items belonging to user where sessionId is null OR sessionId equals personal session */
+    @Query("SELECT s FROM ShareItem s WHERE s.userId = :userId AND (s.sessionId IS NULL OR s.sessionId = :personalSessionId) AND s.expiresAt > :now ORDER BY s.createdAt DESC")
+    List<ShareItem> findPersonalItems(@Param("userId") UUID userId, @Param("personalSessionId") UUID personalSessionId, @Param("now") Instant now);
 
     /** multiple sessions: items belonging to any session the user is member of */
     List<ShareItem> findBySessionIdInAndExpiresAtAfterOrderByCreatedAtDesc(List<UUID> sessionIds, Instant now);

@@ -5,9 +5,13 @@ import com.backend.auth.domain.AuthenticatedUser;
 import com.backend.auth.domain.PairingStartResponse;
 import com.backend.auth.domain.StartPairingRequest;
 import com.backend.auth.dto.ApprovalResponse;
+import com.backend.auth.dto.ClaimInviteRequest;
+import com.backend.auth.dto.ClaimInviteResponse;
 import com.backend.auth.dto.ClaimTokenRequest;
 import com.backend.auth.dto.CreateAccountRequest;
 import com.backend.auth.dto.DeviceResponse;
+import com.backend.auth.dto.HostInviteRequest;
+import com.backend.auth.dto.HostInviteResponse;
 import com.backend.auth.dto.LoginRequest;
 import com.backend.auth.dto.PairingDecisionRequest;
 import com.backend.auth.dto.PairingPreview;
@@ -130,6 +134,23 @@ public class AuthController {
     public PairingStartResponse startPairing(@Valid @RequestBody StartPairingRequest request) {
         return auth.startPairing(request.deviceName(), request.deviceType(), request.platform(),
                 request.publicKey(), request.devicePublicKey());
+    }
+
+    @PostMapping("/api/auth/device/host-invite")
+    @ResponseStatus(HttpStatus.CREATED)
+    public HostInviteResponse hostInvite(@AuthenticationPrincipal AuthenticatedUser caller,
+                                         @Valid @RequestBody HostInviteRequest request) {
+        return auth.createHostInvite(caller.userId(), request.encryptedKeyBundle(),
+                request.userCode(), request.deviceName(), request.platform());
+    }
+
+    @PostMapping("/api/auth/device/claim-invite")
+    public ResponseEntity<ClaimInviteResponse> claimInvite(@Valid @RequestBody ClaimInviteRequest request,
+                                                           HttpServletRequest httpRequest,
+                                                           HttpServletResponse httpResponse) {
+        ClaimInviteResponse response = auth.claimHostInvite(request);
+        setSessionCookie(httpResponse, httpRequest, response.token());
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping(value = "/api/auth/device/qr.svg", produces = "image/svg+xml")

@@ -25,6 +25,8 @@ window.TeilenCrypto = (() => {
     // domain separation for the key that wraps the account key, both sides must agree
     const HKDF_SALT = 'teilen-pairing';
     const HKDF_INFO = 'teilen-master-key';
+    const HOST_INVITE_SALT = 'teilen-host-invite';
+    const HOST_INVITE_INFO = 'teilen-key-bundle';
     const SECRETBOX_NONCE = 24;
 
     const ready = (async () => {
@@ -212,15 +214,28 @@ window.TeilenCrypto = (() => {
      * @param userCode the pairing code both sides can see
      * @return the JSON bundle to hand back through the server, unreadable to it
      */
+    /**
+     * Approving side: seal this device's account key and all session keys for the newcomer.
+     *
+     * @param newcomerPublicKey base64 X25519 key the newcomer offered
+     * @param userCode the pairing code both sides can see
+     * @return the JSON bundle to hand back through the server, unreadable to it
+     */
     async function sealForNewcomer(newcomerPublicKey, userCode) {
         await ready;
         const master = await ensureMasterKey();
         const identity = await ensureIdentity();
+        const sessionKeys = await getAllSessionKeys();
+
+        const payload = JSON.stringify({
+            masterKey: b64(master),
+            sessionKeys: sessionKeys
+        });
 
         const ephemeral = sodium.crypto_box_keypair();
         const shared = sodium.crypto_scalarmult(ephemeral.privateKey, unb64(newcomerPublicKey));
         const nonce = sodium.randombytes_buf(SECRETBOX_NONCE);
-        const wrapped = sodium.crypto_secretbox_easy(master, nonce, wrappingKey(shared));
+        const wrapped = sodium.crypto_secretbox_easy(sodium.from_string(payload), nonce, wrappingKey(shared));
 
         const pk = b64(ephemeral.publicKey);
         const nonceText = b64(nonce);
@@ -239,7 +254,7 @@ window.TeilenCrypto = (() => {
     }
 
     /**
-     * Newcomer side: open the approving device's bundle and keep the account key.
+     * Newcomer side: open the approving device's bundle and keep the account key and session keys.
      *
      * @param bundle the JSON string (or already-parsed object) from the token claim
      * @param privateKey this pairing's X25519 private key
@@ -262,13 +277,144 @@ window.TeilenCrypto = (() => {
         }
 
         const shared = sodium.crypto_scalarmult(privateKey, unb64(pkg.pk));
-        const master = sodium.crypto_secretbox_open_easy(
+        const decryptedBytes = sodium.crypto_secretbox_open_easy(
             unb64(pkg.wrapped), unb64(pkg.nonce), wrappingKey(shared));
+        if (!decryptedBytes) {
+            throw new Error('failed to decrypt key package');
+        }
+
+        try {
+            const payloadStr = sodium.to_string(decryptedBytes);
+            const payload = JSON.parse(payloadStr);
+            if (payload && payload.masterKey) {
+                const master = unb64(payload.masterKey);
+                await setMasterKey(master);
+                if (payload.sessionKeys) {
+                    await setSessionKeysMap(payload.sessionKeys);
+                }
+                return master;
+            }
+        } catch (e) {
+            // legacy raw 32 bytes format fallback
+        }
+
+        await setMasterKey(decryptedBytes);
+        return decryptedBytes;
+    }
+
+    /**
+     * Host Invite: seal this device's account key and session keys under the user code secret.
+     */
+    async function sealHostInvite(userCode) {
+        await ready;
+        const master = await ensureMasterKey();
+        const sessionKeys = await getAllSessionKeys();
+
+        const payload = JSON.stringify({
+            masterKey: b64(master),
+            sessionKeys: sessionKeys
+        });
+
+        const key = hkdfSha256(
+            sodium.from_string(compact(userCode)),
+            sodium.from_string(HOST_INVITE_SALT),
+            sodium.from_string(HOST_INVITE_INFO),
+            32
+        );
+        const nonce = sodium.randombytes_buf(SECRETBOX_NONCE);
+        const wrapped = sodium.crypto_secretbox_easy(sodium.from_string(payload), nonce, key);
+
+        return JSON.stringify({
+            v: 1,
+            type: 'host_invite',
+            nonce: b64(nonce),
+            wrapped: b64(wrapped)
+        });
+    }
+
+    /**
+     * Scanner side: open a Host Invite bundle using the user code.
+     */
+    async function openHostInvite(bundle, userCode) {
+        await ready;
+        const pkg = typeof bundle === 'string' ? JSON.parse(bundle) : bundle;
+        if (!pkg || pkg.v !== 1) {
+            throw new Error('unknown key package');
+        }
+
+        const key = hkdfSha256(
+            sodium.from_string(compact(userCode)),
+            sodium.from_string(HOST_INVITE_SALT),
+            sodium.from_string(HOST_INVITE_INFO),
+            32
+        );
+        const decryptedBytes = sodium.crypto_secretbox_open_easy(
+            unb64(pkg.wrapped), unb64(pkg.nonce), key
+        );
+        if (!decryptedBytes) {
+            throw new Error('Failed to decrypt host invite bundle');
+        }
+
+        const payload = JSON.parse(sodium.to_string(decryptedBytes));
+        if (!payload || !payload.masterKey) {
+            throw new Error('Missing masterKey in host invite bundle');
+        }
+
+        const master = unb64(payload.masterKey);
         await setMasterKey(master);
+        if (payload.sessionKeys) {
+            await setSessionKeysMap(payload.sessionKeys);
+        }
         return master;
     }
 
     // ---------- per-session encryption keys ----------
+
+    async function getAllSessionKeys() {
+        await ready;
+        const result = {};
+        if (!idbDisabled && typeof indexedDB !== 'undefined') {
+            try {
+                const db = await openDb();
+                await new Promise((resolve) => {
+                    const tx = db.transaction(STORE, 'readonly');
+                    const store = tx.objectStore(STORE);
+                    const req = store.openCursor();
+                    req.onsuccess = (e) => {
+                        const cursor = e.target.result;
+                        if (cursor) {
+                            if (typeof cursor.key === 'string' && cursor.key.startsWith('session_key_')) {
+                                const sessionId = cursor.key.replace('session_key_', '');
+                                result[sessionId] = b64(cursor.value);
+                            }
+                            cursor.continue();
+                        } else {
+                            resolve();
+                        }
+                    };
+                    req.onerror = () => resolve();
+                });
+            } catch (e) {}
+        }
+        for (const [k, v] of memStore.entries()) {
+            if (typeof k === 'string' && k.startsWith('session_key_')) {
+                const sessionId = k.replace('session_key_', '');
+                result[sessionId] = b64(v);
+            }
+        }
+        return result;
+    }
+
+    async function setSessionKeysMap(keysMap) {
+        if (!keysMap) return;
+        for (const [sessionId, b64Key] of Object.entries(keysMap)) {
+            if (sessionId && b64Key) {
+                try {
+                    await setSessionKey(sessionId, unb64(b64Key));
+                } catch (e) {}
+            }
+        }
+    }
 
     async function getSessionKey(sessionId, isPersonal = false) {
         await ready;
@@ -330,6 +476,10 @@ window.TeilenCrypto = (() => {
         signRequest,
         newPairingKey,
         sealForNewcomer,
-        openFromApprover
+        openFromApprover,
+        sealHostInvite,
+        openHostInvite,
+        getAllSessionKeys,
+        setSessionKeysMap
     };
 })();

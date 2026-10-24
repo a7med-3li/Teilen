@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.View
@@ -445,34 +446,90 @@ class AccountCard(
             sayApproveStatus(activity.getString(R.string.pair_no_code), isError = true)
             return
         }
-        val token = Session.token(activity) ?: return
-        val serverUrl = Server.get(activity)
+
         sayApproveStatus(activity.getString(R.string.pair_approving), isError = false)
+        val serverUrl = Server.get(activity)
 
         TeilenApi.describePairing(serverUrl, code) { preview ->
             if (preview == null) {
                 sayApproveStatus(activity.getString(R.string.pair_code_stale, code), isError = true)
                 return@describePairing
             }
-            val kind = if (preview.deviceType == "PHONE") {
-                activity.getString(R.string.pair_kind_phone)
-            } else {
-                activity.getString(R.string.pair_kind_web)
+
+            if (preview.mode == "HOST_INVITE") {
+                val devName = listOfNotNull(Build.MANUFACTURER, Build.MODEL)
+                    .joinToString(" ")
+                    .ifBlank { "Android Device" }
+
+                AlertDialog.Builder(activity)
+                    .setTitle(R.string.pair_title)
+                    .setMessage(activity.getString(R.string.pair_ask_named, preview.deviceName, "Vault"))
+                    .setPositiveButton(R.string.pair_allow) { _, _ ->
+                        sayApproveStatus("Connecting to ${preview.deviceName}…", isError = false)
+                        TeilenApi.claimHostInvite(serverUrl, code, devName) { result ->
+                            if (result.ok && result.signedIn != null) {
+                                if (result.encryptedKeyBundle != null) {
+                                    PairingCrypto.openHostInvite(activity, result.encryptedKeyBundle, code)
+                                }
+                                Session.save(activity, result.signedIn.token, result.signedIn.phone, result.signedIn.deviceName)
+                                render()
+                                (activity as? MainActivity)?.refreshFeed()
+                                (activity as? MainActivity)?.fetchDevicesAndUpdateBanners()
+                                sayApproveStatus("Connected!", isError = false)
+                                inputApproveCode.text.clear()
+                                Toast.makeText(activity, "Connected to ${preview.deviceName}!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                val err = result.error ?: "Claim failed"
+                                sayApproveStatus(err, isError = true)
+                                Toast.makeText(activity, err, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                    .setNegativeButton(R.string.pair_deny) { _, _ ->
+                        approvePairStatus.visibility = View.GONE
+                    }
+                    .show()
+                return@describePairing
             }
-            AlertDialog.Builder(activity)
-                .setTitle(R.string.pair_title)
-                .setMessage(activity.getString(R.string.pair_ask_named, preview.deviceName, kind))
-                .setPositiveButton(R.string.pair_allow) { _, _ ->
-                    executePairingDecision(code, token, allow = true, newcomerPublicKey = preview.publicKey)
+
+            // Newcomer Request: needs approver token
+            val mainActivity = activity as? MainActivity
+            if (mainActivity != null) {
+                mainActivity.ensureAuthenticated(onSuccess = { token ->
+                    proceedWithApproveCode(code, token, preview)
+                }, onError = { err ->
+                    sayApproveStatus(err, isError = true)
+                })
+            } else {
+                val token = Session.token(activity)
+                if (token != null) {
+                    proceedWithApproveCode(code, token, preview)
+                } else {
+                    sayApproveStatus("Authentication required", isError = true)
                 }
-                .setNegativeButton(R.string.pair_deny) { _, _ ->
-                    executePairingDecision(code, token, allow = false, newcomerPublicKey = null)
-                }
-                .setOnCancelListener {
-                    approvePairStatus.visibility = View.GONE
-                }
-                .show()
+            }
         }
+    }
+
+    private fun proceedWithApproveCode(code: String, token: String, preview: TeilenApi.PairingPreview) {
+        val kind = if (preview.deviceType == "PHONE") {
+            activity.getString(R.string.pair_kind_phone)
+        } else {
+            activity.getString(R.string.pair_kind_web)
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(R.string.pair_title)
+            .setMessage(activity.getString(R.string.pair_ask_named, preview.deviceName, kind))
+            .setPositiveButton(R.string.pair_allow) { _, _ ->
+                executePairingDecision(code, token, allow = true, newcomerPublicKey = preview.publicKey)
+            }
+            .setNegativeButton(R.string.pair_deny) { _, _ ->
+                executePairingDecision(code, token, allow = false, newcomerPublicKey = null)
+            }
+            .setOnCancelListener {
+                approvePairStatus.visibility = View.GONE
+            }
+            .show()
     }
 
     private fun executePairingDecision(code: String, token: String, allow: Boolean, newcomerPublicKey: String?) {

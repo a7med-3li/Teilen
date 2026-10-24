@@ -4,7 +4,10 @@ import com.backend.auth.domain.AuthenticatedUser;
 import com.backend.auth.domain.PairingStartResponse;
 import com.backend.auth.domain.Tokens;
 import com.backend.auth.dto.ApprovalResponse;
+import com.backend.auth.dto.ClaimInviteRequest;
+import com.backend.auth.dto.ClaimInviteResponse;
 import com.backend.auth.dto.DeviceResponse;
+import com.backend.auth.dto.HostInviteResponse;
 import com.backend.auth.dto.SessionResponse;
 import com.backend.auth.dto.TokenClaimResponse;
 import com.backend.auth.dto.UserResponse;
@@ -237,6 +240,121 @@ public class AuthService {
                 "/api/auth/device/qr.svg?code=" + formatted,
                 pairingUri(formatted),
                 request.getExpiresAt());
+    }
+
+    @Transactional
+    public HostInviteResponse createHostInvite(UUID userId, String encryptedKeyBundle,
+                                               String requestedUserCode,
+                                               String rawDeviceName, String platform) {
+        Instant now = Instant.now();
+        User owner = findUser(userId);
+
+        String deviceCode = Tokens.newToken();
+        PairingRequest request = null;
+        String userCode = null;
+
+        if (requestedUserCode != null && !requestedUserCode.isBlank()) {
+            userCode = Tokens.normalizeUserCode(requestedUserCode);
+            if (userCode.length() == 8) {
+                request = new PairingRequest(UUID.randomUUID(),
+                        Tokens.hash(deviceCode),
+                        Tokens.hash(userCode),
+                        clean(rawDeviceName != null && !rawDeviceName.isBlank() ? rawDeviceName : owner.getUsername(), 120),
+                        DeviceType.PHONE,
+                        clean(platform, 160),
+                        now,
+                        now.plus(pairingTtl));
+                request.setUserId(owner.getId());
+                request.setHostInvite(true);
+                request.setKeyPackage(clean(encryptedKeyBundle, 16000));
+                try {
+                    pairings.save(request);
+                } catch (DataIntegrityViolationException e) {
+                    log.debug("provided pairing code {} already taken, retrying random", userCode);
+                    request = null;
+                }
+            }
+        }
+
+        if (request == null) {
+            for (int attempt = 0; attempt < 6; attempt++) {
+                userCode = Tokens.newUserCode();
+                try {
+                    request = new PairingRequest(UUID.randomUUID(),
+                            Tokens.hash(deviceCode),
+                            Tokens.hash(userCode),
+                            clean(rawDeviceName != null && !rawDeviceName.isBlank() ? rawDeviceName : owner.getUsername(), 120),
+                            DeviceType.PHONE,
+                            clean(platform, 160),
+                            now,
+                            now.plus(pairingTtl));
+                    request.setUserId(owner.getId());
+                    request.setHostInvite(true);
+                    request.setKeyPackage(clean(encryptedKeyBundle, 16000));
+                    pairings.save(request);
+                    break;
+                } catch (DataIntegrityViolationException e) {
+                    log.debug("pairing code {} already taken, retrying", userCode);
+                }
+            }
+        }
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "could not find a free pairing code, try again");
+        }
+
+        String formatted = Tokens.formatUserCode(userCode);
+        return new HostInviteResponse(
+                formatted,
+                deviceCode,
+                "/api/auth/device/qr.svg?code=" + formatted,
+                pairingTtl.toSeconds(),
+                request.getExpiresAt()
+        );
+    }
+
+    @Transactional
+    public ClaimInviteResponse claimHostInvite(ClaimInviteRequest requestBody) {
+        Instant now = Instant.now();
+        String userCode = Tokens.normalizeUserCode(requestBody.userCode());
+        PairingRequest request = findPairingByUserCode(userCode);
+
+        if (request.isExpired(now)) {
+            throw new ResponseStatusException(HttpStatus.GONE, "pairing_expired");
+        }
+        if (!request.isPending()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "pairing_already_resolved");
+        }
+        if (!request.isHostInvite() || request.getUserId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "not_a_host_invite");
+        }
+
+        User owner = findUser(request.getUserId());
+        String token = Tokens.newToken();
+        UUID newDeviceId = UUID.randomUUID();
+        DeviceType type = DeviceType.parse(requestBody.deviceType());
+        String devName = clean(requestBody.deviceName() != null && !requestBody.deviceName().isBlank()
+                ? requestBody.deviceName() : "Companion Device", 120);
+
+        Device device = new Device(newDeviceId, owner.getId(), type, devName,
+                Tokens.hash(token), clean(requestBody.devicePublicKey(), 200), null,
+                clean(requestBody.platform(), 160), now);
+        devices.save(device);
+
+        request.approve(device.getId(), token, now);
+        request.deliver(now);
+        pairings.save(request);
+
+        log.info("device {} claimed host invite into account {}", devName, owner.getUsername());
+
+        return new ClaimInviteResponse(
+                token,
+                device.getId(),
+                device.getName(),
+                owner.getId(),
+                owner.getUsername(),
+                request.getKeyPackage()
+        );
     }
 
     @Transactional

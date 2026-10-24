@@ -27,6 +27,7 @@ public class SecurityConfig {
             "/api/auth/device/token",
             "/api/auth/device/qr.svg",
             "/api/auth/device/pending",
+            "/api/auth/device/claim-invite",
             "/api/sessions/join/preview",
             "/api/version"
     };

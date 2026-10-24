@@ -37,7 +37,8 @@
                     <rect x="3" y="14" width="7" height="7"></rect>
                     <rect x="14" y="14" width="7" height="7"></rect>
                 </svg>
-                <span>Pair Phone / QR</span>
+                <span>Pair</span>
+                <span id="header-device-badge" class="header-device-badge">● 1</span>
             </button>
             <button id="account" class="btn-header-account" type="button" hidden aria-expanded="false">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -175,52 +176,6 @@
 </section>
 
 <main id="app" hidden>
-    <!-- Hero Pairing Card (prominent phone connection for single-device vault) -->
-    <div id="hero-pairing-card" class="hero-pairing-card" hidden>
-        <div class="hero-pairing-header">
-            <div class="hero-pairing-title-wrap">
-                <span class="hero-pairing-icon">📱</span>
-                <div>
-                    <h2 class="hero-pairing-title">Pair Your Phone</h2>
-                    <p class="hero-pairing-subtitle">Connect your Android app in 3 seconds to sync text, links, and multi-gigabyte files</p>
-                </div>
-            </div>
-            <button id="hero-pairing-dismiss" class="btn-subtle hero-dismiss-btn" type="button" title="Dismiss">✕</button>
-        </div>
-        <div class="hero-pairing-body">
-            <div class="hero-pairing-side">
-                <span class="hero-step-badge">Option A: Scan QR</span>
-                <p class="hero-step-desc">Open Teilen on your phone &amp; scan:</p>
-                <div class="hero-qr-wrap">
-                    <img id="hero-qr" alt="Pairing QR Code" width="160" height="160">
-                </div>
-                <div class="pair-code-row">
-                    <span id="hero-pair-code" class="pair-code-text">····-····</span>
-                    <button id="hero-code-copy" type="button" class="btn-copy-code-styled" title="Copy code">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#F1F5F9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                        </svg>
-                        <span>Copy</span>
-                    </button>
-                </div>
-                <p id="hero-pair-status" class="hero-pair-status">Waiting for phone…</p>
-            </div>
-            <div class="hero-pairing-divider">
-                <span>OR</span>
-            </div>
-            <div class="hero-pairing-side">
-                <span class="hero-step-badge">Option B: Enter Code</span>
-                <p class="hero-step-desc">Enter the 8-character code shown on your phone:</p>
-                <form id="hero-approve-form" class="hero-approve-form" autocomplete="off">
-                    <input id="hero-approve-code" type="text" class="hero-code-input" placeholder="e.g. K7PM-3XQD" maxlength="9" autocapitalize="characters" spellcheck="false" required>
-                    <button type="submit" class="submit-btn hero-connect-btn">Connect Phone</button>
-                </form>
-                <p id="hero-approve-status" class="hero-approve-status" hidden></p>
-            </div>
-        </div>
-    </div>
-
     <!-- Session (Room) Switcher Bar -->
     <div class="session-bar">
         <div class="session-bar-scroll">

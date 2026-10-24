@@ -13,8 +13,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ListView
+import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -255,11 +257,9 @@ class FeedActivity : Activity() {
                 thumb.visibility = View.GONE
             }
 
-            val btnExtend = view.findViewById<Button?>(R.id.feed_action_extend)
             val btnCopy = view.findViewById<Button?>(R.id.feed_action_copy)
-            val btnDownload = view.findViewById<Button?>(R.id.feed_action_download)
-            val btnOpen = view.findViewById<Button?>(R.id.feed_action_open)
-            val btnDelete = view.findViewById<Button?>(R.id.feed_action_delete)
+            val btnDownload = view.findViewById<ImageButton?>(R.id.feed_action_download)
+            val btnMore = view.findViewById<ImageButton?>(R.id.feed_action_more)
 
             btnCopy?.visibility = if (!item.hasBlob) View.VISIBLE else View.GONE
             btnCopy?.setOnClickListener {
@@ -268,41 +268,51 @@ class FeedActivity : Activity() {
                 Toast.makeText(this@FeedActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
             }
 
-            btnOpen?.visibility = if (item.hasBlob || item.type == "LINK") View.VISIBLE else View.GONE
-            btnOpen?.setOnClickListener { open(item) }
-
             btnDownload?.visibility = if (item.hasBlob) View.VISIBLE else View.GONE
             btnDownload?.setOnClickListener { open(item) }
 
-            btnExtend?.setOnClickListener {
-                btnExtend.isEnabled = false
-                TeilenApi.extendItem(Server.get(this@FeedActivity), Session.token(this@FeedActivity), item.id) { ok, msg ->
-                    btnExtend.isEnabled = true
-                    if (ok) {
-                        Toast.makeText(this@FeedActivity, "Extended +1 hour", Toast.LENGTH_SHORT).show()
-                        refresh()
-                    } else {
-                        Toast.makeText(this@FeedActivity, msg, Toast.LENGTH_SHORT).show()
-                    }
+            btnMore?.setOnClickListener { anchor ->
+                val popup = PopupMenu(this@FeedActivity, anchor)
+                popup.menu.add(0, 1, 0, "+1 Hour Expiration")
+                if (item.hasBlob || item.type == "LINK") {
+                    popup.menu.add(0, 2, 1, "Open / Share")
                 }
-            }
+                popup.menu.add(0, 3, 2, "Delete")
 
-            btnDelete?.setOnClickListener {
-                AlertDialog.Builder(this@FeedActivity)
-                    .setTitle("Delete item?")
-                    .setMessage("This item will be deleted immediately.")
-                    .setPositiveButton("Delete") { _, _ ->
-                        TeilenApi.deleteItem(Server.get(this@FeedActivity), Session.token(this@FeedActivity), item.id) { ok, msg ->
-                            if (ok) {
-                                Toast.makeText(this@FeedActivity, "Deleted", Toast.LENGTH_SHORT).show()
-                                refresh()
-                            } else {
-                                Toast.makeText(this@FeedActivity, msg, Toast.LENGTH_SHORT).show()
+                popup.setOnMenuItemClickListener { menuItem ->
+                    when (menuItem.itemId) {
+                        1 -> {
+                            TeilenApi.extendItem(Server.get(this@FeedActivity), Session.token(this@FeedActivity), item.id) { ok, msg ->
+                                if (ok) {
+                                    Toast.makeText(this@FeedActivity, "Extended +1 hour", Toast.LENGTH_SHORT).show()
+                                    refresh()
+                                } else {
+                                    Toast.makeText(this@FeedActivity, msg, Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
+                        2 -> open(item)
+                        3 -> {
+                            AlertDialog.Builder(this@FeedActivity)
+                                .setTitle("Delete item?")
+                                .setMessage("This item will be deleted immediately.")
+                                .setPositiveButton("Delete") { _, _ ->
+                                    TeilenApi.deleteItem(Server.get(this@FeedActivity), Session.token(this@FeedActivity), item.id) { ok, msg ->
+                                        if (ok) {
+                                            Toast.makeText(this@FeedActivity, "Deleted", Toast.LENGTH_SHORT).show()
+                                            refresh()
+                                        } else {
+                                            Toast.makeText(this@FeedActivity, msg, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .show()
+                        }
                     }
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show()
+                    true
+                }
+                popup.show()
             }
 
             return view

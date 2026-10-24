@@ -41,6 +41,35 @@ object Session {
         }
     }
 
+    fun getSessionKey(context: Context, sessionId: String): ByteArray? {
+        val b64 = prefs(context).getString("session_key_$sessionId", null) ?: return null
+        return try { android.util.Base64.decode(b64, android.util.Base64.NO_WRAP) } catch (e: Exception) { null }
+    }
+
+    fun setSessionKey(context: Context, sessionId: String, key: ByteArray) {
+        val b64 = android.util.Base64.encodeToString(key, android.util.Base64.NO_WRAP)
+        prefs(context).edit().putString("session_key_$sessionId", b64).apply()
+    }
+
+    fun getAllSessionKeys(context: Context): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        val all = prefs(context).all
+        for ((k, v) in all) {
+            if (k.startsWith("session_key_") && v is String) {
+                result[k.removePrefix("session_key_")] = v
+            }
+        }
+        return result
+    }
+
+    fun setAllSessionKeys(context: Context, keys: Map<String, String>) {
+        val editor = prefs(context).edit()
+        for ((sessionId, b64Key) in keys) {
+            editor.putString("session_key_$sessionId", b64Key)
+        }
+        editor.apply()
+    }
+
     /** the only thing that decides whether this device can talk to the backend */
     fun isPaired(context: Context): Boolean = token(context) != null
 

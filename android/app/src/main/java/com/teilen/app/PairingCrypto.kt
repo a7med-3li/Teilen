@@ -27,6 +27,8 @@ object PairingCrypto {
     private const val SIGN_CONTEXT = "teilen-pairing-v1"
     private const val HKDF_SALT = "teilen-pairing"
     private const val HKDF_INFO = "teilen-master-key"
+    private const val HOST_INVITE_SALT = "teilen-host-invite"
+    private const val HOST_INVITE_INFO = "teilen-key-bundle"
     private const val VERSION = 1
     private const val KEY_BYTES = 32
     private const val X25519_PUBLIC = 32
@@ -63,7 +65,7 @@ object PairingCrypto {
     }
 
     /**
-     * Approving side: seal this device's account key for the newcomer.
+     * Approving side: seal this device's account key and session keys for the newcomer.
      *
      * @param newcomerPublicKey the X25519 key the newcomer offered
      * @param userCode the code both sides can see, bound into the signature
@@ -72,11 +74,17 @@ object PairingCrypto {
     fun sealForNewcomer(context: Context, newcomerPublicKey: ByteArray, userCode: String): String {
         val master = SecureKeyManager.ensureMasterKey(context)
         val identity = SecureKeyManager.ensureIdentity(context)
+        val sessionKeys = Session.getAllSessionKeys(context)
+
+        val payload = JSONObject()
+            .put("masterKey", b64(master))
+            .put("sessionKeys", JSONObject(sessionKeys))
+            .toString()
 
         val ephemeral = newPairingKey()
         val shared = scalarMult(ephemeral.secretKey, newcomerPublicKey)
         val nonce = randomBytes(SecretBox.NONCEBYTES)
-        val wrapped = secretBoxEasy(master, nonce, wrappingKey(shared))
+        val wrapped = secretBoxEasy(payload.toByteArray(Charsets.UTF_8), nonce, wrappingKey(shared))
 
         val pk = b64(ephemeral.publicKey)
         val nonceText = b64(nonce)
@@ -96,7 +104,7 @@ object PairingCrypto {
     }
 
     /**
-     * Newcomer side: open the approving device's bundle and keep the account key.
+     * Newcomer side: open the approving device's bundle and keep the account key and session keys.
      *
      * @return the account key, now stored, or null when the bundle does not verify or does not open
      */
@@ -126,10 +134,92 @@ object PairingCrypto {
         }
 
         val shared = scalarMult(pairingSecretKey, unb64(pk))
-        val master = secretBoxOpenEasy(unb64(wrappedText), unb64(nonceText), wrappingKey(shared))
+        val decrypted = secretBoxOpenEasy(unb64(wrappedText), unb64(nonceText), wrappingKey(shared))
             ?: return null
+
+        val master = try {
+            val payload = JSONObject(String(decrypted, Charsets.UTF_8))
+            val masterB64 = payload.optString("masterKey").ifBlank { null }
+            if (masterB64 != null) {
+                val sessionKeysObj = payload.optJSONObject("sessionKeys")
+                if (sessionKeysObj != null) {
+                    val map = mutableMapOf<String, String>()
+                    for (k in sessionKeysObj.keys()) {
+                        map[k] = sessionKeysObj.getString(k)
+                    }
+                    Session.setAllSessionKeys(context, map)
+                }
+                unb64(masterB64)
+            } else {
+                decrypted
+            }
+        } catch (e: Exception) {
+            decrypted
+        }
         SecureKeyManager.setMasterKey(context, master)
         return master
+    }
+
+    /**
+     * Host Invite: seal this device's account key and session keys under the user code secret.
+     */
+    fun sealHostInvite(context: Context, userCode: String): String {
+        val master = SecureKeyManager.ensureMasterKey(context)
+        val sessionKeys = Session.getAllSessionKeys(context)
+
+        val payload = JSONObject()
+            .put("masterKey", b64(master))
+            .put("sessionKeys", JSONObject(sessionKeys))
+            .toString()
+
+        val key = hkdfSha256(
+            compact(userCode).toByteArray(Charsets.UTF_8),
+            HOST_INVITE_SALT.toByteArray(Charsets.UTF_8),
+            HOST_INVITE_INFO.toByteArray(Charsets.UTF_8),
+            KEY_BYTES
+        )
+        val nonce = randomBytes(SecretBox.NONCEBYTES)
+        val wrapped = secretBoxEasy(payload.toByteArray(Charsets.UTF_8), nonce, key)
+
+        return JSONObject()
+            .put("v", VERSION)
+            .put("type", "host_invite")
+            .put("nonce", b64(nonce))
+            .put("wrapped", b64(wrapped))
+            .toString()
+    }
+
+    /**
+     * Scanner side: open a Host Invite bundle using the user code.
+     */
+    fun openHostInvite(context: Context, bundle: String, userCode: String): Boolean {
+        val json = try { JSONObject(bundle) } catch (e: Exception) { return false }
+        if (json.optInt("v", -1) != VERSION) return false
+        val nonceText = json.optString("nonce").ifBlank { return false }
+        val wrappedText = json.optString("wrapped").ifBlank { return false }
+
+        val key = hkdfSha256(
+            compact(userCode).toByteArray(Charsets.UTF_8),
+            HOST_INVITE_SALT.toByteArray(Charsets.UTF_8),
+            HOST_INVITE_INFO.toByteArray(Charsets.UTF_8),
+            KEY_BYTES
+        )
+        val decryptedBytes = secretBoxOpenEasy(unb64(wrappedText), unb64(nonceText), key) ?: return false
+        val payload = try { JSONObject(String(decryptedBytes, Charsets.UTF_8)) } catch (e: Exception) { return false }
+
+        val masterB64 = payload.optString("masterKey").ifBlank { return false }
+        val masterBytes = unb64(masterB64)
+        SecureKeyManager.setMasterKey(context, masterBytes)
+
+        val sessionKeysObj = payload.optJSONObject("sessionKeys")
+        if (sessionKeysObj != null) {
+            val keysMap = mutableMapOf<String, String>()
+            for (k in sessionKeysObj.keys()) {
+                keysMap[k] = sessionKeysObj.getString(k)
+            }
+            Session.setAllSessionKeys(context, keysMap)
+        }
+        return true
     }
 
     // ------------------------------------------------------------------ primitives
