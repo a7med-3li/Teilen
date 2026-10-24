@@ -1365,14 +1365,17 @@ class MainActivity : Activity() {
         cardFeed.visibility = View.VISIBLE
         cardClipboard.visibility = View.VISIBLE
 
-        sessionScrollView.visibility = if (paired) View.VISIBLE else View.GONE
+        sessionScrollView.visibility = View.GONE
         if (paired) {
             loadSessions()
         }
 
-        headerSessionBadge.visibility = if (paired) View.VISIBLE else View.GONE
-        if (paired) {
-            headerSessionBadge.text = Session.phone(this) ?: getString(R.string.signed_in)
+        val encryptedUser = findViewById<TextView>(R.id.header_encrypted_username)
+        if (encryptedUser != null) {
+            val username = Session.phone(this) ?: getString(R.string.signed_in)
+            encryptedUser.text = "Encrypted · " + username
+            encryptedUser.isSingleLine = true
+            encryptedUser.ellipsize = android.text.TextUtils.TruncateAt.END
         }
 
         if (paired) {
@@ -1768,7 +1771,7 @@ class MainActivity : Activity() {
             }
         }
 
-        // Bottom Section: Connected Devices (Part 5)
+        // Bottom Section: Connected Devices
         val devicesTitle = dialogView.findViewById<TextView>(R.id.dialog_devices_title)
         val btnDisconnectOthers = dialogView.findViewById<Button>(R.id.dialog_btn_disconnect_others)
         val devicesContainer = dialogView.findViewById<LinearLayout>(R.id.dialog_devices_container)
@@ -2476,53 +2479,22 @@ class MainActivity : Activity() {
     }
 
     private fun renderSessionPills() {
-        sessionPillContainer.removeAllViews()
+        try {
+            sessionPillContainer.removeAllViews()
+        } catch (_: Exception) {
+        }
         val activeId = Session.activeSessionId(this)
 
         val activeSession = currentSessions.firstOrNull { it.id == activeId }
             ?: currentSessions.firstOrNull { it.isPersonal }
         findViewById<TextView>(R.id.header_active_session_name)?.text = activeSession?.name ?: "Personal Vault"
 
-        // 1. Personal Vault Pill
-        val personalSession = currentSessions.firstOrNull { it.isPersonal }
-        val isPersonalActive = activeId == null || (personalSession != null && activeId == personalSession.id)
-        val personalPill = createPillView("🔒 Personal", isPersonalActive) {
-            Session.setActiveSessionId(this, personalSession?.id)
-            renderSessionPills()
-            refreshFeed()
-        }
-        sessionPillContainer.addView(personalPill)
-
-        // 2. Shared Group Sessions
-        currentSessions.filter { !it.isPersonal }.forEach { session ->
-            val isActive = activeId == session.id
-            val label = "👥 ${session.name} (${session.memberCount})"
-            val pill = createPillView(label, isActive) {
-                Session.setActiveSessionId(this, session.id)
-                renderSessionPills()
-                refreshFeed()
-            }
-            sessionPillContainer.addView(pill)
-        }
-
-        // 3. "+ Room" Action Pill
-        val addPill = createActionPillView("+ Room") {
-            showCreateRoomDialog()
-        }
-        sessionPillContainer.addView(addPill)
-
-        // 4. "Share Room" and "Leave Room" Action Pills (if active session is non-personal)
-        val activeGroupSession = currentSessions.firstOrNull { !it.isPersonal && it.id == activeId }
-        if (activeGroupSession != null) {
-            val sharePill = createActionPillView("🔗 Share") {
-                showShareRoomDialog(activeGroupSession)
-            }
-            sessionPillContainer.addView(sharePill)
-
-            val leavePill = createActionPillView("✕ Leave") {
-                showLeaveRoomDialog(activeGroupSession)
-            }
-            sessionPillContainer.addView(leavePill)
+        val encryptedUser = findViewById<TextView>(R.id.header_encrypted_username)
+        if (encryptedUser != null) {
+            val username = Session.phone(this) ?: getString(R.string.signed_in)
+            encryptedUser.text = "Encrypted · " + username
+            encryptedUser.isSingleLine = true
+            encryptedUser.ellipsize = android.text.TextUtils.TruncateAt.END
         }
     }
 

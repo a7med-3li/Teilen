@@ -1984,8 +1984,32 @@
         });
     }
 
+    function normalizeUserCodeInput(raw) {
+        if (!raw) return '';
+        let s = String(raw).trim();
+        if (s.includes('code=')) {
+            const idx = s.indexOf('code=');
+            let after = s.substring(idx + 5);
+            const amp = after.indexOf('&');
+            if (amp >= 0) after = after.substring(0, amp);
+            const hash = after.indexOf('#');
+            if (hash >= 0) after = after.substring(0, hash);
+            s = after;
+        }
+        s = s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        return s;
+    }
+
     async function handlePairWithCode(userCode, statusEl, inputEl) {
         if (!userCode) return;
+        const normalized = normalizeUserCodeInput(userCode);
+        if (normalized.length !== 8) {
+            if (statusEl) {
+                statusEl.hidden = false;
+                statusEl.textContent = 'Enter an 8-character pairing code (e.g. K7PM-3XQD)';
+            }
+            return;
+        }
         if (statusEl) {
             statusEl.hidden = false;
             statusEl.textContent = 'Connecting…';
@@ -1994,7 +2018,7 @@
             const master = await TeilenCrypto.getMasterKey();
             const masterB64 = master ? TeilenCrypto.b64(master) : null;
             const res = await postJson('/api/auth/device/pair', {
-                userCode: userCode.trim().toUpperCase(),
+                userCode: normalized,
                 scannerMasterKey: masterB64,
                 deviceName: navigator.userAgent.includes('Chrome') ? 'Chrome' :
                             navigator.userAgent.includes('Firefox') ? 'Firefox' :

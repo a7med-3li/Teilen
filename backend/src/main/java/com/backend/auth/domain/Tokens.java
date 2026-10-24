@@ -61,11 +61,59 @@ public final class Tokens {
         if (compact.isEmpty()) {
             return "";
         }
-        return compact.substring(0, 4) + "-" + compact.substring(4);
+        if (compact.length() == 8) {
+            return compact.substring(0, 4) + "-" + compact.substring(4);
+        }
+        if (compact.length() > 8) {
+            compact = compact.substring(0, 8);
+            return compact.substring(0, 4) + "-" + compact.substring(4);
+        }
+        return compact;
     }
 
     public static String normalizeUserCode(String raw) {
-        return raw == null ? "" : raw.replaceAll("[\\s-]", "").toUpperCase();
+        return raw == null ? "" : raw.replaceAll("[^A-Za-z0-9]", "").toUpperCase();
+    }
+
+    public static String extractAndNormalizeUserCode(String rawInput) {
+        if (rawInput == null || rawInput.isBlank()) {
+            return "";
+        }
+        String input = rawInput.trim();
+        // Try to extract from query parameter code= if present
+        if (input.contains("code=")) {
+            int idx = input.indexOf("code=");
+            String after = input.substring(idx + 5);
+            // cut at & or #
+            int cut = after.indexOf('&');
+            if (cut >= 0) {
+                after = after.substring(0, cut);
+            }
+            cut = after.indexOf('#');
+            if (cut >= 0) {
+                after = after.substring(0, cut);
+            }
+            input = after;
+        }
+        // Also handle teilen://pair?code= style
+        if (input.toLowerCase().startsWith("teilen://")) {
+            // try to extract
+            try {
+                java.net.URI uri = java.net.URI.create(input);
+                String query = uri.getQuery();
+                if (query != null && query.contains("code=")) {
+                    String[] parts = query.split("&");
+                    for (String p : parts) {
+                        if (p.startsWith("code=")) {
+                            input = p.substring(5);
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return normalizeUserCode(input);
     }
 
     /**

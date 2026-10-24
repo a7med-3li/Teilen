@@ -84,15 +84,24 @@ public class VaultMergeService {
         Session primaryPersonalSession = sessionService.getOrCreatePersonalSession(primaryUserId);
         UUID primaryPersonalSessionId = primaryPersonalSession.getId();
 
-        // 1. Move all active shared items from secondaryUserId to primaryUserId
-        // Remap personal session items to primary user's personal session
+        // 1. Clear pairing_requests
+        try {
+            entityManager.createNativeQuery("""
+                DELETE FROM pairing_requests WHERE user_id = :secondaryUserId
+            """)
+            .setParameter("secondaryUserId", secondaryUserId)
+            .executeUpdate();
+        } catch (Exception ignored) {
+        }
+
+        // 2. Reassign share_items + session_id NULL
         entityManager.createNativeQuery("""
             UPDATE share_items
             SET user_id = :primaryUserId,
                 session_id = CASE
                     WHEN session_id IN (SELECT id FROM sessions WHERE owner_user_id = :secondaryUserId AND is_personal = true)
                     THEN :primaryPersonalSessionId
-                    ELSE session_id
+                    ELSE COALESCE(session_id, :primaryPersonalSessionId)
                 END
             WHERE user_id = :secondaryUserId
         """)
@@ -101,7 +110,19 @@ public class VaultMergeService {
         .setParameter("primaryPersonalSessionId", primaryPersonalSessionId)
         .executeUpdate();
 
-        // 2. Move custom (non-personal) Sessions/Rooms owned by secondaryUserId to primaryUserId
+        // Also ensure any share_items pointing to secondary that might need reassignment
+        entityManager.createNativeQuery("""
+            UPDATE share_items
+            SET user_id = :primaryUserId,
+                session_id = COALESCE(session_id, :primaryPersonalSessionId)
+            WHERE user_id = :secondaryUserId
+        """)
+        .setParameter("primaryUserId", primaryUserId)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .setParameter("primaryPersonalSessionId", primaryPersonalSessionId)
+        .executeUpdate();
+
+        // 3. Reassign non-personal sessions and delete secondary personal session
         entityManager.createNativeQuery("""
             UPDATE sessions
             SET owner_user_id = :primaryUserId
@@ -111,7 +132,13 @@ public class VaultMergeService {
         .setParameter("secondaryUserId", secondaryUserId)
         .executeUpdate();
 
-        // 3. Move Session Memberships (avoiding duplicate (session_id, user_id) constraint violations)
+        entityManager.createNativeQuery("""
+            DELETE FROM sessions WHERE owner_user_id = :secondaryUserId AND is_personal = true
+        """)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        // 4. Dedupe/reassign session_members
         entityManager.createNativeQuery("""
             UPDATE session_members
             SET user_id = :primaryUserId
@@ -128,7 +155,7 @@ public class VaultMergeService {
         .setParameter("secondaryUserId", secondaryUserId)
         .executeUpdate();
 
-        // 4. Move all registered Devices from secondaryUserId to primaryUserId and deduplicate
+        // 5. Move devices
         entityManager.createNativeQuery("""
             UPDATE devices
             SET user_id = :primaryUserId
@@ -138,6 +165,22 @@ public class VaultMergeService {
         .setParameter("secondaryUserId", secondaryUserId)
         .executeUpdate();
 
+        // 6. Dedupe devices keeping tokenHash match (prefer to keep devices matching by token_hash if present; else dedupe by fingerprint/name+type keeping most recent)
+        try {
+            entityManager.createNativeQuery("""
+                DELETE FROM devices d2
+                USING devices d1
+                WHERE d1.user_id = :primaryUserId
+                  AND d2.user_id = :primaryUserId
+                  AND d1.id <> d2.id
+                  AND d1.token_hash = d2.token_hash
+                  AND d1.created_at >= d2.created_at
+            """)
+            .setParameter("primaryUserId", primaryUserId)
+            .executeUpdate();
+        } catch (Exception ignored) {
+        }
+
         entityManager.createNativeQuery("""
             DELETE FROM devices d2
             USING devices d1
@@ -145,7 +188,7 @@ public class VaultMergeService {
               AND d2.user_id = :primaryUserId
               AND d1.id <> d2.id
               AND (
-                (d1.client_fingerprint IS NOT NULL AND d1.client_fingerprint = d2.client_fingerprint)
+                (d1.client_fingerprint IS NOT NULL AND d1.client_fingerprint <> '' AND d1.client_fingerprint = d2.client_fingerprint)
                 OR (d1.name = d2.name AND d1.device_type = d2.device_type)
               )
               AND d1.last_seen_at >= d2.last_seen_at
@@ -153,7 +196,7 @@ public class VaultMergeService {
         .setParameter("primaryUserId", primaryUserId)
         .executeUpdate();
 
-        // 5. Move Push Subscriptions
+        // 7. Dedupe/reassign push_subscriptions
         entityManager.createNativeQuery("""
             DELETE FROM push_subscriptions
             WHERE user_id = :secondaryUserId
@@ -172,23 +215,7 @@ public class VaultMergeService {
         .setParameter("secondaryUserId", secondaryUserId)
         .executeUpdate();
 
-        // 6. Update pairing_requests
-        entityManager.createNativeQuery("""
-            UPDATE pairing_requests
-            SET user_id = :primaryUserId
-            WHERE user_id = :secondaryUserId
-        """)
-        .setParameter("primaryUserId", primaryUserId)
-        .setParameter("secondaryUserId", secondaryUserId)
-        .executeUpdate();
-
-        // 7. Clean up secondary user's personal session and secondary user row safely
-        entityManager.createNativeQuery("""
-            DELETE FROM sessions WHERE owner_user_id = :secondaryUserId AND is_personal = true
-        """)
-        .setParameter("secondaryUserId", secondaryUserId)
-        .executeUpdate();
-
+        // 8. Delete user row
         entityManager.createNativeQuery("""
             DELETE FROM users WHERE id = :secondaryUserId
         """)

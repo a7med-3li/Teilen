@@ -169,6 +169,14 @@ public class AuthController {
                                                    @Valid @RequestBody DevicePairRequest request,
                                                    HttpServletRequest httpRequest,
                                                    HttpServletResponse httpResponse) {
+        return pairAndMergeDevices(caller, request, httpRequest, httpResponse);
+    }
+
+    @PostMapping({"/api/auth/device/approve", "/api/auth/device/claim", "/api/auth/device/connect"})
+    public ResponseEntity<DevicePairResponse> pairAndMergeDevices(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                                  @Valid @RequestBody DevicePairRequest request,
+                                                                  HttpServletRequest httpRequest,
+                                                                  HttpServletResponse httpResponse) {
         if (caller == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "authentication required to pair device");
         }
@@ -188,7 +196,7 @@ public class AuthController {
                 request.userCode(), request.deviceName(), request.platform());
     }
 
-    @PostMapping("/api/auth/device/claim-invite")
+    @PostMapping({"/api/auth/device/claim-invite", "/api/auth/device/claim"})
     public ResponseEntity<ClaimInviteResponse> claimInvite(@AuthenticationPrincipal AuthenticatedUser caller,
                                                            @Valid @RequestBody ClaimInviteRequest request,
                                                            HttpServletRequest httpRequest,

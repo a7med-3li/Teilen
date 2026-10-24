@@ -197,11 +197,22 @@ class PairActivity : Activity() {
         }
 
         fun cleanCode(raw: String): String? {
-            val trimmed = raw.trim()
-            if (trimmed.startsWith("teilen://", ignoreCase = true)) {
-                return codeOf(Uri.parse(trimmed))
+            if (raw.isNullOrBlank()) return null
+            var trimmed = raw.trim()
+            if (trimmed.contains("code=")) {
+                val idx = trimmed.indexOf("code=")
+                var after = trimmed.substring(idx + 5)
+                val cutAmp = after.indexOf('&')
+                if (cutAmp >= 0) after = after.substring(0, cutAmp)
+                val cutHash = after.indexOf('#')
+                if (cutHash >= 0) after = after.substring(0, cutHash)
+                trimmed = after
             }
-            val compact = trimmed.uppercase().filter { it in CODE_LETTERS }
+            if (trimmed.startsWith("teilen://", ignoreCase = true)) {
+                val c = codeOf(Uri.parse(trimmed))
+                if (c != null) return c
+            }
+            val compact = trimmed.uppercase().replace("[^A-Z0-9]".toRegex(), "")
             return compact.takeIf { it.length == 8 }
         }
     }

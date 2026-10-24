@@ -283,7 +283,7 @@ public class AuthService {
         String userCode = null;
 
         if (requestedUserCode != null && !requestedUserCode.isBlank()) {
-            userCode = Tokens.normalizeUserCode(requestedUserCode);
+            userCode = Tokens.extractAndNormalizeUserCode(requestedUserCode);
             if (userCode.length() == 8) {
                 request = new PairingRequest(UUID.randomUUID(),
                         Tokens.hash(deviceCode),
@@ -350,7 +350,7 @@ public class AuthService {
     @Transactional
     public ClaimInviteResponse claimHostInvite(ClaimInviteRequest requestBody, AuthenticatedUser caller) {
         Instant now = Instant.now();
-        String userCode = Tokens.normalizeUserCode(requestBody.userCode());
+        String userCode = Tokens.extractAndNormalizeUserCode(requestBody.userCode());
         PairingRequest request = findPairingByUserCode(userCode);
 
         if (request.isExpired(now)) {
@@ -635,7 +635,7 @@ public class AuthService {
     @Transactional
     public DevicePairResponse pairDeviceWithCode(UUID callerUserId, UUID callerDeviceId, String callerToken,
                                                  DevicePairRequest request, String ipAddress, String platform) {
-        String compact = Tokens.normalizeUserCode(request.userCode());
+        String compact = Tokens.extractAndNormalizeUserCode(request.userCode());
         if (compact.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "no pairing code given");
         }
@@ -745,8 +745,12 @@ public class AuthService {
         return new SessionResponse(token, device.getId(), device.getName(), UserResponse.from(user));
     }
 
+    public static String extractAndNormalizeUserCode(String rawInput) {
+        return Tokens.extractAndNormalizeUserCode(rawInput);
+    }
+
     private PairingRequest findPairingByUserCode(String rawUserCode) {
-        String compact = Tokens.normalizeUserCode(rawUserCode);
+        String compact = Tokens.extractAndNormalizeUserCode(rawUserCode);
         if (compact.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "no pairing code given");
         }
