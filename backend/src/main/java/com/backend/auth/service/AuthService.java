@@ -59,6 +59,7 @@ public class AuthService {
     private final SessionService sessionService;
     private final VaultMergeService vaultMergeService;
     private final ShareItemWebSocketHandler webSocketHandler;
+    jakarta.persistence.EntityManager entityManager;
 
     @Autowired
     public AuthService(UserRepository users,
@@ -668,17 +669,28 @@ public class AuthService {
         }
 
         if (userIdA != null && !userIdA.equals(userIdB)) {
-            if (vaultMergeService != null) {
-                vaultMergeService.mergeIfDifferent(userIdA, userIdB, true, callerDeviceId, null);
-            }
+            // 1. Move caller's device to userIdA explicitly via JPA before merge
             if (callerDeviceId != null) {
                 devices.findById(callerDeviceId).ifPresent(d -> {
                     d.setUserId(userIdA);
                     d.setLastSeenAt(now);
-                    devices.save(d);
+                    devices.saveAndFlush(d);
                 });
             }
-            // Deduplicate devices under userIdA
+
+            // 2. Execute database item/session merge
+            if (vaultMergeService != null) {
+                vaultMergeService.mergeIfDifferent(userIdA, userIdB, true, callerDeviceId, null);
+            }
+
+            // 3. Flush and clear persistence context so raw SQL and JPA cache stay synchronized
+            entityManager.flush();
+            entityManager.clear();
+
+            // 4. Reload PairingRequest in the fresh session to avoid detached state
+            pr = pairings.findById(pr.getId()).orElse(pr);
+
+            // 5. Safe deduplication under userIdA (skip callerDeviceId completely)
             List<Device> allDevices = devices.findByUserIdOrderByCreatedAtAsc(userIdA);
             java.util.Set<String> seen = new java.util.HashSet<>();
             for (Device d : allDevices) {
@@ -713,7 +725,6 @@ public class AuthService {
 
         return new DevicePairResponse(callerToken, finalUserId, masterKey);
     }
-
     private SessionResponse pairDevice(User user, DeviceType type, String rawDeviceName,
                                        String devicePublicKey, String ipAddress, String platform, Instant now) {
         return pairDevice(user, type, rawDeviceName, devicePublicKey, ipAddress, platform, null, now);
