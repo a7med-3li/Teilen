@@ -62,7 +62,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .headers(headers -> headers
                         .contentSecurityPolicy(csp -> csp
-                                .policyDirectives("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss: ws: https:; object-src 'none'; frame-ancestors 'none';"))
+                                .policyDirectives("default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss: ws: https:; object-src 'none'; frame-ancestors 'none';"))
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny))
                 .exceptionHandling(exceptions ->
                         exceptions.authenticationEntryPoint(new JsonAuthenticationEntryPoint()))

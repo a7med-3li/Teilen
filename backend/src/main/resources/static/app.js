@@ -424,10 +424,10 @@
         sessionDropdownJoinBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (sessionDropdown) sessionDropdown.hidden = true;
-            joinSessionInput.value = '';
-            joinSessionPreview.hidden = true;
+            if (joinSessionInput) joinSessionInput.value = '';
+            if (joinSessionPreview) joinSessionPreview.hidden = true;
             openModal(modalJoinSession);
-            joinSessionInput.focus();
+            if (joinSessionInput) joinSessionInput.focus();
         });
     }
     document.querySelectorAll('.modal-close').forEach(btn => {
@@ -443,15 +443,15 @@
     });
 
     // Create Room
-    sessionCreateBtn.addEventListener('click', () => {
-        createSessionName.value = '';
+    sessionCreateBtn?.addEventListener('click', () => {
+        if (createSessionName) createSessionName.value = '';
         openModal(modalCreateSession);
-        createSessionName.focus();
+        if (createSessionName) createSessionName.focus();
     });
 
-    formCreateSession.addEventListener('submit', async (e) => {
+    formCreateSession?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const name = createSessionName.value.trim();
+        const name = createSessionName?.value?.trim() || '';
         if (!name) return;
 
         try {
@@ -479,7 +479,7 @@
     });
 
     // Share Room (Invite Code / QR with #key fragment)
-    sessionShareBtn.addEventListener('click', async () => {
+    sessionShareBtn?.addEventListener('click', async () => {
         const current = availableSessions.find(s => s.id === currentSessionId);
         if (!current) return;
         if (current.isPersonal) {
@@ -498,16 +498,20 @@
             const keyFragment = sessionKey ? '#key=' + encodeURIComponent(TeilenCrypto.b64(sessionKey)) : '';
             const shareableUrl = `${location.origin}/#join?code=${invite.inviteCode}${keyFragment}`;
 
-            shareSessionTitle.textContent = `Share Room: ${current.name}`;
-            shareSessionCode.textContent = invite.inviteCode;
+            if (shareSessionTitle) shareSessionTitle.textContent = `Share Room: ${current.name}`;
+            if (shareSessionCode) shareSessionCode.textContent = invite.inviteCode;
 
             // Render SVG QR code via backend QR endpoint
-            shareSessionQr.innerHTML = `<img src="/api/auth/device/qr.svg?code=${encodeURIComponent(invite.inviteCode)}" width="200" height="200" alt="Room QR">`;
+            if (shareSessionQr) {
+                shareSessionQr.innerHTML = `<img src="/api/auth/device/qr.svg?code=${encodeURIComponent(invite.inviteCode)}" width="200" height="200" alt="Room QR">`;
+            }
 
-            shareSessionCopy.onclick = async () => {
-                await navigator.clipboard.writeText(shareableUrl);
-                toast('Copied invite link with secure key to clipboard', 'success');
-            };
+            if (shareSessionCopy) {
+                shareSessionCopy.onclick = async () => {
+                    await navigator.clipboard.writeText(shareableUrl);
+                    toast('Copied invite link with secure key to clipboard', 'success');
+                };
+            }
 
             openModal(modalShareSession);
         } catch (err) {
@@ -516,16 +520,22 @@
     });
 
     // Join Room
-    sessionJoinBtn.addEventListener('click', () => {
-        joinSessionInput.value = '';
-        joinSessionPreview.hidden = true;
+    sessionJoinBtn?.addEventListener('click', () => {
+        if (joinSessionInput) {
+            joinSessionInput.value = '';
+        }
+        if (joinSessionPreview) {
+            joinSessionPreview.hidden = true;
+        }
         openModal(modalJoinSession);
-        joinSessionInput.focus();
+        if (joinSessionInput) {
+            joinSessionInput.focus();
+        }
     });
 
-    formJoinSession.addEventListener('submit', async (e) => {
+    formJoinSession?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const raw = joinSessionInput.value.trim();
+        const raw = joinSessionInput?.value?.trim() || '';
         if (!raw) return;
 
         let code = raw;
