@@ -27,6 +27,7 @@ import com.backend.item.ShareItemEvent;
 import com.backend.item.ShareItemWebSocketHandler;
 import com.backend.session.SessionService;
 import jakarta.persistence.EntityManager;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,7 +65,6 @@ public class AuthService {
 
     @Autowired
     public AuthService(UserRepository users,
-                       EntityManager entityManager,
                        DeviceRepository devices,
                        PairingRequestRepository pairings,
                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
@@ -72,6 +72,7 @@ public class AuthService {
                        @Autowired(required = false) SessionService sessionService,
                        @Autowired(required = false) VaultMergeService vaultMergeService,
                        @Autowired(required = false) ShareItemWebSocketHandler webSocketHandler,
+                       EntityManager entityManager,
                        @Value("${teilen.auth.pairing-ttl-seconds:300}") long pairingTtlSeconds,
                        @Value("${teilen.auth.poll-interval-seconds:3}") long pollIntervalSeconds) {
         this.users = users;
@@ -82,19 +83,18 @@ public class AuthService {
         this.sessionService = sessionService;
         this.vaultMergeService = vaultMergeService;
         this.webSocketHandler = webSocketHandler;
+        this.entityManager = entityManager;
         this.pairingTtl = Duration.ofSeconds(pairingTtlSeconds);
         this.pollInterval = Duration.ofSeconds(pollIntervalSeconds);
-        this.entityManager = entityManager;
     }
 
     public AuthService(UserRepository users,
                        DeviceRepository devices,
-                       EntityManager entityManager,
                        PairingRequestRepository pairings,
                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                        long pairingTtlSeconds,
                        long pollIntervalSeconds) {
-        this(users,  entityManager, devices, pairings, passwordEncoder, null, null, null, null, pairingTtlSeconds, pollIntervalSeconds);
+        this(users, devices, pairings, passwordEncoder, null, null, null, null, null, pairingTtlSeconds, pollIntervalSeconds);
     }
 
     // ------------------------------------------------------------------ accounts
@@ -688,8 +688,13 @@ public class AuthService {
             }
 
             // 3. Flush and clear persistence context so raw SQL and JPA cache stay synchronized
-            entityManager.flush();
-            entityManager.clear();
+            if (entityManager != null) {
+                try {
+                    entityManager.flush();
+                    entityManager.clear();
+                } catch (Exception ignored) {
+                }
+            }
 
             // 4. Reload PairingRequest in the fresh session to avoid detached state
             pr = pairings.findById(pr.getId()).orElse(pr);
@@ -713,7 +718,11 @@ public class AuthService {
         try {
             pr.approve(callerDeviceId, callerToken, now);
             pr.deliver(now);
-            pairings.saveAndFlush(pr);
+            if (pairings instanceof org.springframework.data.jpa.repository.JpaRepository<?, ?>) {
+                pairings.saveAndFlush(pr);
+            } else {
+                pairings.save(pr);
+            }
         } catch (Exception ex) {
             log.error("Pairing failed while finalizing pairing request {}", pr.getId(), ex);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "pairing_failed");
