@@ -1439,7 +1439,12 @@
         try {
             const path = currentSessionId ? `${API}?sessionId=${encodeURIComponent(currentSessionId)}` : API;
             const response = await api(path);
-            if (!response.ok) throw new Error(await why(response));
+            if (response.status === 401) {
+                console.warn("Token expired or invalid (401). Clearing and re-provisioning...");
+                localStorage.removeItem("teilen_token"); // check the exact key name used in app.js
+                await provisionAnonymousAccount(); // call your silent account creation function
+                return; // or retry the fetch once with the new token
+            }
             const items = await response.json();
             items.reverse().forEach(item => upsert(item, false));
         } catch (e) {

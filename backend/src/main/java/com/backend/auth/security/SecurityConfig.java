@@ -39,7 +39,7 @@ public class SecurityConfig {
 
     @Bean
     public BearerTokenFilter bearerTokenFilter(AuthService auth, Ed25519Verifier verifier) {
-        return new BearerTokenFilter(auth, verifier);
+        return new BearerTokenFilter(auth);
     }
 
     @Bean
