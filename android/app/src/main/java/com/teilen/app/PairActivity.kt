@@ -55,10 +55,18 @@ class PairActivity : Activity() {
             .setMessage(getString(R.string.pair_ask_named, preview.deviceName, "Vault"))
             .setPositiveButton(R.string.pair_allow) { _, _ ->
                 Toast.makeText(this, "Connecting…", Toast.LENGTH_SHORT).show()
-                TeilenApi.claimHostInvite(Server.get(this), code, devName) { result ->
+                val myMergePkg = try { PairingCrypto.sealHostInvite(this, code) } catch (e: Exception) { null }
+                val currentToken = Session.token(this)
+                TeilenApi.claimHostInvite(
+                    baseUrl = Server.get(this),
+                    userCode = code,
+                    deviceName = devName,
+                    mergeKeyPackage = myMergePkg,
+                    scannerToken = currentToken
+                ) { result ->
                     if (result.ok && result.signedIn != null) {
                         if (result.encryptedKeyBundle != null) {
-                            PairingCrypto.openHostInvite(this, result.encryptedKeyBundle, code)
+                            PairingCrypto.openHostInvite(this, result.encryptedKeyBundle, code, isPrimaryHost = result.isPrimaryHost)
                         }
                         Session.save(this, result.signedIn.token, result.signedIn.phone, result.signedIn.deviceName)
                         Toast.makeText(this, "Connected to ${preview.deviceName}!", Toast.LENGTH_SHORT).show()
@@ -158,7 +166,11 @@ class PairActivity : Activity() {
             }
         }
 
-        TeilenApi.decidePairing(Server.get(this), token, code, allow, keyPackage) { ok, message ->
+        val mergePkg = if (allow) {
+            try { PairingCrypto.sealHostInvite(this, code) } catch (e: Exception) { null }
+        } else null
+
+        TeilenApi.decidePairing(Server.get(this), token, code, allow, keyPackage, mergePkg) { ok, message ->
             val said = if (ok) {
                 getString(if (allow) R.string.pair_allowed else R.string.pair_refused, message)
             } else {

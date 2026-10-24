@@ -466,10 +466,18 @@ class AccountCard(
                     .setMessage(activity.getString(R.string.pair_ask_named, preview.deviceName, "Vault"))
                     .setPositiveButton(R.string.pair_allow) { _, _ ->
                         sayApproveStatus("Connecting to ${preview.deviceName}…", isError = false)
-                        TeilenApi.claimHostInvite(serverUrl, code, devName) { result ->
+                        val myMergePkg = try { PairingCrypto.sealHostInvite(activity, code) } catch (e: Exception) { null }
+                        val currentToken = Session.token(activity)
+                        TeilenApi.claimHostInvite(
+                            baseUrl = serverUrl,
+                            userCode = code,
+                            deviceName = devName,
+                            mergeKeyPackage = myMergePkg,
+                            scannerToken = currentToken
+                        ) { result ->
                             if (result.ok && result.signedIn != null) {
                                 if (result.encryptedKeyBundle != null) {
-                                    PairingCrypto.openHostInvite(activity, result.encryptedKeyBundle, code)
+                                    PairingCrypto.openHostInvite(activity, result.encryptedKeyBundle, code, isPrimaryHost = result.isPrimaryHost)
                                 }
                                 Session.save(activity, result.signedIn.token, result.signedIn.phone, result.signedIn.deviceName)
                                 render()
@@ -542,7 +550,11 @@ class AccountCard(
             }
         } else null
 
-        TeilenApi.decidePairing(Server.get(activity), token, code, allow, keyPackage) { ok, message ->
+        val mergePkg = if (allow) {
+            try { PairingCrypto.sealHostInvite(activity, code) } catch (e: Exception) { null }
+        } else null
+
+        TeilenApi.decidePairing(Server.get(activity), token, code, allow, keyPackage, mergePkg) { ok, message ->
             if (ok) {
                 val said = activity.getString(if (allow) R.string.pair_allowed else R.string.pair_refused, message)
                 sayApproveStatus(said, isError = false)

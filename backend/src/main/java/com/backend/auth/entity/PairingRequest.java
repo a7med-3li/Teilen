@@ -64,6 +64,9 @@ public class PairingRequest {
     @Column(name = "key_package", length = 16000)
     private String keyPackage;
 
+    @Column(name = "merge_key_package", length = 16000)
+    private String mergeKeyPackage;
+
     @Column(name = "device_name", nullable = false, length = 120)
     private String deviceName;
 
@@ -237,5 +240,13 @@ public class PairingRequest {
 
     public Instant getResolvedAt() {
         return resolvedAt;
+    }
+
+    public String getMergeKeyPackage() {
+        return mergeKeyPackage;
+    }
+
+    public void setMergeKeyPackage(String mergeKeyPackage) {
+        this.mergeKeyPackage = mergeKeyPackage;
     }
 }

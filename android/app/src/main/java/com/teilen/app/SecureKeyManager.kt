@@ -50,6 +50,49 @@ object SecureKeyManager {
         write(context, KEY_MASTER, key)
     }
 
+    // ------------------------------------------------------------ legacy keys for vault merge
+
+    fun getLegacyKeys(context: Context): List<ByteArray> {
+        val raw = read(context, "account_legacy_keys") ?: return emptyList()
+        val text = String(raw, Charsets.UTF_8)
+        return try {
+            val arr = org.json.JSONArray(text)
+            val list = mutableListOf<ByteArray>()
+            for (i in 0 until arr.length()) {
+                val b64 = arr.optString(i)
+                if (!b64.isNullOrBlank()) {
+                    list.add(Base64.decode(b64, Base64.NO_WRAP))
+                }
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun addLegacyKey(context: Context, key: ByteArray) {
+        val currentMaster = getMasterKey(context)
+        if (currentMaster != null && currentMaster.contentEquals(key)) return
+        val currentLegacies = getLegacyKeys(context).toMutableList()
+        if (currentLegacies.none { it.contentEquals(key) }) {
+            currentLegacies.add(key)
+            val arr = org.json.JSONArray()
+            for (k in currentLegacies) {
+                arr.put(Base64.encodeToString(k, Base64.NO_WRAP))
+            }
+            write(context, "account_legacy_keys", arr.toString().toByteArray(Charsets.UTF_8))
+        }
+    }
+
+    fun addLegacyKeys(context: Context, keys: List<ByteArray>) {
+        for (k in keys) {
+            addLegacyKey(context, k)
+        }
+    }
+
+    fun getAllCandidateKeys(context: Context): List<ByteArray> =
+        listOfNotNull(getMasterKey(context)) + getLegacyKeys(context)
+
     // ------------------------------------------------------------ session keys
 
     fun getSessionKey(context: Context, sessionId: String): ByteArray? =

@@ -50,6 +50,7 @@ public class AuthService {
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
     private final AuthRateLimiter rateLimiter;
     private final SessionService sessionService;
+    private final VaultMergeService vaultMergeService;
 
     @Autowired
     public AuthService(UserRepository users,
@@ -58,6 +59,7 @@ public class AuthService {
                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                        @Autowired(required = false) AuthRateLimiter rateLimiter,
                        @Autowired(required = false) SessionService sessionService,
+                       @Autowired(required = false) VaultMergeService vaultMergeService,
                        @Value("${teilen.auth.pairing-ttl-seconds:300}") long pairingTtlSeconds,
                        @Value("${teilen.auth.poll-interval-seconds:3}") long pollIntervalSeconds) {
         this.users = users;
@@ -66,6 +68,7 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
         this.rateLimiter = rateLimiter != null ? rateLimiter : new AuthRateLimiter();
         this.sessionService = sessionService;
+        this.vaultMergeService = vaultMergeService;
         this.pairingTtl = Duration.ofSeconds(pairingTtlSeconds);
         this.pollInterval = Duration.ofSeconds(pollIntervalSeconds);
     }
@@ -76,7 +79,7 @@ public class AuthService {
                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                        long pairingTtlSeconds,
                        long pollIntervalSeconds) {
-        this(users, devices, pairings, passwordEncoder, null, null, pairingTtlSeconds, pollIntervalSeconds);
+        this(users, devices, pairings, passwordEncoder, null, null, null, pairingTtlSeconds, pollIntervalSeconds);
     }
 
     // ------------------------------------------------------------------ accounts
@@ -315,6 +318,11 @@ public class AuthService {
 
     @Transactional
     public ClaimInviteResponse claimHostInvite(ClaimInviteRequest requestBody) {
+        return claimHostInvite(requestBody, null);
+    }
+
+    @Transactional
+    public ClaimInviteResponse claimHostInvite(ClaimInviteRequest requestBody, AuthenticatedUser caller) {
         Instant now = Instant.now();
         String userCode = Tokens.normalizeUserCode(requestBody.userCode());
         PairingRequest request = findPairingByUserCode(userCode);
@@ -329,36 +337,75 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "not_a_host_invite");
         }
 
-        User owner = findUser(request.getUserId());
+        UUID hostUserId = request.getUserId();
+        UUID scannerUserId = null;
+        if (caller != null) {
+            scannerUserId = caller.userId();
+        } else if (requestBody.scannerToken() != null && !requestBody.scannerToken().isBlank()) {
+            scannerUserId = devices.findByTokenHash(Tokens.hash(requestBody.scannerToken()))
+                    .map(Device::getUserId)
+                    .orElse(null);
+        }
+
+        UUID primaryUserId = hostUserId;
+        boolean isPrimaryHost = true;
+        if (vaultMergeService != null && scannerUserId != null && !scannerUserId.equals(hostUserId)) {
+            VaultMergeService.MergeResult mergeResult = vaultMergeService.mergeIfDifferent(hostUserId, scannerUserId, true);
+            primaryUserId = mergeResult.primaryUserId();
+            isPrimaryHost = primaryUserId.equals(hostUserId);
+        }
+
+        User primaryUser = findUser(primaryUserId);
         String token = Tokens.newToken();
         UUID newDeviceId = UUID.randomUUID();
         DeviceType type = DeviceType.parse(requestBody.deviceType());
         String devName = clean(requestBody.deviceName() != null && !requestBody.deviceName().isBlank()
                 ? requestBody.deviceName() : "Companion Device", 120);
 
-        Device device = new Device(newDeviceId, owner.getId(), type, devName,
+        Device device = new Device(newDeviceId, primaryUserId, type, devName,
                 Tokens.hash(token), clean(requestBody.devicePublicKey(), 200), null,
                 clean(requestBody.platform(), 160), now);
         devices.save(device);
 
-        request.approve(device.getId(), token, now);
-        request.deliver(now);
+        if (requestBody.mergeKeyPackage() != null && !requestBody.mergeKeyPackage().isBlank()) {
+            request.setMergeKeyPackage(clean(requestBody.mergeKeyPackage(), 16000));
+        }
+
+        // If the scanner became primary (e.g., host was anonymous and scanner was named),
+        // we generate a new token for the host device under primaryUserId so host receives it when polling claim().
+        if (!isPrimaryHost) {
+            String hostToken = Tokens.newToken();
+            Device hostDevice = new Device(UUID.randomUUID(), primaryUserId, request.getDeviceType(),
+                    request.getDeviceName() != null ? request.getDeviceName() : "Host Device",
+                    Tokens.hash(hostToken), request.getDevicePublicKey(), null, request.getPlatform(), now);
+            devices.save(hostDevice);
+            request.approve(hostDevice.getId(), hostToken, now);
+        } else {
+            request.approve(device.getId(), token, now);
+        }
         pairings.save(request);
 
-        log.info("device {} claimed host invite into account {}", devName, owner.getUsername());
+        log.info("device {} claimed host invite into unified account {}", devName, primaryUser.getUsername());
 
         return new ClaimInviteResponse(
                 token,
                 device.getId(),
                 device.getName(),
-                owner.getId(),
-                owner.getUsername(),
-                request.getKeyPackage()
+                primaryUser.getId(),
+                primaryUser.getUsername(),
+                request.getKeyPackage(),
+                primaryUserId,
+                isPrimaryHost
         );
     }
 
     @Transactional
     public ApprovalResponse approve(UUID userId, String rawUserCode, String keyPackage) {
+        return approve(userId, rawUserCode, keyPackage, null);
+    }
+
+    @Transactional
+    public ApprovalResponse approve(UUID userId, String rawUserCode, String keyPackage, String mergeKeyPackage) {
         Instant now = Instant.now();
         PairingRequest request = findPairingByUserCode(rawUserCode);
 
@@ -370,14 +417,23 @@ public class AuthService {
                     "pairing_" + request.getStatus().name().toLowerCase() + ": this code was already used");
         }
 
-        User owner = findUser(userId);
+        UUID approverUserId = userId;
+        if (vaultMergeService != null && request.getUserId() != null && !request.getUserId().equals(approverUserId)) {
+            VaultMergeService.MergeResult res = vaultMergeService.mergeIfDifferent(approverUserId, request.getUserId(), false);
+            approverUserId = res.primaryUserId();
+        }
+
+        User owner = findUser(approverUserId);
         String token = Tokens.newToken();
         Device device = new Device(UUID.randomUUID(), owner.getId(), request.getDeviceType(),
                 request.getDeviceName(), Tokens.hash(token), request.getDevicePublicKey(),
                 null, request.getPlatform(), now);
         devices.save(device);
         request.approve(device.getId(), token, now);
-        request.setKeyPackage(clean(keyPackage, 4000));
+        request.setKeyPackage(clean(keyPackage, 16000));
+        if (mergeKeyPackage != null && !mergeKeyPackage.isBlank()) {
+            request.setMergeKeyPackage(clean(mergeKeyPackage, 16000));
+        }
 
         log.info("{} approved a {} device: {}", request.describe(), request.getDeviceType(),
                 request.getDeviceName());
@@ -421,7 +477,7 @@ public class AuthService {
         User user = findUser(device.getUserId());
         log.info("paired {} device {} for {}", request.getDeviceType(), device.getName(), user.label());
         return new TokenClaimResponse(token, device.getId(), device.getDeviceType(), device.getName(),
-                request.getKeyPackage(), UserResponse.from(user));
+                request.getKeyPackage(), request.getMergeKeyPackage(), UserResponse.from(user));
     }
 
     @Transactional(readOnly = true)

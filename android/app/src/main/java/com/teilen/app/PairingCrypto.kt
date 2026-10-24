@@ -75,9 +75,11 @@ object PairingCrypto {
         val master = SecureKeyManager.ensureMasterKey(context)
         val identity = SecureKeyManager.ensureIdentity(context)
         val sessionKeys = Session.getAllSessionKeys(context)
+        val legacyKeys = SecureKeyManager.getLegacyKeys(context).map { b64(it) }
 
         val payload = JSONObject()
             .put("masterKey", b64(master))
+            .put("legacyKeys", org.json.JSONArray(legacyKeys))
             .put("sessionKeys", JSONObject(sessionKeys))
             .toString()
 
@@ -137,6 +139,7 @@ object PairingCrypto {
         val decrypted = secretBoxOpenEasy(unb64(wrappedText), unb64(nonceText), wrappingKey(shared))
             ?: return null
 
+        val currentMaster = SecureKeyManager.getMasterKey(context)
         val master = try {
             val payload = JSONObject(String(decrypted, Charsets.UTF_8))
             val masterB64 = payload.optString("masterKey").ifBlank { null }
@@ -149,12 +152,25 @@ object PairingCrypto {
                     }
                     Session.setAllSessionKeys(context, map)
                 }
+                val legacyArr = payload.optJSONArray("legacyKeys")
+                if (legacyArr != null) {
+                    val list = mutableListOf<ByteArray>()
+                    for (i in 0 until legacyArr.length()) {
+                        val s = legacyArr.optString(i)
+                        if (!s.isNullOrBlank()) list.add(unb64(s))
+                    }
+                    SecureKeyManager.addLegacyKeys(context, list)
+                }
                 unb64(masterB64)
             } else {
                 decrypted
             }
         } catch (e: Exception) {
             decrypted
+        }
+
+        if (currentMaster != null && !currentMaster.contentEquals(master)) {
+            SecureKeyManager.addLegacyKey(context, currentMaster)
         }
         SecureKeyManager.setMasterKey(context, master)
         return master
@@ -166,9 +182,11 @@ object PairingCrypto {
     fun sealHostInvite(context: Context, userCode: String): String {
         val master = SecureKeyManager.ensureMasterKey(context)
         val sessionKeys = Session.getAllSessionKeys(context)
+        val legacyKeys = SecureKeyManager.getLegacyKeys(context).map { b64(it) }
 
         val payload = JSONObject()
             .put("masterKey", b64(master))
+            .put("legacyKeys", org.json.JSONArray(legacyKeys))
             .put("sessionKeys", JSONObject(sessionKeys))
             .toString()
 
@@ -192,7 +210,7 @@ object PairingCrypto {
     /**
      * Scanner side: open a Host Invite bundle using the user code.
      */
-    fun openHostInvite(context: Context, bundle: String, userCode: String): Boolean {
+    fun openHostInvite(context: Context, bundle: String, userCode: String, isPrimaryHost: Boolean = true): Boolean {
         val json = try { JSONObject(bundle) } catch (e: Exception) { return false }
         if (json.optInt("v", -1) != VERSION) return false
         val nonceText = json.optString("nonce").ifBlank { return false }
@@ -208,8 +226,29 @@ object PairingCrypto {
         val payload = try { JSONObject(String(decryptedBytes, Charsets.UTF_8)) } catch (e: Exception) { return false }
 
         val masterB64 = payload.optString("masterKey").ifBlank { return false }
-        val masterBytes = unb64(masterB64)
-        SecureKeyManager.setMasterKey(context, masterBytes)
+        val incomingMaster = unb64(masterB64)
+        val currentMaster = SecureKeyManager.getMasterKey(context)
+
+        if (isPrimaryHost) {
+            if (currentMaster != null && !currentMaster.contentEquals(incomingMaster)) {
+                SecureKeyManager.addLegacyKey(context, currentMaster)
+            }
+            SecureKeyManager.setMasterKey(context, incomingMaster)
+        } else {
+            if (currentMaster != null && !currentMaster.contentEquals(incomingMaster)) {
+                SecureKeyManager.addLegacyKey(context, incomingMaster)
+            }
+        }
+
+        val legacyArr = payload.optJSONArray("legacyKeys")
+        if (legacyArr != null) {
+            val list = mutableListOf<ByteArray>()
+            for (i in 0 until legacyArr.length()) {
+                val s = legacyArr.optString(i)
+                if (!s.isNullOrBlank()) list.add(unb64(s))
+            }
+            SecureKeyManager.addLegacyKeys(context, list)
+        }
 
         val sessionKeysObj = payload.optJSONObject("sessionKeys")
         if (sessionKeysObj != null) {

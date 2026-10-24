@@ -1338,6 +1338,9 @@
                 applyExtended(event.item);
             } else if (event.event === 'deleted' && event.id) {
                 remove(event.id);
+            } else if (event.event === 'vault_merged') {
+                loadSessions().then(() => showFeed());
+                api('/api/devices').then(r => r.ok && r.json()).then(devs => devs && renderDevices(devs));
             }
         });
 
@@ -1754,10 +1757,19 @@
                         });
                         if (claimRes.status === 200) {
                             clearInterval(pairTimer);
+                            const claimData = await claimRes.json();
+                            if (claimData.mergeKeyPackage) {
+                                await TeilenCrypto.openHostInvite(claimData.mergeKeyPackage, codeVal, true);
+                            }
+                            if (claimData.token && claimData.token !== token.get()) {
+                                token.set(claimData.token);
+                                connect();
+                            }
                             toast('Companion device connected!', 'success');
                             closeModal(modalPairPhone);
                             const devRes = await api('/api/devices');
                             if (devRes.ok) renderDevices(await devRes.json());
+                            await loadSessions();
                             await showFeed();
                         }
                     } catch (e) {
@@ -1821,7 +1833,8 @@
                             toast('Pairing successful!', 'success');
                             closeModal(modalPairPhone);
                             connectSignalWs();
-                            connectWs();
+                            connect();
+                            await loadSessions();
                             await showFeed();
                         }
                     } catch (e) {
@@ -1877,15 +1890,21 @@
             if (preview.mode === 'HOST_INVITE') {
                 if (statusEl) statusEl.textContent = 'Connecting to ' + preview.deviceName + '…';
                 const identity = await TeilenCrypto.ensureIdentity();
+                const myMergePkg = await TeilenCrypto.sealHostInvite(code);
                 const claimRes = await fetch('/api/auth/device/claim-invite', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token.get() ? {'Authorization': 'Bearer ' + token.get()} : {})
+                    },
                     body: JSON.stringify({
                         userCode: code,
                         deviceName: 'Browser',
                         deviceType: 'WEB',
                         platform: navigator.platform || 'Web',
-                        devicePublicKey: identity && identity.publicKey ? TeilenCrypto.b64(identity.publicKey) : undefined
+                        devicePublicKey: identity && identity.publicKey ? TeilenCrypto.b64(identity.publicKey) : undefined,
+                        mergeKeyPackage: myMergePkg,
+                        scannerToken: token.get() || undefined
                     })
                 });
                 if (!claimRes.ok) {
@@ -1894,7 +1913,7 @@
                 }
                 const claim = await claimRes.json();
                 if (claim.encryptedKeyBundle) {
-                    await TeilenCrypto.openHostInvite(claim.encryptedKeyBundle, code);
+                    await TeilenCrypto.openHostInvite(claim.encryptedKeyBundle, code, claim.isPrimaryHost !== false);
                 }
                 token.set(claim.token);
                 if (inputEl) inputEl.value = '';
@@ -1902,21 +1921,27 @@
                 toast('Connected to ' + (claim.username || preview.deviceName) + '!', 'success');
                 closeModal(modalPairPhone);
                 connectSignalWs();
-                connectWs();
+                connect();
                 const devRes = await api('/api/devices');
                 if (devRes.ok) renderDevices(await devRes.json());
+                await loadSessions();
                 await showFeed();
                 return;
             }
 
             let keyPkg = null;
+            let mergePkg = null;
             if (preview.publicKey) {
                 keyPkg = await TeilenCrypto.sealForNewcomer(preview.publicKey, code);
             }
+            try {
+                mergePkg = await TeilenCrypto.sealHostInvite(code);
+            } catch (e) {}
 
             const approveRes = await postJson('/api/auth/device/approve', {
                 userCode: code,
-                keyPackage: keyPkg
+                keyPackage: keyPkg,
+                mergeKeyPackage: mergePkg
             });
 
             if (approveRes.ok) {

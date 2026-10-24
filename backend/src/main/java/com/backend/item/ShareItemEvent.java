@@ -21,4 +21,8 @@ public record ShareItemEvent(String event, ShareItemResponse item, String id) {
     public static ShareItemEvent deleted(java.util.UUID id) {
         return new ShareItemEvent("deleted", null, id.toString());
     }
+
+    public static ShareItemEvent vaultMerged() {
+        return new ShareItemEvent("vault_merged", null, null);
+    }
 }

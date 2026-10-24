@@ -24,10 +24,37 @@ const PLAIN_CHUNK = 64 * 1024;
 const WIRE_CHUNK = PLAIN_CHUNK + TAG_BYTES;
 
 self.onmessage = async (event) => {
-    const {id, masterKey, encrypted} = event.data;
+    const {id, masterKey, keys, encrypted} = event.data;
     try {
         await sodium.ready;
-        const result = decrypt(new Uint8Array(masterKey), new Uint8Array(encrypted));
+        const candidateKeys = [];
+        if (Array.isArray(keys) && keys.length > 0) {
+            for (const k of keys) {
+                if (k instanceof Uint8Array) candidateKeys.push(k);
+                else if (typeof k === 'string') candidateKeys.push(sodium.from_base64(k, sodium.base64_variants.ORIGINAL));
+            }
+        }
+        if (candidateKeys.length === 0 && masterKey) {
+            candidateKeys.push(new Uint8Array(masterKey));
+        }
+
+        const cipherBytes = new Uint8Array(encrypted);
+        let result = null;
+        let lastError = null;
+
+        for (const key of candidateKeys) {
+            try {
+                result = decrypt(key, cipherBytes);
+                if (result) break;
+            } catch (err) {
+                lastError = err;
+            }
+        }
+
+        if (!result) {
+            throw lastError || new Error('Decryption failed with all candidate keys');
+        }
+
         const blob = new Blob(result.chunks, {type: result.metadata.type || 'application/octet-stream'});
         self.postMessage({id, metadata: result.metadata, blob});
     } catch (e) {

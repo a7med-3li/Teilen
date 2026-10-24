@@ -1724,10 +1724,18 @@ class MainActivity : Activity() {
                         .setMessage("Connect to ${preview.deviceName}?")
                         .setPositiveButton(R.string.pair_allow) { _, _ ->
                             statusManual.text = "Connecting…"
-                            TeilenApi.claimHostInvite(Server.get(this), code, devName) { result ->
+                            val myMergePkg = try { PairingCrypto.sealHostInvite(this, code) } catch (e: Exception) { null }
+                            val currentToken = Session.token(this)
+                            TeilenApi.claimHostInvite(
+                                baseUrl = Server.get(this),
+                                userCode = code,
+                                deviceName = devName,
+                                mergeKeyPackage = myMergePkg,
+                                scannerToken = currentToken
+                            ) { result ->
                                 if (result.ok && result.signedIn != null) {
                                     if (result.encryptedKeyBundle != null) {
-                                        PairingCrypto.openHostInvite(this, result.encryptedKeyBundle, code)
+                                        PairingCrypto.openHostInvite(this, result.encryptedKeyBundle, code, isPrimaryHost = result.isPrimaryHost)
                                     }
                                     Session.save(this, result.signedIn.token, result.signedIn.phone, result.signedIn.deviceName)
                                     dialog.dismiss()
@@ -1759,8 +1767,9 @@ class MainActivity : Activity() {
                                     PairingCrypto.sealForNewcomer(this, PairingCrypto.unb64(preview.publicKey), code)
                                 } else null
                             } catch (e: Exception) { null }
+                            val mergePkg = try { PairingCrypto.sealHostInvite(this, code) } catch (e: Exception) { null }
 
-                            TeilenApi.decidePairing(Server.get(this), token, code, true, keyPackage) { ok, msg ->
+                            TeilenApi.decidePairing(Server.get(this), token, code, true, keyPackage, mergePkg) { ok, msg ->
                                 if (ok) {
                                     dialog.dismiss()
                                     Toast.makeText(this, getString(R.string.pair_allowed, msg), Toast.LENGTH_LONG).show()
@@ -1847,9 +1856,15 @@ class MainActivity : Activity() {
                     Toast.makeText(this, R.string.code_copied, Toast.LENGTH_SHORT).show()
                 }
 
-                TeilenApi.pollForSettlement(url, offer.deviceCode) { settled ->
+                TeilenApi.pollForSettlement(url, offer.deviceCode) { res ->
                     if (!dialog.isShowing) return@pollForSettlement
-                    if (settled) {
+                    if (res.settled) {
+                        if (!res.mergeKeyPackage.isNullOrBlank()) {
+                            PairingCrypto.openHostInvite(this, res.mergeKeyPackage, offer.userCode, isPrimaryHost = true)
+                        }
+                        if (!res.token.isNullOrBlank() && res.token != Session.token(this)) {
+                            Session.save(this, res.token, res.username ?: Session.phone(this) ?: "Device", Session.deviceName(this) ?: "Device")
+                        }
                         dialog.dismiss()
                         Toast.makeText(this, "Companion device connected!", Toast.LENGTH_SHORT).show()
                         account.render()

@@ -18,6 +18,7 @@ window.TeilenCrypto = (() => {
     const DB_NAME = 'teilen_sec_db';
     const STORE = 'keys';
     const MASTER = 'account_master_key';
+    const LEGACY_KEYS = 'account_legacy_keys';
     const IDENTITY = 'identity_ed25519';
 
     // the string the approving device signs over, so a relayed bundle cannot be re-pointed
@@ -181,6 +182,55 @@ window.TeilenCrypto = (() => {
         return (await getMasterKey()) !== null;
     }
 
+    // ---------- legacy keys for non-destructive merges ----------
+
+    async function getLegacyKeys() {
+        await ready;
+        const stored = await idbGet(LEGACY_KEYS);
+        if (!stored) return [];
+        try {
+            const parsed = typeof stored === 'string' ? JSON.parse(stored) : stored;
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async function addLegacyKey(keyBytesOrB64) {
+        if (!keyBytesOrB64) return;
+        await ready;
+        const keyStr = typeof keyBytesOrB64 === 'string' ? keyBytesOrB64 : b64(keyBytesOrB64);
+        const currentMaster = await getMasterKey();
+        if (currentMaster && b64(currentMaster) === keyStr) return;
+
+        const list = await getLegacyKeys();
+        if (!list.includes(keyStr)) {
+            list.push(keyStr);
+            await idbPut(LEGACY_KEYS, JSON.stringify(list));
+        }
+    }
+
+    async function addLegacyKeys(keysList) {
+        if (!Array.isArray(keysList)) return;
+        for (const k of keysList) {
+            await addLegacyKey(k);
+        }
+    }
+
+    async function getAllCandidateKeys() {
+        await ready;
+        const master = await getMasterKey();
+        const legacies = await getLegacyKeys();
+        const res = [];
+        if (master) res.push(master);
+        for (const l of legacies) {
+            try {
+                res.push(unb64(l));
+            } catch (e) {}
+        }
+        return res;
+    }
+
     // ---------- this device's signing identity ----------
 
     async function ensureIdentity() {
@@ -225,10 +275,12 @@ window.TeilenCrypto = (() => {
         await ready;
         const master = await ensureMasterKey();
         const identity = await ensureIdentity();
+        const legacyKeys = await getLegacyKeys();
         const sessionKeys = await getAllSessionKeys();
 
         const payload = JSON.stringify({
             masterKey: b64(master),
+            legacyKeys: legacyKeys,
             sessionKeys: sessionKeys
         });
 
@@ -283,12 +335,20 @@ window.TeilenCrypto = (() => {
             throw new Error('failed to decrypt key package');
         }
 
+        const currentMaster = await getMasterKey();
+
         try {
             const payloadStr = sodium.to_string(decryptedBytes);
             const payload = JSON.parse(payloadStr);
             if (payload && payload.masterKey) {
                 const master = unb64(payload.masterKey);
+                if (currentMaster && b64(currentMaster) !== b64(master)) {
+                    await addLegacyKey(currentMaster);
+                }
                 await setMasterKey(master);
+                if (Array.isArray(payload.legacyKeys)) {
+                    await addLegacyKeys(payload.legacyKeys);
+                }
                 if (payload.sessionKeys) {
                     await setSessionKeysMap(payload.sessionKeys);
                 }
@@ -298,6 +358,9 @@ window.TeilenCrypto = (() => {
             // legacy raw 32 bytes format fallback
         }
 
+        if (currentMaster && b64(currentMaster) !== b64(decryptedBytes)) {
+            await addLegacyKey(currentMaster);
+        }
         await setMasterKey(decryptedBytes);
         return decryptedBytes;
     }
@@ -308,10 +371,12 @@ window.TeilenCrypto = (() => {
     async function sealHostInvite(userCode) {
         await ready;
         const master = await ensureMasterKey();
+        const legacyKeys = await getLegacyKeys();
         const sessionKeys = await getAllSessionKeys();
 
         const payload = JSON.stringify({
             masterKey: b64(master),
+            legacyKeys: legacyKeys,
             sessionKeys: sessionKeys
         });
 
@@ -335,7 +400,7 @@ window.TeilenCrypto = (() => {
     /**
      * Scanner side: open a Host Invite bundle using the user code.
      */
-    async function openHostInvite(bundle, userCode) {
+    async function openHostInvite(bundle, userCode, isPrimaryHost = true) {
         await ready;
         const pkg = typeof bundle === 'string' ? JSON.parse(bundle) : bundle;
         if (!pkg || pkg.v !== 1) {
@@ -360,12 +425,28 @@ window.TeilenCrypto = (() => {
             throw new Error('Missing masterKey in host invite bundle');
         }
 
-        const master = unb64(payload.masterKey);
-        await setMasterKey(master);
+        const incomingMaster = unb64(payload.masterKey);
+        const currentMaster = await getMasterKey();
+
+        if (isPrimaryHost) {
+            if (currentMaster && b64(currentMaster) !== b64(incomingMaster)) {
+                await addLegacyKey(currentMaster);
+            }
+            await setMasterKey(incomingMaster);
+        } else {
+            if (currentMaster && b64(currentMaster) !== b64(incomingMaster)) {
+                await addLegacyKey(incomingMaster);
+            }
+        }
+
+        if (Array.isArray(payload.legacyKeys)) {
+            await addLegacyKeys(payload.legacyKeys);
+        }
+
         if (payload.sessionKeys) {
             await setSessionKeysMap(payload.sessionKeys);
         }
-        return master;
+        return await getMasterKey();
     }
 
     // ---------- per-session encryption keys ----------
@@ -469,6 +550,10 @@ window.TeilenCrypto = (() => {
         getMasterKey,
         ensureMasterKey,
         setMasterKey,
+        getLegacyKeys,
+        addLegacyKey,
+        addLegacyKeys,
+        getAllCandidateKeys,
         getSessionKey,
         setSessionKey,
         generateSessionKey,

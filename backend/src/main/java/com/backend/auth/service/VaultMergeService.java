@@ -1,0 +1,191 @@
+package com.backend.auth.service;
+
+import com.backend.auth.entity.User;
+import com.backend.auth.repository.UserRepository;
+import com.backend.item.ShareItemEvent;
+import com.backend.item.ShareItemWebSocketHandler;
+import com.backend.session.Session;
+import com.backend.session.SessionService;
+import jakarta.persistence.EntityManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
+
+@Service
+public class VaultMergeService {
+
+    private static final Logger log = LoggerFactory.getLogger(VaultMergeService.class);
+
+    private final EntityManager entityManager;
+    private final UserRepository userRepository;
+    private final SessionService sessionService;
+    private final ShareItemWebSocketHandler webSocketHandler;
+
+    public VaultMergeService(EntityManager entityManager,
+                             UserRepository userRepository,
+                             SessionService sessionService,
+                             ShareItemWebSocketHandler webSocketHandler) {
+        this.entityManager = entityManager;
+        this.userRepository = userRepository;
+        this.sessionService = sessionService;
+        this.webSocketHandler = webSocketHandler;
+    }
+
+    public static boolean isAnonymous(User u) {
+        if (u == null || u.getUsername() == null) return true;
+        String name = u.getUsername().toLowerCase();
+        return name.startsWith("vault") && name.length() >= 8;
+    }
+
+    public record MergeResult(UUID primaryUserId, UUID secondaryUserId, boolean merged) {}
+
+    @Transactional
+    public MergeResult mergeIfDifferent(UUID userAId, UUID userBId, boolean isAHost) {
+        if (userAId == null || userBId == null || userAId.equals(userBId)) {
+            return new MergeResult(userAId != null ? userAId : userBId, null, false);
+        }
+
+        User userA = userRepository.findById(userAId).orElse(null);
+        User userB = userRepository.findById(userBId).orElse(null);
+
+        if (userA == null || userB == null) {
+            return new MergeResult(userA != null ? userAId : userBId, null, false);
+        }
+
+        boolean aNamed = !isAnonymous(userA);
+        boolean bNamed = !isAnonymous(userB);
+
+        UUID primaryUserId;
+        UUID secondaryUserId;
+
+        if (aNamed && !bNamed) {
+            primaryUserId = userAId;
+            secondaryUserId = userBId;
+        } else if (!aNamed && bNamed) {
+            primaryUserId = userBId;
+            secondaryUserId = userAId;
+        } else {
+            // Both named or both anonymous: Host takes precedence if isAHost, else older user
+            if (isAHost) {
+                primaryUserId = userAId;
+                secondaryUserId = userBId;
+            } else {
+                primaryUserId = userB.getCreatedAt().isBefore(userA.getCreatedAt()) ? userBId : userAId;
+                secondaryUserId = primaryUserId.equals(userAId) ? userBId : userAId;
+            }
+        }
+
+        log.info("Merging secondary vault {} into primary vault {}", secondaryUserId, primaryUserId);
+
+        // Ensure primary user has a personal session
+        Session primaryPersonalSession = sessionService.getOrCreatePersonalSession(primaryUserId);
+        UUID primaryPersonalSessionId = primaryPersonalSession.getId();
+
+        // 1. Move all active shared items from secondaryUserId to primaryUserId
+        // Remap personal session items to primary user's personal session
+        entityManager.createNativeQuery("""
+            UPDATE share_items
+            SET user_id = :primaryUserId,
+                session_id = CASE
+                    WHEN session_id IN (SELECT id FROM sessions WHERE owner_user_id = :secondaryUserId AND is_personal = true)
+                    THEN :primaryPersonalSessionId
+                    ELSE session_id
+                END
+            WHERE user_id = :secondaryUserId
+        """)
+        .setParameter("primaryUserId", primaryUserId)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .setParameter("primaryPersonalSessionId", primaryPersonalSessionId)
+        .executeUpdate();
+
+        // 2. Move custom (non-personal) Sessions/Rooms owned by secondaryUserId to primaryUserId
+        entityManager.createNativeQuery("""
+            UPDATE sessions
+            SET owner_user_id = :primaryUserId
+            WHERE owner_user_id = :secondaryUserId AND is_personal = false
+        """)
+        .setParameter("primaryUserId", primaryUserId)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        // 3. Move Session Memberships (avoiding duplicate (session_id, user_id) constraint violations)
+        entityManager.createNativeQuery("""
+            UPDATE session_members
+            SET user_id = :primaryUserId
+            WHERE user_id = :secondaryUserId
+              AND session_id NOT IN (SELECT session_id FROM session_members WHERE user_id = :primaryUserId)
+        """)
+        .setParameter("primaryUserId", primaryUserId)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        entityManager.createNativeQuery("""
+            DELETE FROM session_members WHERE user_id = :secondaryUserId
+        """)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        // 4. Move all registered Devices from secondaryUserId to primaryUserId
+        entityManager.createNativeQuery("""
+            UPDATE devices
+            SET user_id = :primaryUserId
+            WHERE user_id = :secondaryUserId
+        """)
+        .setParameter("primaryUserId", primaryUserId)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        // 5. Move Push Subscriptions
+        entityManager.createNativeQuery("""
+            DELETE FROM push_subscriptions
+            WHERE user_id = :secondaryUserId
+              AND endpoint IN (SELECT endpoint FROM push_subscriptions WHERE user_id = :primaryUserId)
+        """)
+        .setParameter("primaryUserId", primaryUserId)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        entityManager.createNativeQuery("""
+            UPDATE push_subscriptions
+            SET user_id = :primaryUserId
+            WHERE user_id = :secondaryUserId
+        """)
+        .setParameter("primaryUserId", primaryUserId)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        // 6. Update pairing_requests
+        entityManager.createNativeQuery("""
+            UPDATE pairing_requests
+            SET user_id = :primaryUserId
+            WHERE user_id = :secondaryUserId
+        """)
+        .setParameter("primaryUserId", primaryUserId)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        // 7. Clean up secondary user's personal session and secondary user row safely
+        entityManager.createNativeQuery("""
+            DELETE FROM sessions WHERE owner_user_id = :secondaryUserId AND is_personal = true
+        """)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        entityManager.createNativeQuery("""
+            DELETE FROM users WHERE id = :secondaryUserId
+        """)
+        .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        // 8. Broadcast real-time WebSocket event to all connected sessions of primary and secondary
+        ShareItemEvent mergeEvent = ShareItemEvent.vaultMerged();
+        webSocketHandler.broadcast(primaryUserId, mergeEvent);
+        webSocketHandler.broadcast(secondaryUserId, mergeEvent);
+
+        log.info("Vault merge complete: {} is now unified into {}", secondaryUserId, primaryUserId);
+        return new MergeResult(primaryUserId, secondaryUserId, true);
+    }
+}

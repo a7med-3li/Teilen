@@ -128,6 +128,33 @@ object CipherStreamEngine {
         }
     }
 
+    /**
+     * Attempts decryption using the primary key first, falling back to legacy keys if the MAC fails.
+     */
+    fun decryptWithFallback(
+        keys: List<ByteArray>,
+        input: InputStream,
+        output: OutputStream
+    ): ByteArray {
+        if (keys.isEmpty()) throw IOException("No keys provided for decryption")
+        if (keys.size == 1) return decrypt(keys[0], input, output)
+
+        val bytes = input.readBytes()
+        var lastException: IOException? = null
+        for (key in keys) {
+            try {
+                val byteIn = java.io.ByteArrayInputStream(bytes)
+                val byteOut = java.io.ByteArrayOutputStream()
+                val meta = decrypt(key, byteIn, byteOut)
+                output.write(byteOut.toByteArray())
+                return meta
+            } catch (e: IOException) {
+                lastException = e
+            }
+        }
+        throw lastException ?: IOException("Decryption failed for all candidate keys")
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private fun intToStringLength(value: Int): ByteArray = byteArrayOf(

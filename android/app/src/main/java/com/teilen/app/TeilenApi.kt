@@ -93,7 +93,16 @@ object TeilenApi {
         val ok: Boolean,
         val signedIn: SignedIn? = null,
         val encryptedKeyBundle: String? = null,
+        val primaryUserId: String? = null,
+        val isPrimaryHost: Boolean = true,
         val error: String? = null
+    )
+
+    data class SettlementResult(
+        val settled: Boolean,
+        val mergeKeyPackage: String? = null,
+        val token: String? = null,
+        val username: String? = null
     )
 
     /**
@@ -315,6 +324,7 @@ object TeilenApi {
         userCode: String,
         allow: Boolean,
         keyPackage: String?,
+        mergeKeyPackage: String? = null,
         onResult: (ok: Boolean, message: String) -> Unit
     ) {
         Thread {
@@ -322,6 +332,9 @@ object TeilenApi {
                 val body = JSONObject().put("userCode", userCode)
                 if (allow && keyPackage != null) {
                     body.put("keyPackage", keyPackage)
+                }
+                if (allow && mergeKeyPackage != null) {
+                    body.put("mergeKeyPackage", mergeKeyPackage)
                 }
                 val reply = postBlocking(
                     baseUrl,
@@ -392,6 +405,8 @@ object TeilenApi {
         deviceType: String = "PHONE",
         devicePublicKey: String? = null,
         platform: String = "Android ${android.os.Build.VERSION.RELEASE}",
+        mergeKeyPackage: String? = null,
+        scannerToken: String? = null,
         onResult: (ClaimInviteResult) -> Unit
     ) {
         Thread {
@@ -404,7 +419,13 @@ object TeilenApi {
                 if (devicePublicKey != null) {
                     body.put("devicePublicKey", devicePublicKey)
                 }
-                val reply = postBlocking(baseUrl, "/api/auth/device/claim-invite", token = null, body)
+                if (mergeKeyPackage != null) {
+                    body.put("mergeKeyPackage", mergeKeyPackage)
+                }
+                if (scannerToken != null) {
+                    body.put("scannerToken", scannerToken)
+                }
+                val reply = postBlocking(baseUrl, "/api/auth/device/claim-invite", token = scannerToken, body)
                 if (reply.ok) {
                     val token = reply.str("token").orEmpty()
                     val signedIn = SignedIn(
@@ -416,7 +437,9 @@ object TeilenApi {
                     ClaimInviteResult(
                         ok = true,
                         signedIn = signedIn,
-                        encryptedKeyBundle = reply.str("encryptedKeyBundle")
+                        encryptedKeyBundle = reply.str("encryptedKeyBundle"),
+                        primaryUserId = reply.str("primaryUserId"),
+                        isPrimaryHost = reply.bool("isPrimaryHost", true)
                     )
                 } else {
                     ClaimInviteResult(ok = false, error = reply.message)
@@ -437,7 +460,7 @@ object TeilenApi {
         baseUrl: String,
         deviceCode: String,
         pollIntervalMillis: Long = 3000L,
-        onSettled: (Boolean) -> Unit
+        onSettled: (SettlementResult) -> Unit
     ) {
         Thread {
             val reply = try {
@@ -452,13 +475,20 @@ object TeilenApi {
             }
             main.post {
                 if (reply != null && reply.status != 202 && reply.ok) {
-                    onSettled(true)
+                    onSettled(
+                        SettlementResult(
+                            settled = true,
+                            mergeKeyPackage = reply.str("mergeKeyPackage"),
+                            token = reply.str("token"),
+                            username = reply.str("user.username") ?: reply.str("username")
+                        )
+                    )
                 } else if (reply != null && reply.status == 202) {
                     main.postDelayed({
                         pollForSettlement(baseUrl, deviceCode, pollIntervalMillis, onSettled)
                     }, pollIntervalMillis)
                 } else {
-                    onSettled(false)
+                    onSettled(SettlementResult(settled = false))
                 }
             }
         }.apply { name = "teilen-poll-settle" }.start()
@@ -1253,6 +1283,12 @@ object TeilenApi {
         fun num(name: String, fallback: Long): Long = when (val value = body?.opt(name)) {
             is Number -> value.toLong()
             is String -> value.toLongOrNull() ?: fallback
+            else -> fallback
+        }
+
+        fun bool(name: String, fallback: Boolean = true): Boolean = when (val value = body?.opt(name)) {
+            is Boolean -> value
+            is String -> value.toBooleanStrictOrNull() ?: fallback
             else -> fallback
         }
 

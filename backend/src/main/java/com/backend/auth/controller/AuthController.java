@@ -145,10 +145,11 @@ public class AuthController {
     }
 
     @PostMapping("/api/auth/device/claim-invite")
-    public ResponseEntity<ClaimInviteResponse> claimInvite(@Valid @RequestBody ClaimInviteRequest request,
+    public ResponseEntity<ClaimInviteResponse> claimInvite(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                           @Valid @RequestBody ClaimInviteRequest request,
                                                            HttpServletRequest httpRequest,
                                                            HttpServletResponse httpResponse) {
-        ClaimInviteResponse response = auth.claimHostInvite(request);
+        ClaimInviteResponse response = auth.claimHostInvite(request, caller);
         setSessionCookie(httpResponse, httpRequest, response.token());
         return ResponseEntity.ok(response);
     }
@@ -171,7 +172,7 @@ public class AuthController {
     @PostMapping("/api/auth/device/approve")
     public ApprovalResponse approve(@AuthenticationPrincipal AuthenticatedUser caller,
                                     @Valid @RequestBody PairingDecisionRequest request) {
-        return auth.approve(caller.userId(), request.userCode(), request.keyPackage());
+        return auth.approve(caller.userId(), request.userCode(), request.keyPackage(), request.mergeKeyPackage());
     }
 
     @PostMapping("/api/auth/device/deny")
