@@ -7,12 +7,10 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Build
 import android.view.HapticFeedbackConstants
-import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -61,25 +59,14 @@ class AccountCard(
     private val btnAccountCopyUrl: Button = activity.findViewById(R.id.btn_account_copy_url)
     private val btnAccountShareLink: Button = activity.findViewById(R.id.btn_account_share_link)
 
-    // Replay Guide & Connected Devices
+    // Replay Guide
     private val cardReplayGuide: View = activity.findViewById(R.id.card_replay_guide)
-    private val cardDevices: View = activity.findViewById(R.id.card_devices)
-    private val containerDevicesList: LinearLayout = activity.findViewById(R.id.container_devices_list)
-    private val btnAccountRevokeOthers: Button = activity.findViewById(R.id.btn_account_revoke_others)
 
     // Expandable Advanced Auth Toggle
     private val btnToggleAdvancedAuth: View = activity.findViewById(R.id.btn_toggle_advanced_auth)
     private val txtAdvancedChevron: TextView = activity.findViewById(R.id.txt_advanced_chevron)
     private val layoutAdvancedAuth: View = activity.findViewById(R.id.layout_advanced_auth)
     private var advancedAuthExpanded = false
-
-    // Approver Mode Views
-    private val cardPairDevice: View = activity.findViewById(R.id.card_pair_device)
-    private val inputApproveCode: EditText = activity.findViewById(R.id.input_approve_code)
-    private val btnScanQr: Button = activity.findViewById(R.id.btn_scan_qr)
-    private val btnApproveCode: Button = activity.findViewById(R.id.btn_approve_code)
-    private val approvePairStatus: TextView = activity.findViewById(R.id.approve_pair_status)
-    private val btnRevokeOthers: Button = activity.findViewById(R.id.btn_revoke_others)
 
     private var mode = AuthMode.LOGIN
 
@@ -100,47 +87,6 @@ class AccountCard(
         pairStart.setOnClickListener { startPairing() }
         pairCancel.setOnClickListener { pairing = false; render() }
         signOut.setOnClickListener { signOut() }
-
-        // Approver pairing listeners
-        btnScanQr.setOnClickListener {
-            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-            onScanQr()
-        }
-        btnApproveCode.setOnClickListener {
-            it.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-            handleApproveCode(inputApproveCode.text.toString())
-        }
-        btnRevokeOthers.setOnClickListener {
-            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-            val token = Session.token(activity) ?: return@setOnClickListener
-            AlertDialog.Builder(activity)
-                .setTitle("Sign out all other devices?")
-                .setMessage("All other sessions and devices paired with this account will be immediately revoked.")
-                .setPositiveButton("Sign Out Others") { _, _ ->
-                    TeilenApi.revokeOtherDevices(Server.get(activity), token) { ok, msg ->
-                        Toast.makeText(activity, msg, Toast.LENGTH_LONG).show()
-                        loadDevices()
-                    }
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-        }
-
-        btnAccountRevokeOthers.setOnClickListener {
-            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-            val token = Session.token(activity) ?: return@setOnClickListener
-            AlertDialog.Builder(activity)
-                .setTitle("Sign out all other devices?")
-                .setMessage("All other sessions and devices paired with this account will be immediately revoked.")
-                .setPositiveButton("Sign Out Others") { _, _ ->
-                    TeilenApi.revokeOtherDevices(Server.get(activity), token) { ok, msg ->
-                        Toast.makeText(activity, msg, Toast.LENGTH_LONG).show()
-                        loadDevices()
-                    }
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
-        }
 
         txtAccountWebUrl.text = Server.get(activity)
 
@@ -228,11 +174,9 @@ class AccountCard(
         pairBox.visibility = View.GONE
         pairStart.visibility = View.VISIBLE
         signOut.visibility = View.GONE
-        cardPairDevice.visibility = View.GONE
         cardWebCompanion.visibility = View.VISIBLE
         txtAccountWebUrl.text = Server.get(activity)
         cardReplayGuide.visibility = View.VISIBLE
-        cardDevices.visibility = View.GONE
 
         // the last username used is a good guess for this one
         val remembered = Session.phone(activity)
@@ -435,7 +379,6 @@ class AccountCard(
         pairBox.visibility = View.VISIBLE
         pairStart.visibility = View.GONE
         signOut.visibility = View.GONE
-        cardPairDevice.visibility = View.GONE
     }
 
     // ---------------------------------------------------------------- approver pairing
@@ -484,7 +427,6 @@ class AccountCard(
                                 (activity as? MainActivity)?.refreshFeed()
                                 (activity as? MainActivity)?.fetchDevicesAndUpdateBanners()
                                 sayApproveStatus("Connected!", isError = false)
-                                inputApproveCode.text.clear()
                                 Toast.makeText(activity, "Connected to ${preview.deviceName}!", Toast.LENGTH_SHORT).show()
                             } else {
                                 val err = result.error ?: "Claim failed"
@@ -494,7 +436,7 @@ class AccountCard(
                         }
                     }
                     .setNegativeButton(R.string.pair_deny) { _, _ ->
-                        approvePairStatus.visibility = View.GONE
+                        status.visibility = View.GONE
                     }
                     .show()
                 return@describePairing
@@ -535,7 +477,7 @@ class AccountCard(
                 executePairingDecision(code, token, allow = false, newcomerPublicKey = null)
             }
             .setOnCancelListener {
-                approvePairStatus.visibility = View.GONE
+                status.visibility = View.GONE
             }
             .show()
     }
@@ -558,7 +500,6 @@ class AccountCard(
             if (ok) {
                 val said = activity.getString(if (allow) R.string.pair_allowed else R.string.pair_refused, message)
                 sayApproveStatus(said, isError = false)
-                inputApproveCode.text.clear()
                 Toast.makeText(activity, said, Toast.LENGTH_LONG).show()
             } else {
                 val err = activity.getString(R.string.pair_failed_reason, message)
@@ -569,9 +510,9 @@ class AccountCard(
     }
 
     private fun sayApproveStatus(text: String, isError: Boolean) {
-        approvePairStatus.visibility = View.VISIBLE
-        approvePairStatus.text = text
-        approvePairStatus.setTextColor(
+        status.visibility = View.VISIBLE
+        status.text = text
+        status.setTextColor(
             activity.getColor(if (isError) R.color.danger else R.color.text_secondary)
         )
     }
@@ -589,51 +530,16 @@ class AccountCard(
         pairBox.visibility = View.GONE
         pairStart.visibility = View.GONE
         signOut.visibility = View.VISIBLE
-        cardPairDevice.visibility = View.VISIBLE
-        approvePairStatus.visibility = View.GONE
 
         cardWebCompanion.visibility = View.VISIBLE
         txtAccountWebUrl.text = Server.get(activity)
         cardReplayGuide.visibility = View.VISIBLE
-        loadDevices()
-    }
-
-    fun loadDevices() {
-        val token = Session.token(activity) ?: return
-        TeilenApi.getDevices(Server.get(activity), token) { devices ->
-            if (devices != null) {
-                cardDevices.visibility = View.VISIBLE
-                containerDevicesList.removeAllViews()
-                val inflater = LayoutInflater.from(activity)
-                for (dev in devices) {
-                    val row = inflater.inflate(R.layout.item_device_row, containerDevicesList, false)
-                    val icon = row.findViewById<ImageView>(R.id.device_item_icon)
-                    val name = row.findViewById<TextView>(R.id.device_item_name)
-                    val currentBadge = row.findViewById<View>(R.id.device_item_current_badge)
-                    val type = row.findViewById<TextView>(R.id.device_item_type)
-
-                    name.text = dev.name
-                    if (dev.current) {
-                        currentBadge.visibility = View.VISIBLE
-                    } else {
-                        currentBadge.visibility = View.GONE
-                    }
-                    val isPhone = dev.deviceType.equals("PHONE", ignoreCase = true)
-                    icon.setImageResource(if (isPhone) R.drawable.ic_tab_send else R.drawable.ic_tab_feed)
-                    type.text = if (isPhone) "Mobile Device" else "Web Browser"
-                    containerDevicesList.addView(row)
-                }
-                onDevicesCountChanged(devices.size)
-            }
-        }
     }
 
     private fun signOut() {
         Session.clear(activity)
         password.text.clear()
         status.visibility = View.GONE
-        approvePairStatus.visibility = View.GONE
-        inputApproveCode.text.clear()
         render()
     }
 

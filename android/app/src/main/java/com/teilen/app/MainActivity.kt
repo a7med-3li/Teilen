@@ -92,7 +92,6 @@ class MainActivity : Activity() {
 
     // Header & Route Badges
     private lateinit var headerRouteBadge: TextView
-    private lateinit var headerSessionBadge: TextView
 
     // Tab 1: Unified Send Composer (4 Modes: Text, Files, Photos, Audio)
     private lateinit var modePillText: TextView
@@ -131,8 +130,6 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
 
     // Multi-Session Spaces
-    private lateinit var sessionScrollView: View
-    private lateinit var sessionPillContainer: LinearLayout
     private val currentSessions = ArrayList<TeilenApi.SessionInfo>()
 
     // Tab 2: Feed
@@ -389,7 +386,6 @@ class MainActivity : Activity() {
         splashStatus = findViewById(R.id.splash_status)
 
         headerRouteBadge = findViewById(R.id.header_route_badge)
-        headerSessionBadge = findViewById(R.id.header_session_badge)
 
         modePillText = findViewById(R.id.mode_pill_text)
         modePillFiles = findViewById(R.id.mode_pill_files)
@@ -422,8 +418,6 @@ class MainActivity : Activity() {
         ttlPill4h = findViewById(R.id.ttl_pill_4h)
         ttlPill24h = findViewById(R.id.ttl_pill_24h)
         ttlPillCustom = findViewById(R.id.ttl_pill_custom)
-        sessionScrollView = findViewById(R.id.session_scroll_view)
-        sessionPillContainer = findViewById(R.id.session_pill_container)
         spinner = findViewById(R.id.ttl)
         send = findViewById(R.id.send)
         status = findViewById(R.id.status)
@@ -1365,7 +1359,6 @@ class MainActivity : Activity() {
         cardFeed.visibility = View.VISIBLE
         cardClipboard.visibility = View.VISIBLE
 
-        sessionScrollView.visibility = View.GONE
         if (paired) {
             loadSessions()
         }
@@ -2479,10 +2472,6 @@ class MainActivity : Activity() {
     }
 
     private fun renderSessionPills() {
-        try {
-            sessionPillContainer.removeAllViews()
-        } catch (_: Exception) {
-        }
         val activeId = Session.activeSessionId(this)
 
         val activeSession = currentSessions.firstOrNull { it.id == activeId }

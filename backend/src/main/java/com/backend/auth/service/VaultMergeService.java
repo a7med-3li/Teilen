@@ -7,11 +7,15 @@ import com.backend.item.ShareItemWebSocketHandler;
 import com.backend.session.Session;
 import com.backend.session.SessionService;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -44,8 +48,28 @@ public class VaultMergeService {
 
     @Transactional
     public MergeResult mergeIfDifferent(UUID userAId, UUID userBId, boolean isAHost) {
+        return mergeIfDifferent(userAId, userBId, isAHost, null, null);
+    }
+
+    /**
+     * Merge two vaults while never deleting the devices that are actively being used by the
+     * pairing flow. Raw SQL bypasses the JPA persistence context, so without this guard the
+     * caller's device could be removed by deduplication and the following
+     * {@code pairing_requests.device_id} update would violate its foreign key.
+     */
+    @Transactional
+    public MergeResult mergeIfDifferent(UUID userAId, UUID userBId, boolean isAHost,
+                                        UUID protectedDeviceId, UUID alsoProtectedDeviceId) {
         if (userAId == null || userBId == null || userAId.equals(userBId)) {
             return new MergeResult(userAId != null ? userAId : userBId, null, false);
+        }
+
+        List<UUID> protectedDeviceIds = new ArrayList<>(2);
+        if (protectedDeviceId != null) {
+            protectedDeviceIds.add(protectedDeviceId);
+        }
+        if (alsoProtectedDeviceId != null && !alsoProtectedDeviceId.equals(protectedDeviceId)) {
+            protectedDeviceIds.add(alsoProtectedDeviceId);
         }
 
         User userA = userRepository.findById(userAId).orElse(null);
@@ -166,35 +190,76 @@ public class VaultMergeService {
         .executeUpdate();
 
         // 6. Dedupe devices keeping tokenHash match (prefer to keep devices matching by token_hash if present; else dedupe by fingerprint/name+type keeping most recent)
-        try {
+        if (!protectedDeviceIds.isEmpty()) {
+            try {
+                String sql = """
+                    DELETE FROM devices d2
+                    USING devices d1
+                    WHERE d1.user_id = :primaryUserId
+                      AND d2.user_id = :primaryUserId
+                      AND d1.id <> d2.id
+                      AND d1.token_hash = d2.token_hash
+                      AND d1.created_at >= d2.created_at
+                      AND d2.id NOT IN (:protected)
+                """;
+                entityManager.createNativeQuery(sql)
+                    .setParameter("primaryUserId", primaryUserId)
+                    .setParameter("protected", protectedDeviceIds)
+                    .executeUpdate();
+            } catch (Exception ignored) {
+            }
+
+            try {
+                String sql = """
+                    DELETE FROM devices d2
+                    USING devices d1
+                    WHERE d1.user_id = :primaryUserId
+                      AND d2.user_id = :primaryUserId
+                      AND d1.id <> d2.id
+                      AND (
+                        (d1.client_fingerprint IS NOT NULL AND d1.client_fingerprint <> '' AND d1.client_fingerprint = d2.client_fingerprint)
+                        OR (d1.name = d2.name AND d1.device_type = d2.device_type)
+                      )
+                      AND d1.last_seen_at >= d2.last_seen_at
+                      AND d2.id NOT IN (:protected)
+                """;
+                entityManager.createNativeQuery(sql)
+                    .setParameter("primaryUserId", primaryUserId)
+                    .setParameter("protected", protectedDeviceIds)
+                    .executeUpdate();
+            } catch (Exception ignored) {
+            }
+        } else {
+            try {
+                entityManager.createNativeQuery("""
+                    DELETE FROM devices d2
+                    USING devices d1
+                    WHERE d1.user_id = :primaryUserId
+                      AND d2.user_id = :primaryUserId
+                      AND d1.id <> d2.id
+                      AND d1.token_hash = d2.token_hash
+                      AND d1.created_at >= d2.created_at
+                """)
+                .setParameter("primaryUserId", primaryUserId)
+                .executeUpdate();
+            } catch (Exception ignored) {
+            }
+
             entityManager.createNativeQuery("""
                 DELETE FROM devices d2
                 USING devices d1
                 WHERE d1.user_id = :primaryUserId
                   AND d2.user_id = :primaryUserId
                   AND d1.id <> d2.id
-                  AND d1.token_hash = d2.token_hash
-                  AND d1.created_at >= d2.created_at
+                  AND (
+                    (d1.client_fingerprint IS NOT NULL AND d1.client_fingerprint <> '' AND d1.client_fingerprint = d2.client_fingerprint)
+                    OR (d1.name = d2.name AND d1.device_type = d2.device_type)
+                  )
+                  AND d1.last_seen_at >= d2.last_seen_at
             """)
             .setParameter("primaryUserId", primaryUserId)
             .executeUpdate();
-        } catch (Exception ignored) {
         }
-
-        entityManager.createNativeQuery("""
-            DELETE FROM devices d2
-            USING devices d1
-            WHERE d1.user_id = :primaryUserId
-              AND d2.user_id = :primaryUserId
-              AND d1.id <> d2.id
-              AND (
-                (d1.client_fingerprint IS NOT NULL AND d1.client_fingerprint <> '' AND d1.client_fingerprint = d2.client_fingerprint)
-                OR (d1.name = d2.name AND d1.device_type = d2.device_type)
-              )
-              AND d1.last_seen_at >= d2.last_seen_at
-        """)
-        .setParameter("primaryUserId", primaryUserId)
-        .executeUpdate();
 
         // 7. Dedupe/reassign push_subscriptions
         entityManager.createNativeQuery("""

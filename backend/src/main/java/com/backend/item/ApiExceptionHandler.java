@@ -51,6 +51,9 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Object> onStatusException(ResponseStatusException e) {
         String message = e.getReason() == null ? e.getMessage() : e.getReason();
+        if (message != null && (message.contains("insert or update on table \"pairing_requests\"") || message.contains("pairing_requests_device_id_fkey"))) {
+            message = "pairing_failed";
+        }
         return new ResponseEntity<>(payload(e.getStatusCode(), message), HttpHeaders.EMPTY, e.getStatusCode());
     }
 
@@ -72,6 +75,9 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<Object> onUnexpected(Exception e) {
         log.warn("request failed", e);
         String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+        if (message != null && (message.contains("insert or update on table \"pairing_requests\"") || message.contains("pairing_requests_device_id_fkey"))) {
+            message = "pairing_failed";
+        }
         return new ResponseEntity<>(payload(HttpStatus.INTERNAL_SERVER_ERROR, message),
                 HttpHeaders.EMPTY, HttpStatus.INTERNAL_SERVER_ERROR);
     }

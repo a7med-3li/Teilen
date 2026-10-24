@@ -399,17 +399,22 @@ public class AuthService {
 
         // If the scanner became primary (e.g., host was anonymous and scanner was named),
         // we generate a new token for the host device under primaryUserId so host receives it when polling claim().
-        if (!isPrimaryHost) {
-            String hostToken = Tokens.newToken();
-            Device hostDevice = new Device(UUID.randomUUID(), primaryUserId, request.getDeviceType(),
-                    request.getDeviceName() != null ? request.getDeviceName() : "Host Device",
-                    Tokens.hash(hostToken), request.getDevicePublicKey(), null, request.getPlatform(), now);
-            devices.save(hostDevice);
-            request.approve(hostDevice.getId(), hostToken, now);
-        } else {
-            request.approve(device.getId(), token, now);
+        try {
+            if (!isPrimaryHost) {
+                String hostToken = Tokens.newToken();
+                Device hostDevice = new Device(UUID.randomUUID(), primaryUserId, request.getDeviceType(),
+                        request.getDeviceName() != null ? request.getDeviceName() : "Host Device",
+                        Tokens.hash(hostToken), request.getDevicePublicKey(), null, request.getPlatform(), now);
+                devices.save(hostDevice);
+                request.approve(hostDevice.getId(), hostToken, now);
+            } else {
+                request.approve(device.getId(), token, now);
+            }
+            pairings.saveAndFlush(request);
+        } catch (Exception ex) {
+            log.error("Pairing failed while finalizing host invite {}", request.getId(), ex);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "pairing_failed");
         }
-        pairings.save(request);
 
         log.info("device {} claimed host invite into unified account {}", devName, primaryUser.getUsername());
 
@@ -455,10 +460,16 @@ public class AuthService {
                 request.getDeviceName(), Tokens.hash(token), request.getDevicePublicKey(),
                 null, request.getPlatform(), now);
         devices.save(device);
-        request.approve(device.getId(), token, now);
-        request.setKeyPackage(clean(keyPackage, 16000));
-        if (mergeKeyPackage != null && !mergeKeyPackage.isBlank()) {
-            request.setMergeKeyPackage(clean(mergeKeyPackage, 16000));
+        try {
+            request.approve(device.getId(), token, now);
+            request.setKeyPackage(clean(keyPackage, 16000));
+            if (mergeKeyPackage != null && !mergeKeyPackage.isBlank()) {
+                request.setMergeKeyPackage(clean(mergeKeyPackage, 16000));
+            }
+            pairings.saveAndFlush(request);
+        } catch (Exception ex) {
+            log.error("Pairing failed while approving request {}", request.getId(), ex);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "pairing_failed");
         }
 
         log.info("{} approved a {} device: {}", request.describe(), request.getDeviceType(),
@@ -658,7 +669,7 @@ public class AuthService {
 
         if (userIdA != null && !userIdA.equals(userIdB)) {
             if (vaultMergeService != null) {
-                vaultMergeService.mergeIfDifferent(userIdA, userIdB, true);
+                vaultMergeService.mergeIfDifferent(userIdA, userIdB, true, callerDeviceId, null);
             }
             if (callerDeviceId != null) {
                 devices.findById(callerDeviceId).ifPresent(d -> {
@@ -671,20 +682,26 @@ public class AuthService {
             List<Device> allDevices = devices.findByUserIdOrderByCreatedAtAsc(userIdA);
             java.util.Set<String> seen = new java.util.HashSet<>();
             for (Device d : allDevices) {
+                if (callerDeviceId != null && d.getId().equals(callerDeviceId)) {
+                    continue;
+                }
                 String key = (d.getClientFingerprint() != null && !d.getClientFingerprint().isBlank())
                         ? "fp:" + d.getClientFingerprint()
                         : "nt:" + d.getName() + ":" + d.getDeviceType();
                 if (!seen.add(key)) {
-                    if (callerDeviceId == null || !d.getId().equals(callerDeviceId)) {
-                        devices.delete(d);
-                    }
+                    devices.delete(d);
                 }
             }
         }
 
-        pr.approve(callerDeviceId, callerToken, now);
-        pr.deliver(now);
-        pairings.save(pr);
+        try {
+            pr.approve(callerDeviceId, callerToken, now);
+            pr.deliver(now);
+            pairings.saveAndFlush(pr);
+        } catch (Exception ex) {
+            log.error("Pairing failed while finalizing pairing request {}", pr.getId(), ex);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "pairing_failed");
+        }
 
         UUID finalUserId = userIdA != null ? userIdA : userIdB;
         if (webSocketHandler != null) {
