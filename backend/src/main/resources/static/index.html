@@ -37,19 +37,38 @@
                     <rect x="14" y="14" width="7" height="7"></rect>
                 </svg>
                 <span>Pair</span>
-                <span id="header-device-badge" class="header-device-badge">● 1</span>
             </button>
-            <button id="account" class="btn-header-account" type="button" hidden aria-expanded="false">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
-                    <rect x="9" y="9" width="6" height="6"></rect>
-                    <line x1="9" y1="1" x2="9" y2="4"></line>
-                    <line x1="15" y1="1" x2="15" y2="4"></line>
-                    <line x1="9" y1="20" x2="9" y2="23"></line>
-                    <line x1="15" y1="20" x2="15" y2="23"></line>
+            <button id="account" class="btn-header-account" type="button" hidden aria-expanded="false" style="display:none;">
+                <span id="account-label"></span>
+            </button>
+        </div>
+    </div>
+    <!-- Row 2: Encrypted Badge + Truncated Session Pill -->
+    <div class="header-sub-row">
+        <div class="head-sub-left">
+            <span class="enc-badge">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                 </svg>
-                <span id="account-label">Devices</span>
-            </button>
+                <span>End-to-End Encrypted</span>
+            </span>
+        </div>
+        <div class="head-sub-right">
+            <div class="session-selector-container">
+                <button type="button" id="session-selector-pill" class="session-selector-pill" title="Switch session">
+                    <span id="active-session-name" class="active-session-name">Personal Vault</span>
+                    <span class="session-chevron">▾</span>
+                </button>
+                <button id="session-create-btn" type="button" class="btn-add-room" title="New Room">+</button>
+                <div id="session-dropdown" class="session-dropdown" hidden>
+                    <div id="session-dropdown-list" class="session-dropdown-list"></div>
+                    <div class="session-dropdown-footer">
+                        <button type="button" id="session-dropdown-join-btn" class="session-dropdown-btn">Join Room by Code</button>
+                        <button type="button" id="session-share-btn" class="session-dropdown-btn" hidden>Share Room</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </header>
@@ -376,6 +395,15 @@
             <button type="submit" class="btn-connect-device">Connect Device</button>
         </form>
         <p id="modal-approve-status" class="panel-status" hidden></p>
+
+        <!-- Bottom Section — Connected Devices -->
+        <div class="modal-devices-section">
+            <div class="modal-devices-head">
+                <h4 id="modal-devices-title" class="modal-section-title">Connected Devices (1)</h4>
+                <button type="button" id="modal-disconnect-others-btn" class="btn-disconnect-others" hidden>Disconnect All Other Devices</button>
+            </div>
+            <ul id="modal-devices-list" class="modal-devices-list"></ul>
+        </div>
     </div>
 </div>
 

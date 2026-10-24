@@ -166,4 +166,72 @@ class AuthServiceTest {
         assertEquals(userId, claim.userId());
         verify(devices).save(any(Device.class));
     }
+
+    @Test
+    void singlePairingFlowGeneratesCodeAndPairsSymmetrically() {
+        UUID userAId = UUID.randomUUID();
+        UUID userBId = UUID.randomUUID();
+        UUID deviceBId = UUID.randomUUID();
+
+        // Device A generates code
+        com.backend.auth.dto.DeviceCodeRequest codeReq = new com.backend.auth.dto.DeviceCodeRequest(
+                "Browser on Linux", "WEB", "keyPackageA", "fp-device-a"
+        );
+        com.backend.auth.dto.DeviceCodeResponse codeResp = authService.generateDeviceCode(
+                userAId, codeReq, "127.0.0.1", "Firefox"
+        );
+        assertNotNull(codeResp);
+        assertNotNull(codeResp.userCode());
+        assertTrue(codeResp.qrSvgUrl().contains(codeResp.userCode()));
+
+        ArgumentCaptor<com.backend.auth.entity.PairingRequest> captor =
+                ArgumentCaptor.forClass(com.backend.auth.entity.PairingRequest.class);
+        verify(pairings).save(captor.capture());
+        com.backend.auth.entity.PairingRequest pr = captor.getValue();
+        assertEquals(userAId, pr.getUserId());
+        assertEquals("keyPackageA", pr.getKeyPackage());
+
+        when(pairings.findByUserCodeHash(anyString())).thenReturn(Optional.of(pr));
+
+        Device deviceB = new Device(deviceBId, userBId, com.backend.auth.enums.DeviceType.PHONE,
+                "Pixel Phone", "tokenHashB", "keyPubB", "127.0.0.1", "Android", "fp-device-b", Instant.now());
+        when(devices.findById(deviceBId)).thenReturn(Optional.of(deviceB));
+
+        // Device B pairs
+        com.backend.auth.dto.DevicePairRequest pairReq = new com.backend.auth.dto.DevicePairRequest(
+                codeResp.userCode(), "scannerKeyB", "Pixel Phone", "PHONE", "fp-device-b"
+        );
+        com.backend.auth.dto.DevicePairResponse pairResp = authService.pairDeviceWithCode(
+                userBId, deviceBId, "callerTokenB", pairReq, "127.0.0.1", "Android"
+        );
+
+        assertNotNull(pairResp);
+        assertEquals(userAId, pairResp.userId());
+        assertEquals("keyPackageA", pairResp.masterKey());
+        assertEquals("callerTokenB", pairResp.token());
+        assertEquals(userAId, deviceB.getUserId());
+    }
+
+    @Test
+    void deviceDeduplicationUpdatesExistingDeviceOnFingerprintMatch() {
+        UUID userId = UUID.randomUUID();
+        String fp = "perm-uuid-browser-123";
+        Device existing = new Device(UUID.randomUUID(), userId, com.backend.auth.enums.DeviceType.WEB,
+                "Firefox", "oldTokenHash", null, "127.0.0.1", "Linux", fp, Instant.now().minusSeconds(100));
+
+        when(devices.findFirstByUserIdAndClientFingerprint(userId, fp)).thenReturn(Optional.of(existing));
+
+        String hash = passwordEncoder.encode("myPassword");
+        User user = new User(userId, "ahmed123", "Ahmed", hash, Instant.now());
+        when(users.findByUsernameIgnoreCase("ahmed123")).thenReturn(Optional.of(user));
+
+        SessionResponse session = authService.login(
+                "ahmed123", "myPassword", "Firefox", "WEB", null, "127.0.0.1", "Linux", fp
+        );
+
+        assertNotNull(session);
+        assertEquals(existing.getId(), session.deviceId());
+        assertEquals(existing.getName(), session.deviceName());
+        verify(devices).save(existing);
+    }
 }

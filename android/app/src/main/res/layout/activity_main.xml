@@ -11,7 +11,7 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Top Header Bar -->
+        <!-- Row 1: Fixed Title + Pair Button ONLY -->
         <LinearLayout
             android:id="@+id/header_bar"
             android:layout_width="match_parent"
@@ -19,30 +19,34 @@
             android:background="@drawable/bg_header"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="20dp"
-            android:paddingTop="14dp"
-            android:paddingEnd="20dp"
-            android:paddingBottom="14dp">
+            android:paddingStart="16dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="6dp">
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:orientation="vertical">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_marginEnd="8dp"
+                    android:contentDescription="@string/app_name"
+                    android:src="@drawable/ic_inbox"
+                    android:tint="@color/text_primary" />
 
                 <TextView
                     style="@style/Text.Header"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/app_name" />
-
-                <TextView
-                    style="@style/Text.HeaderSub"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:visibility="gone"
-                    android:text="@string/header_subtitle" />
+                    android:singleLine="true"
+                    android:text="@string/app_name"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <!-- Live Route Indicator Pill -->
@@ -52,33 +56,17 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/bg_status_lan"
-                android:paddingStart="10dp"
-                android:paddingTop="4dp"
-                android:paddingEnd="10dp"
-                android:paddingBottom="4dp"
+                android:paddingStart="8dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="3dp"
                 android:text="@string/status_direct_lan"
                 android:textColor="@color/lan_active"
-                android:textSize="11sp"
+                android:textSize="10sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
 
-            <!-- Session Status Badge -->
-            <TextView
-                android:id="@+id/header_session_badge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_segmented_selected"
-                android:paddingStart="10dp"
-                android:paddingTop="4dp"
-                android:paddingEnd="10dp"
-                android:paddingBottom="4dp"
-                android:text="@string/signed_in"
-                android:textColor="@color/accent"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <!-- Universal Pairing Button Pill -->
+            <!-- Universal Pairing Button Pill ONLY (NO device count) -->
             <LinearLayout
                 android:id="@+id/header_btn_pair"
                 android:layout_width="wrap_content"
@@ -89,12 +77,12 @@
                 android:focusable="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp">
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp">
 
                 <ImageView
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
                     android:contentDescription="Pair Devices"
                     android:src="@drawable/ic_qr_scan"
                     android:tint="@color/accent" />
@@ -112,10 +100,107 @@
                     android:id="@+id/header_device_count"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:text="● 1"
-                    android:textColor="@color/accent"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Row 2: Encrypted Badge + Truncated Session Pill -->
+        <LinearLayout
+            android:id="@+id/header_sub_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_header"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="10dp">
+
+            <!-- Left: Subtle monochrome lock icon + "Encrypted" status text -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:contentDescription="Encrypted"
+                    android:src="@drawable/ic_lock"
+                    android:tint="@color/text_muted" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:singleLine="true"
+                    android:text="Encrypted"
+                    android:textColor="@color/text_muted"
                     android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/header_session_badge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Right: Session selector pill ([ Personal ▾ ] + [ + ]) -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/header_session_selector_pill"
+                    android:layout_width="wrap_content"
+                    android:layout_height="28dp"
+                    android:background="@drawable/bg_segmented_selected"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp">
+
+                    <TextView
+                        android:id="@+id/header_active_session_name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:maxWidth="160dp"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:text="Personal Vault"
+                        android:textColor="@color/accent"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:text="▾"
+                        android:textColor="@color/accent"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/header_btn_add_room"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_icon_btn"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="+"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
 

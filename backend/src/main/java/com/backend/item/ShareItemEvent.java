@@ -25,4 +25,12 @@ public record ShareItemEvent(String event, ShareItemResponse item, String id) {
     public static ShareItemEvent vaultMerged() {
         return new ShareItemEvent("vault_merged", null, null);
     }
+
+    public static ShareItemEvent syncAll() {
+        return new ShareItemEvent("sync_all", null, null);
+    }
+
+    public static ShareItemEvent kicked() {
+        return new ShareItemEvent("kicked", null, null);
+    }
 }

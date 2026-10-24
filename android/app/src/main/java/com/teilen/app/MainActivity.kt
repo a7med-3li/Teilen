@@ -48,6 +48,11 @@ import androidx.core.view.updatePadding
 import com.google.zxing.BarcodeFormat
 import com.journeyapps.barcodescanner.BarcodeEncoder
 import com.google.zxing.integration.android.IntentIntegrator
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -73,6 +78,11 @@ class MainActivity : Activity() {
 
     // Selected files for upload
     private val selectedFiles = ArrayList<Uri>()
+
+    // WebSocket Real-Time Sync (Part 3)
+    private val okHttpClient = OkHttpClient.Builder().build()
+    private var feedWebSocket: WebSocket? = null
+    private val wsReconnectHandler = Handler(Looper.getMainLooper())
 
     // Splash overlay
     private lateinit var splashOverlay: View
@@ -328,6 +338,7 @@ class MainActivity : Activity() {
         updatePasteButtonPreview()
         if (Session.isPaired(this)) {
             fetchDevicesAndUpdateBanners()
+            connectFeedWebSocket()
         }
         if (currentTab == Tab.FEED && Session.isPaired(this)) {
             refreshFeed(silent = true)
@@ -339,12 +350,14 @@ class MainActivity : Activity() {
         super.onPause()
         unregisterNetworkCallback()
         main.removeCallbacks(feedTicker)
+        disconnectFeedWebSocket()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         appUpdateHelper.stop()
         main.removeCallbacks(feedTicker)
+        disconnectFeedWebSocket()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -774,7 +787,12 @@ class MainActivity : Activity() {
                 if (content.startsWith("teilen://session/join") || (content.startsWith("teilen://session") && content.contains("code="))) {
                     handleSessionJoinUri(Uri.parse(content))
                 } else {
-                    account.handleApproveCode(content)
+                    val code = PairActivity.cleanCode(content)
+                    if (code != null) {
+                        pairWithScannedCode(code)
+                    } else {
+                        account.handleApproveCode(content)
+                    }
                 }
             }
             return
@@ -1435,15 +1453,17 @@ class MainActivity : Activity() {
             phone = handle,
             password = password,
             displayName = "Personal Vault",
-            deviceName = devName
+            deviceName = devName,
+            clientFingerprint = Session.clientFingerprint(this)
         ) { result ->
             isProvisioningVault = false
             when (result) {
                 is TeilenApi.CreateResult.Created -> {
-                    Session.save(this, result.signedIn.token, handle, devName)
+                    Session.save(this, result.signedIn.token, handle, devName, result.signedIn.userId, result.signedIn.deviceId)
                     account.render()
                     applyGating()
                     fetchDevicesAndUpdateBanners()
+                    connectFeedWebSocket()
                     onSuccess?.invoke(result.signedIn.token)
                 }
                 is TeilenApi.CreateResult.Taken -> {
@@ -1608,11 +1628,19 @@ class MainActivity : Activity() {
             performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
             showUniversalPairingDialog()
         }
+        findViewById<View>(R.id.header_session_selector_pill)?.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            showSessionSelectorDialog()
+        }
+        findViewById<View>(R.id.header_btn_add_room)?.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            showCreateRoomDialog()
+        }
     }
 
     private fun updateCompanionBanners(deviceCount: Int) {
-        val count = deviceCount.coerceAtLeast(1)
-        findViewById<TextView>(R.id.header_device_count)?.text = "● $count"
+        // Strict requirement: Never display device count on main screen or inside the Pair button
+        findViewById<TextView>(R.id.header_device_count)?.visibility = View.GONE
     }
 
     fun fetchDevicesAndUpdateBanners() {
@@ -1705,93 +1733,109 @@ class MainActivity : Activity() {
                 return@setOnClickListener
             }
             statusManual.visibility = View.VISIBLE
-            statusManual.text = getString(R.string.pair_approving)
+            statusManual.text = "Connecting…"
             statusManual.setTextColor(getColor(R.color.text_secondary))
 
-            TeilenApi.describePairing(Server.get(this), code) { preview ->
-                if (preview == null) {
-                    statusManual.text = getString(R.string.pair_code_stale, code)
+            val token = Session.token(this)
+            val devName = listOfNotNull(Build.MANUFACTURER, Build.MODEL).joinToString(" ").ifBlank { "Android Device" }
+            val mk = SecureKeyManager.getMasterKey(this)
+            val mkB64 = if (mk != null) PairingCrypto.b64(mk) else null
+            val fp = Session.clientFingerprint(this)
+
+            TeilenApi.pairWithCode(Server.get(this), token ?: "", code, mkB64, devName, fp) { result ->
+                result.onSuccess { pairResult ->
+                    statusManual.text = "Connected!"
+                    Session.save(this, pairResult.token, Session.phone(this), devName, pairResult.userId)
+                    if (!pairResult.masterKey.isNullOrBlank()) {
+                        val incoming = PairingCrypto.unb64(pairResult.masterKey)
+                        val current = SecureKeyManager.getMasterKey(this)
+                        if (current != null && !current.contentEquals(incoming)) {
+                            SecureKeyManager.addLegacyKey(this, current)
+                        }
+                        SecureKeyManager.setMasterKey(this, incoming)
+                    }
+                    dialog.dismiss()
+                    Toast.makeText(this, "Device paired successfully!", Toast.LENGTH_SHORT).show()
+                    account.render()
+                    applyGating()
+                    fetchDevicesAndUpdateBanners()
+                    refreshFeed()
+                    connectFeedWebSocket()
+                }.onFailure { err ->
+                    statusManual.text = "Pairing failed: ${err.message}"
                     statusManual.setTextColor(getColor(R.color.danger))
-                    return@describePairing
                 }
-
-                if (preview.mode == "HOST_INVITE") {
-                    val devName = listOfNotNull(Build.MANUFACTURER, Build.MODEL)
-                        .joinToString(" ")
-                        .ifBlank { "Android Device" }
-                    AlertDialog.Builder(this)
-                        .setTitle(R.string.pair_title)
-                        .setMessage("Connect to ${preview.deviceName}?")
-                        .setPositiveButton(R.string.pair_allow) { _, _ ->
-                            statusManual.text = "Connecting…"
-                            val myMergePkg = try { PairingCrypto.sealHostInvite(this, code) } catch (e: Exception) { null }
-                            val currentToken = Session.token(this)
-                            TeilenApi.claimHostInvite(
-                                baseUrl = Server.get(this),
-                                userCode = code,
-                                deviceName = devName,
-                                mergeKeyPackage = myMergePkg,
-                                scannerToken = currentToken
-                            ) { result ->
-                                if (result.ok && result.signedIn != null) {
-                                    if (result.encryptedKeyBundle != null) {
-                                        PairingCrypto.openHostInvite(this, result.encryptedKeyBundle, code, isPrimaryHost = result.isPrimaryHost)
-                                    }
-                                    Session.save(this, result.signedIn.token, result.signedIn.phone, result.signedIn.deviceName)
-                                    dialog.dismiss()
-                                    Toast.makeText(this, "Connected to ${preview.deviceName}!", Toast.LENGTH_SHORT).show()
-                                    account.render()
-                                    applyGating()
-                                    fetchDevicesAndUpdateBanners()
-                                    refreshFeed()
-                                } else {
-                                    val err = result.error ?: "Claim failed"
-                                    statusManual.text = err
-                                    statusManual.setTextColor(getColor(R.color.danger))
-                                }
-                            }
-                        }
-                        .setNegativeButton(R.string.pair_deny, null)
-                        .show()
-                    return@describePairing
-                }
-
-                ensureAuthenticated(onSuccess = { token ->
-                    val kind = if (preview.deviceType == "PHONE") getString(R.string.pair_kind_phone) else getString(R.string.pair_kind_web)
-                    AlertDialog.Builder(this)
-                        .setTitle(R.string.pair_title)
-                        .setMessage(getString(R.string.pair_ask_named, preview.deviceName, kind))
-                        .setPositiveButton(R.string.pair_allow) { _, _ ->
-                            val keyPackage = try {
-                                if (preview.publicKey != null) {
-                                    PairingCrypto.sealForNewcomer(this, PairingCrypto.unb64(preview.publicKey), code)
-                                } else null
-                            } catch (e: Exception) { null }
-                            val mergePkg = try { PairingCrypto.sealHostInvite(this, code) } catch (e: Exception) { null }
-
-                            TeilenApi.decidePairing(Server.get(this), token, code, true, keyPackage, mergePkg) { ok, msg ->
-                                if (ok) {
-                                    dialog.dismiss()
-                                    Toast.makeText(this, getString(R.string.pair_allowed, msg), Toast.LENGTH_LONG).show()
-                                    fetchDevicesAndUpdateBanners()
-                                    refreshFeed()
-                                } else {
-                                    statusManual.text = getString(R.string.pair_failed_reason, msg)
-                                    statusManual.setTextColor(getColor(R.color.danger))
-                                }
-                            }
-                        }
-                        .setNegativeButton(R.string.pair_deny) { _, _ ->
-                            TeilenApi.decidePairing(Server.get(this), token, code, false, null) { _, _ -> }
-                        }
-                        .show()
-                }, onError = { err ->
-                    statusManual.text = err
-                    statusManual.setTextColor(getColor(R.color.danger))
-                })
             }
         }
 
+        // Bottom Section: Connected Devices (Part 5)
+        val devicesTitle = dialogView.findViewById<TextView>(R.id.dialog_devices_title)
+        val btnDisconnectOthers = dialogView.findViewById<Button>(R.id.dialog_btn_disconnect_others)
+        val devicesContainer = dialogView.findViewById<LinearLayout>(R.id.dialog_devices_container)
+
+        fun loadDevicesList() {
+            val token = Session.token(this) ?: return
+            TeilenApi.getDevices(Server.get(this), token) { devs ->
+                val list = devs ?: emptyList()
+                devicesTitle?.text = "CONNECTED DEVICES (${list.size})"
+                btnDisconnectOthers?.visibility = if (list.size > 1) View.VISIBLE else View.GONE
+                devicesContainer?.removeAllViews()
+
+                for (dev in list) {
+                    val row = LayoutInflater.from(this).inflate(R.layout.item_device_row, devicesContainer, false)
+                    val nameText = row.findViewById<TextView>(R.id.device_item_name)
+                    val currentBadge = row.findViewById<TextView>(R.id.device_item_current_badge)
+                    val typeText = row.findViewById<TextView>(R.id.device_item_type)
+                    val btnDisconnect = row.findViewById<Button>(R.id.btn_device_disconnect)
+
+                    nameText.text = dev.name
+                    typeText.text = dev.deviceType
+                    if (dev.current) {
+                        currentBadge.visibility = View.VISIBLE
+                        btnDisconnect.visibility = View.GONE
+                    } else {
+                        currentBadge.visibility = View.GONE
+                        btnDisconnect.visibility = View.VISIBLE
+                        btnDisconnect.setOnClickListener {
+                            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+                            btnDisconnect.isEnabled = false
+                            TeilenApi.revokeDevice(Server.get(this), token, dev.id) { ok, msg ->
+                                if (ok) {
+                                    Toast.makeText(this, "Device disconnected", Toast.LENGTH_SHORT).show()
+                                    loadDevicesList()
+                                } else {
+                                    btnDisconnect.isEnabled = true
+                                    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                    devicesContainer?.addView(row)
+                }
+            }
+        }
+
+        btnDisconnectOthers?.setOnClickListener {
+            val token = Session.token(this) ?: return@setOnClickListener
+            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
+            AlertDialog.Builder(this)
+                .setTitle("Disconnect Other Devices")
+                .setMessage("Are you sure you want to disconnect all other devices?")
+                .setPositiveButton("Disconnect") { _, _ ->
+                    TeilenApi.revokeOtherDevices(Server.get(this), token) { ok, msg ->
+                        if (ok) {
+                            Toast.makeText(this, "All other devices disconnected", Toast.LENGTH_SHORT).show()
+                            loadDevicesList()
+                        } else {
+                            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        loadDevicesList()
         dialog.show()
     }
 
@@ -1812,65 +1856,45 @@ class MainActivity : Activity() {
         pairQr.setImageDrawable(null)
         pairCode.text = ""
 
-        ensureAuthenticated(onSuccess = { token ->
-            val alphabet = PairActivity.CODE_LETTERS.toList()
-            val rawCode = (1..8).map { alphabet.random() }.joinToString("")
-            val bundle = PairingCrypto.sealHostInvite(this, rawCode)
+        val mk = SecureKeyManager.getMasterKey(this)
+        val mkB64 = if (mk != null) PairingCrypto.b64(mk) else null
+        val fp = Session.clientFingerprint(this)
 
-            TeilenApi.createHostInvite(
+        ensureAuthenticated(onSuccess = { token ->
+            TeilenApi.generateDeviceCode(
                 baseUrl = url,
                 token = token,
-                userCode = rawCode,
-                encryptedKeyBundle = bundle,
-                deviceName = devName
-            ) { offer ->
-                if (!dialog.isShowing) return@createHostInvite
-                if (offer == null) {
+                deviceName = devName,
+                clientFingerprint = fp,
+                masterKeyPackage = mkB64
+            ) { result ->
+                if (!dialog.isShowing) return@generateDeviceCode
+                result.onSuccess { offer ->
                     pairSpinner.visibility = View.GONE
-                    pairStatus.text = getString(R.string.pair_failed)
-                    return@createHostInvite
-                }
+                    val code = offer.userCode
+                    pairCode.text = code
+                    pairStatus.text = "Scan or enter this code on the other device"
 
-                val code = offer.userCode
-                pairCode.text = code
-                pairStatus.text = getString(R.string.pair_waiting)
+                    try {
+                        val barcodeEncoder = BarcodeEncoder()
+                        val bitmap = barcodeEncoder.encodeBitmap(
+                            "teilen://pair?code=$code",
+                            BarcodeFormat.QR_CODE,
+                            400,
+                            400
+                        )
+                        pairQr.setImageBitmap(bitmap)
+                    } catch (_: Exception) {}
 
-                try {
-                    val barcodeEncoder = BarcodeEncoder()
-                    val bitmap = barcodeEncoder.encodeBitmap(
-                        "teilen://pair?code=$code",
-                        BarcodeFormat.QR_CODE,
-                        400,
-                        400
-                    )
-                    pairQr.setImageBitmap(bitmap)
-                    pairSpinner.visibility = View.GONE
-                } catch (e: Exception) {
-                    pairSpinner.visibility = View.GONE
-                }
-
-                btnCopyCode.setOnClickListener {
-                    val cm = getSystemService(ClipboardManager::class.java)
-                    cm?.setPrimaryClip(ClipData.newPlainText("Teilen Pairing Code", code))
-                    performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
-                    Toast.makeText(this, R.string.code_copied, Toast.LENGTH_SHORT).show()
-                }
-
-                TeilenApi.pollForSettlement(url, offer.deviceCode) { res ->
-                    if (!dialog.isShowing) return@pollForSettlement
-                    if (res.settled) {
-                        if (!res.mergeKeyPackage.isNullOrBlank()) {
-                            PairingCrypto.openHostInvite(this, res.mergeKeyPackage, offer.userCode, isPrimaryHost = true)
-                        }
-                        if (!res.token.isNullOrBlank() && res.token != Session.token(this)) {
-                            Session.save(this, res.token, res.username ?: Session.phone(this) ?: "Device", Session.deviceName(this) ?: "Device")
-                        }
-                        dialog.dismiss()
-                        Toast.makeText(this, "Companion device connected!", Toast.LENGTH_SHORT).show()
-                        account.render()
-                        fetchDevicesAndUpdateBanners()
-                        refreshFeed()
+                    btnCopyCode.setOnClickListener {
+                        val cm = getSystemService(ClipboardManager::class.java)
+                        cm?.setPrimaryClip(ClipData.newPlainText("Teilen Pairing Code", code))
+                        performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
+                        Toast.makeText(this, R.string.code_copied, Toast.LENGTH_SHORT).show()
                     }
+                }.onFailure { err ->
+                    pairSpinner.visibility = View.GONE
+                    pairStatus.text = "Failed to generate code: ${err.message}"
                 }
             }
         }, onError = { err ->
@@ -1879,6 +1903,154 @@ class MainActivity : Activity() {
                 pairStatus.text = err
             }
         })
+    }
+
+    fun pairWithScannedCode(code: String) {
+        val token = Session.token(this)
+        val devName = listOfNotNull(Build.MANUFACTURER, Build.MODEL).joinToString(" ").ifBlank { "Android Device" }
+        val mk = SecureKeyManager.getMasterKey(this)
+        val mkB64 = if (mk != null) PairingCrypto.b64(mk) else null
+        val fp = Session.clientFingerprint(this)
+
+        Toast.makeText(this, "Pairing with $code…", Toast.LENGTH_SHORT).show()
+        TeilenApi.pairWithCode(Server.get(this), token ?: "", code, mkB64, devName, fp) { result ->
+            result.onSuccess { pairResult ->
+                Session.save(this, pairResult.token, Session.phone(this), devName, pairResult.userId)
+                if (!pairResult.masterKey.isNullOrBlank()) {
+                    val incoming = PairingCrypto.unb64(pairResult.masterKey)
+                    val current = SecureKeyManager.getMasterKey(this)
+                    if (current != null && !current.contentEquals(incoming)) {
+                        SecureKeyManager.addLegacyKey(this, current)
+                    }
+                    SecureKeyManager.setMasterKey(this, incoming)
+                }
+                Toast.makeText(this, "Device paired successfully!", Toast.LENGTH_SHORT).show()
+                account.render()
+                applyGating()
+                fetchDevicesAndUpdateBanners()
+                refreshFeed()
+                connectFeedWebSocket()
+            }.onFailure { err ->
+                Toast.makeText(this, "Pairing failed: ${err.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // ------------------------------------------------------------- Real-Time WebSocket Sync (Part 3)
+
+    fun connectFeedWebSocket() {
+        val token = Session.token(this) ?: return
+        val baseUrl = Server.get(this)
+        val wsScheme = if (baseUrl.startsWith("https://", ignoreCase = true)) "wss://" else "ws://"
+        val hostAndPort = baseUrl.removePrefix("https://").removePrefix("http://").trimEnd('/')
+        var wsUrl = "$wsScheme$hostAndPort/ws?token=${android.net.Uri.encode(token)}"
+        val activeSession = Session.activeSessionId(this)
+        if (!activeSession.isNullOrBlank()) {
+            wsUrl += "&sessionId=${android.net.Uri.encode(activeSession)}"
+        }
+
+        disconnectFeedWebSocket()
+
+        try {
+            val request = Request.Builder().url(wsUrl).build()
+            feedWebSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    main.post {
+                        refreshFeed(silent = true)
+                    }
+                }
+
+                override fun onMessage(webSocket: WebSocket, text: String) {
+                    main.post {
+                        handleFeedWebSocketMessage(text)
+                    }
+                }
+
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    scheduleWebSocketReconnect()
+                }
+
+                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    scheduleWebSocketReconnect()
+                }
+            })
+        } catch (e: Exception) {
+            Log.w("MainActivity", "WebSocket connect error", e)
+            scheduleWebSocketReconnect()
+        }
+    }
+
+    fun disconnectFeedWebSocket() {
+        try {
+            feedWebSocket?.close(1000, "Normal Closure")
+        } catch (_: Exception) {}
+        feedWebSocket = null
+    }
+
+    private fun scheduleWebSocketReconnect() {
+        wsReconnectHandler.removeCallbacksAndMessages(null)
+        wsReconnectHandler.postDelayed({
+            if (!isDestroyed && !isFinishing && Session.isPaired(this)) {
+                connectFeedWebSocket()
+            }
+        }, 2000L)
+    }
+
+    private fun handleFeedWebSocketMessage(jsonStr: String) {
+        try {
+            val json = org.json.JSONObject(jsonStr)
+            val event = json.optString("event")
+            when (event) {
+                "created" -> {
+                    val itemObj = json.optJSONObject("item")
+                    if (itemObj != null) {
+                        val item = FeedItem.parse(itemObj)
+                        if (item != null) {
+                            val activeSession = Session.activeSessionId(this)
+                            if (activeSession == null || item.sessionId == activeSession) {
+                                feedAdapter.insert(item, 0)
+                            }
+                        } else {
+                            refreshFeed(silent = true)
+                        }
+                    } else {
+                        refreshFeed(silent = true)
+                    }
+                }
+                "extended" -> {
+                    val itemObj = json.optJSONObject("item")
+                    if (itemObj != null) {
+                        val item = FeedItem.parse(itemObj)
+                        if (item != null) {
+                            feedAdapter.update(item)
+                        } else {
+                            refreshFeed(silent = true)
+                        }
+                    } else {
+                        refreshFeed(silent = true)
+                    }
+                }
+                "deleted" -> {
+                    val id = json.optString("id")
+                    if (id.isNotBlank()) {
+                        feedAdapter.remove(id)
+                    }
+                }
+                "sync_all", "vault_merged" -> {
+                    refreshFeed(silent = true)
+                    fetchDevicesAndUpdateBanners()
+                    loadSessions()
+                }
+                "kicked" -> {
+                    Session.clear(this)
+                    disconnectFeedWebSocket()
+                    applyGating()
+                    Toast.makeText(this, "This device was disconnected", Toast.LENGTH_LONG).show()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("MainActivity", "WebSocket message parse error", e)
+        }
     }
 
     fun promptManualPairCode() {
@@ -1896,9 +2068,11 @@ class MainActivity : Activity() {
             .setMessage(R.string.pair_manual_code_desc)
             .setView(input)
             .setPositiveButton(R.string.pair_device_button) { _, _ ->
-                val code = input.text.toString().trim()
-                if (code.isNotBlank()) {
-                    account.handleApproveCode(code)
+                val code = PairActivity.cleanCode(input.text.toString())
+                if (code != null) {
+                    pairWithScannedCode(code)
+                } else {
+                    account.handleApproveCode(input.text.toString().trim())
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -1960,6 +2134,37 @@ class MainActivity : Activity() {
         }.apply { name = "teilen-copy-image" }.start()
     }
 
+    private fun extendItem(item: FeedItem) {
+        val token = Session.token(this) ?: return
+        TeilenApi.extendItem(Server.get(this), token, item.id) { ok, msg ->
+            if (ok) {
+                Toast.makeText(this, "Extended +1 hour", Toast.LENGTH_SHORT).show()
+                refreshFeed()
+            } else {
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun deleteItem(item: FeedItem) {
+        AlertDialog.Builder(this)
+            .setTitle("Delete item?")
+            .setMessage("This item will be deleted immediately.")
+            .setPositiveButton("Delete") { _, _ ->
+                val token = Session.token(this) ?: return@setPositiveButton
+                TeilenApi.deleteItem(Server.get(this), token, item.id) { ok, msg ->
+                    if (ok) {
+                        Toast.makeText(this, "Deleted", Toast.LENGTH_SHORT).show()
+                        feedAdapter.remove(item.id)
+                    } else {
+                        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     // ------------------------------------------------------------- Inline Feed Adapter
 
     private inner class InlineFeedAdapter : BaseAdapter() {
@@ -1971,6 +2176,33 @@ class MainActivity : Activity() {
             rows.clear()
             rows.addAll(items)
             notifyDataSetChanged()
+        }
+
+        fun insert(item: FeedItem, position: Int = 0) {
+            val existingIndex = rows.indexOfFirst { it.id == item.id }
+            if (existingIndex >= 0) {
+                rows[existingIndex] = item
+            } else {
+                val pos = position.coerceIn(0, rows.size)
+                rows.add(pos, item)
+            }
+            notifyDataSetChanged()
+        }
+
+        fun update(item: FeedItem) {
+            val idx = rows.indexOfFirst { it.id == item.id }
+            if (idx >= 0) {
+                rows[idx] = item
+                notifyDataSetChanged()
+            }
+        }
+
+        fun remove(id: String) {
+            val idx = rows.indexOfFirst { it.id == id }
+            if (idx >= 0) {
+                rows.removeAt(idx)
+                notifyDataSetChanged()
+            }
         }
 
         fun at(position: Int): FeedItem = rows[position]
@@ -1992,6 +2224,8 @@ class MainActivity : Activity() {
 
             val btnCopy = view.findViewById<Button>(R.id.feed_action_copy)
             val btnDownload = view.findViewById<ImageButton>(R.id.feed_action_download)
+            val btnExtend = view.findViewById<Button>(R.id.feed_action_extend)
+            val btnDelete = view.findViewById<ImageButton>(R.id.feed_action_delete)
             val btnMore = view.findViewById<ImageButton>(R.id.feed_action_more)
 
             kindBadge.text = item.kind.uppercase()
@@ -2043,22 +2277,22 @@ class MainActivity : Activity() {
                 titleText.ellipsize = null
             }
 
-            // Primary 1: Copy Action (Text, Link, Image)
-            if (item.isImage) {
+            // Primary 1: Copy Action (Text, Link, Image) with 1-tap feedback
+            if (item.isImage || !item.hasBlob) {
                 btnCopy.visibility = View.VISIBLE
                 btnCopy.text = "Copy"
                 btnCopy.setOnClickListener {
                     performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
-                    copyImageToClipboard(item)
-                }
-            } else if (!item.hasBlob) {
-                btnCopy.visibility = View.VISIBLE
-                btnCopy.text = "Copy"
-                btnCopy.setOnClickListener {
-                    performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
-                    val cm = getSystemService(ClipboardManager::class.java)
-                    cm?.setPrimaryClip(ClipData.newPlainText("Teilen", item.content))
-                    Toast.makeText(this@MainActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                    if (item.isImage) {
+                        copyImageToClipboard(item)
+                    } else {
+                        val cm = getSystemService(ClipboardManager::class.java)
+                        cm?.setPrimaryClip(ClipData.newPlainText("Teilen", item.content))
+                    }
+                    btnCopy.text = "✓ Copied"
+                    btnCopy.postDelayed({
+                        btnCopy.text = "Copy"
+                    }, 1500)
                 }
             } else {
                 btnCopy.visibility = View.GONE
@@ -2073,6 +2307,18 @@ class MainActivity : Activity() {
                 }
             } else {
                 btnDownload.visibility = View.GONE
+            }
+
+            // Header Action: [ +1h ] Extend
+            btnExtend?.setOnClickListener {
+                performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+                extendItem(item)
+            }
+
+            // Header Action: [ ✕ ] Delete
+            btnDelete?.setOnClickListener {
+                performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+                deleteItem(item)
             }
 
             // Quick Actions Overflow Menu (⋮)
@@ -2159,9 +2405,83 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun showSessionSelectorDialog() {
+        if (currentSessions.isEmpty()) {
+            loadSessions()
+        }
+        val options = mutableListOf<String>()
+        val sessionIds = mutableListOf<String?>()
+
+        val personal = currentSessions.firstOrNull { it.isPersonal }
+        options.add("🔒 Personal Vault")
+        sessionIds.add(personal?.id)
+
+        currentSessions.filter { !it.isPersonal }.forEach {
+            options.add("👥 ${it.name} (${it.memberCount})")
+            sessionIds.add(it.id)
+        }
+
+        options.add("➕ Join Room by Code…")
+        sessionIds.add("ACTION_JOIN")
+
+        AlertDialog.Builder(this)
+            .setTitle("Switch Session / Room")
+            .setItems(options.toTypedArray()) { _, which ->
+                val chosenId = sessionIds[which]
+                if (chosenId == "ACTION_JOIN") {
+                    showJoinRoomDialog()
+                } else {
+                    Session.setActiveSessionId(this, chosenId)
+                    renderSessionPills()
+                    refreshFeed()
+                    connectFeedWebSocket()
+                }
+            }
+            .show()
+    }
+
+    private fun showJoinRoomDialog() {
+        val input = EditText(this).apply {
+            hint = "Invite Code (XXXX-XXXX)"
+            isAllCaps = true
+            setSingleLine(true)
+        }
+        val container = FrameLayout(this).apply {
+            setPadding(48, 24, 48, 12)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Join Space / Room")
+            .setView(container)
+            .setPositiveButton("Join") { _, _ ->
+                val code = input.text.toString().trim().uppercase()
+                if (code.isNotBlank()) {
+                    val url = Server.get(this)
+                    val token = Session.token(this)
+                    TeilenApi.joinSession(url, token, code) { session, err ->
+                        if (session != null) {
+                            Session.setActiveSessionId(this, session.id)
+                            Toast.makeText(this, "Joined '${session.name}'", Toast.LENGTH_LONG).show()
+                            loadSessions()
+                            refreshFeed()
+                            connectFeedWebSocket()
+                        } else {
+                            Toast.makeText(this, err ?: "Failed to join room", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     private fun renderSessionPills() {
         sessionPillContainer.removeAllViews()
         val activeId = Session.activeSessionId(this)
+
+        val activeSession = currentSessions.firstOrNull { it.id == activeId }
+            ?: currentSessions.firstOrNull { it.isPersonal }
+        findViewById<TextView>(R.id.header_active_session_name)?.text = activeSession?.name ?: "Personal Vault"
 
         // 1. Personal Vault Pill
         val personalSession = currentSessions.firstOrNull { it.isPersonal }

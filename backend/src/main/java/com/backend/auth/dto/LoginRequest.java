@@ -25,7 +25,15 @@ public record LoginRequest(
 
         /** Ed25519 or hardware-backed device public key for DPoP device binding */
         @Size(max = 200, message = "devicePublicKey must be at most 200 characters")
-        String devicePublicKey) {
+        String devicePublicKey,
+
+        /** Permanent client fingerprint (UUID) for device deduplication */
+        @Size(max = 100, message = "clientFingerprint must be at most 100 characters")
+        String clientFingerprint) {
+
+    public LoginRequest(String username, String password, String deviceName, String deviceType, String devicePublicKey) {
+        this(username, password, deviceName, deviceType, devicePublicKey, null);
+    }
 
     /** Legacy accessor for backward compatibility */
     public String phone() {

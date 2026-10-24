@@ -22,23 +22,61 @@
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const MAX_RELAY_BYTES = 30 * 1024 * 1024; // 30 MB ceiling for Cloud Relay
 
-    // ---------- In-Memory Token & Security Hardening (Task 6) ----------
-    // Access token is held STRICTLY in memory (never written to localStorage or sessionStorage).
-    // Silent refreshes occur via HttpOnly; SameSite=Strict cookies with rotation.
-    let inMemoryAccessToken = null;
+    // ---------- Clean-Slate Identity & Persistent Storage (Part 1) ----------
+    function getClientFingerprint() {
+        let fp = null;
+        try {
+            fp = localStorage.getItem('teilen_client_fingerprint');
+            if (!fp) {
+                fp = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                    ? crypto.randomUUID()
+                    : 'fp_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+                localStorage.setItem('teilen_client_fingerprint', fp);
+            }
+        } catch (e) {
+            fp = 'fp_fallback_' + Math.random().toString(36).substring(2);
+        }
+        return fp;
+    }
 
     const token = {
         get() {
-            return inMemoryAccessToken;
+            try {
+                return localStorage.getItem('teilen_token') || null;
+            } catch (e) {
+                return null;
+            }
         },
         set(value) {
-            inMemoryAccessToken = value || null;
-            // Clean up any old legacy localStorage token if it existed
             try {
-                localStorage.removeItem('teilen.token');
+                if (value) {
+                    localStorage.setItem('teilen_token', value);
+                } else {
+                    localStorage.removeItem('teilen_token');
+                }
             } catch (e) {}
         }
     };
+
+    function getStoredUserId() {
+        try { return localStorage.getItem('teilen_user_id') || null; } catch (e) { return null; }
+    }
+    function setStoredUserId(id) {
+        try {
+            if (id) localStorage.setItem('teilen_user_id', id);
+            else localStorage.removeItem('teilen_user_id');
+        } catch (e) {}
+    }
+
+    function getStoredDeviceId() {
+        try { return localStorage.getItem('teilen_device_id') || null; } catch (e) { return null; }
+    }
+    function setStoredDeviceId(id) {
+        try {
+            if (id) localStorage.setItem('teilen_device_id', id);
+            else localStorage.removeItem('teilen_device_id');
+        } catch (e) {}
+    }
 
     // ---------- Active Session State (Task 4) ----------
     let currentSessionId = null;
@@ -56,6 +94,11 @@
     const composeInput = el('compose-input');
     const composeSubmit = el('compose-submit');
 
+    const sessionSelectorPill = el('session-selector-pill');
+    const activeSessionName = el('active-session-name');
+    const sessionDropdown = el('session-dropdown');
+    const sessionDropdownList = el('session-dropdown-list');
+    const sessionDropdownJoinBtn = el('session-dropdown-join-btn');
     const sessionPills = el('session-pills');
     const sessionShareBtn = el('session-share-btn');
     const sessionCreateBtn = el('session-create-btn');
@@ -143,6 +186,9 @@
     const modalApproveForm = el('modal-approve-form');
     const modalApproveCode = el('modal-approve-code');
     const modalApproveStatus = el('modal-approve-status');
+    const modalDevicesTitle = el('modal-devices-title');
+    const modalDevicesList = el('modal-devices-list');
+    const modalDisconnectOthersBtn = el('modal-disconnect-others-btn');
 
     // Hero Pairing Card Elements
     const heroPairingCard = el('hero-pairing-card');
@@ -303,24 +349,46 @@
         }
 
         const activeSession = availableSessions.find(s => s.id === currentSessionId) || availableSessions[0];
+        if (activeSessionName) {
+            activeSessionName.textContent = activeSession ? activeSession.name : 'Personal Vault';
+        }
         if (sessionShareBtn) {
             sessionShareBtn.hidden = !activeSession || activeSession.isPersonal;
         }
 
-        sessionPills.replaceChildren(...availableSessions.map(session => {
-            const pill = document.createElement('button');
-            pill.type = 'button';
-            const isActive = session.id === currentSessionId || (session.isPersonal && (!currentSessionId || currentSessionId === 'personal'));
-            pill.className = 'session-pill' + (isActive ? ' active' : '');
-            pill.dataset.id = session.id || 'personal';
+        if (sessionDropdownList) {
+            sessionDropdownList.replaceChildren(...availableSessions.map(session => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                const isActive = session.id === currentSessionId || (session.isPersonal && (!currentSessionId || currentSessionId === 'personal'));
+                btn.className = 'session-dropdown-item' + (isActive ? ' active' : '');
+                const icon = session.isPersonal ? '🔒' : '👥';
+                btn.innerHTML = `<span>${icon}</span> <span class="session-dropdown-name">${session.name}</span>` +
+                    (!session.isPersonal && session.memberCount > 1 ? ` <span class="session-dropdown-count">${session.memberCount}</span>` : '');
+                btn.addEventListener('click', () => {
+                    if (sessionDropdown) sessionDropdown.hidden = true;
+                    selectSession(session.id);
+                });
+                return btn;
+            }));
+        }
 
-            const icon = session.isPersonal ? '🔒' : '👥';
-            pill.innerHTML = `<span>${icon}</span> <span>${session.name}</span>` +
-                (!session.isPersonal && session.memberCount > 1 ? ` <span class="session-pill-badge">${session.memberCount}</span>` : '');
+        if (sessionPills) {
+            sessionPills.replaceChildren(...availableSessions.map(session => {
+                const pill = document.createElement('button');
+                pill.type = 'button';
+                const isActive = session.id === currentSessionId || (session.isPersonal && (!currentSessionId || currentSessionId === 'personal'));
+                pill.className = 'session-pill' + (isActive ? ' active' : '');
+                pill.dataset.id = session.id || 'personal';
 
-            pill.addEventListener('click', () => selectSession(session.id));
-            return pill;
-        }));
+                const icon = session.isPersonal ? '🔒' : '👥';
+                pill.innerHTML = `<span>${icon}</span> <span>${session.name}</span>` +
+                    (!session.isPersonal && session.memberCount > 1 ? ` <span class="session-pill-badge">${session.memberCount}</span>` : '');
+
+                pill.addEventListener('click', () => selectSession(session.id));
+                return pill;
+            }));
+        }
     }
 
     async function selectSession(sessionId) {
@@ -343,6 +411,24 @@
     function closeModal(modal) {
         if (!modal) return;
         modal.hidden = true;
+    }
+
+    if (sessionSelectorPill) {
+        sessionSelectorPill.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (sessionDropdown) sessionDropdown.hidden = !sessionDropdown.hidden;
+        });
+    }
+
+    if (sessionDropdownJoinBtn) {
+        sessionDropdownJoinBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (sessionDropdown) sessionDropdown.hidden = true;
+            joinSessionInput.value = '';
+            joinSessionPreview.hidden = true;
+            openModal(modalJoinSession);
+            joinSessionInput.focus();
+        });
     }
     document.querySelectorAll('.modal-close').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -736,7 +822,7 @@
             });
             headRight.append(dlBtn);
         } else {
-            // TEXT / LINK: ONLY [ 📋 Copy ]
+            // TEXT / LINK: [ 📋 Copy ]
             const copyBtn = document.createElement('button');
             copyBtn.type = 'button';
             copyBtn.className = 'btn-head-action';
@@ -744,13 +830,56 @@
             copyBtn.title = 'Copy to clipboard';
             copyBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
+                if (navigator.vibrate) navigator.vibrate(15);
                 await navigator.clipboard.writeText(item.content);
                 copyBtn.classList.add('copied');
+                const orig = copyBtn.innerHTML;
+                copyBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>✓ Copied</span>`;
                 toast('Copied to clipboard', 'success');
-                setTimeout(() => copyBtn.classList.remove('copied'), 1500);
+                setTimeout(() => {
+                    copyBtn.classList.remove('copied');
+                    copyBtn.innerHTML = orig;
+                }, 1500);
             });
             headRight.append(copyBtn);
         }
+
+        // Always-visible [ +1h ] Extend Button
+        if (!isLan) {
+            const extBtn = document.createElement('button');
+            extBtn.type = 'button';
+            extBtn.className = 'btn-head-action subtle';
+            extBtn.innerHTML = `<span>+1h</span>`;
+            extBtn.title = 'Extend expiration by 1 hour';
+            extBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                extendItem(item.id);
+            });
+            headRight.append(extBtn);
+        }
+
+        // Always-visible [ ✕ ] Delete Button
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn-head-action danger';
+        delBtn.innerHTML = `<span>✕</span>`;
+        delBtn.title = 'Delete item';
+        delBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (isLan) {
+                remove(item.id);
+                toast('Item deleted', 'info');
+            } else {
+                const res = await api(API + '/' + item.id, {method: 'DELETE'});
+                if (res.ok) {
+                    remove(item.id);
+                    toast('Item deleted', 'info');
+                } else {
+                    toast('Could not delete item', 'error');
+                }
+            }
+        });
+        headRight.append(delBtn);
 
         // Quick Actions Overflow Menu (⋮)
         const menuContainer = document.createElement('div');
@@ -1318,9 +1447,10 @@
         socket = live;
 
         live.addEventListener('open', () => {
-            retryDelay = 1000;
+            retryDelay = 2000;
             setStatus('live', 'live');
             stopPolling();
+            load();
         });
 
         live.addEventListener('message', (message) => {
@@ -1338,9 +1468,16 @@
                 applyExtended(event.item);
             } else if (event.event === 'deleted' && event.id) {
                 remove(event.id);
-            } else if (event.event === 'vault_merged') {
-                loadSessions().then(() => showFeed());
-                api('/api/devices').then(r => r.ok && r.json()).then(devs => devs && renderDevices(devs));
+            } else if (event.event === 'sync_all' || event.event === 'vault_merged') {
+                loadSessions().then(() => load());
+                loadDevices();
+            } else if (event.event === 'kicked') {
+                token.set(null);
+                setStoredUserId(null);
+                setStoredDeviceId(null);
+                stopSocket();
+                showPairing();
+                toast('This device was disconnected', 'info');
             }
         });
 
@@ -1349,8 +1486,7 @@
             socket = null;
             setStatus('reconnecting…', 'offline');
             startPolling();
-            setTimeout(connect, retryDelay);
-            retryDelay = Math.min(retryDelay * 2, 15000);
+            setTimeout(connect, 2000);
         });
 
         live.addEventListener('error', () => live.close());
@@ -1396,66 +1532,145 @@
 
     // ---------- Devices & Account Section ----------
 
+    async function loadDevices() {
+        try {
+            const devRes = await api('/api/devices');
+            if (devRes.ok) {
+                const devs = await devRes.json();
+                renderDevices(devs);
+            }
+        } catch (e) {
+            console.warn('Could not load devices:', e);
+        }
+    }
+
     function renderDevices(devices) {
+        if (!Array.isArray(devices)) devices = [];
+
         // Hero Pairing Card: show when user has <= 1 connected device, hide when >= 2 connected devices
         if (heroPairingCard) {
-            const hasMultiple = devices && devices.length > 1;
+            const hasMultiple = devices.length > 1;
             if (hasMultiple || heroPairingDismissed) {
                 heroPairingCard.hidden = true;
             } else {
                 heroPairingCard.hidden = false;
-                startPairing();
             }
         }
 
-        const devCount = devices ? devices.length : 1;
-        const headerDeviceBadge = el('header-device-badge');
-        if (headerDeviceBadge) {
-            headerDeviceBadge.textContent = `● ${devCount}`;
+        const devCount = devices.length;
+        if (modalDevicesTitle) {
+            modalDevicesTitle.textContent = `Connected Devices (${devCount})`;
         }
-        const accountLabel = el('account-label');
-        if (accountLabel) {
-            accountLabel.textContent = `Devices (${devCount})`;
+        if (modalDisconnectOthersBtn) {
+            modalDisconnectOthersBtn.hidden = devCount <= 1;
         }
 
-        deviceList.replaceChildren(...devices.map(device => {
-            const row = document.createElement('li');
-            row.className = 'device';
+        if (modalDevicesList) {
+            modalDevicesList.replaceChildren(...devices.map(device => {
+                const li = document.createElement('li');
+                li.className = 'modal-device-row';
 
-            const label = document.createElement('span');
-            label.className = 'device-name';
-            label.textContent = device.name + (device.current ? ' (this browser)' : '');
+                const info = document.createElement('div');
+                info.className = 'modal-device-info';
 
-            const meta = document.createElement('span');
-            meta.className = 'device-meta';
-            const details = [];
-            if (device.platform) details.push(device.platform.slice(0, 30));
-            if (device.ipAddress) details.push(device.ipAddress);
-            details.push(new Date(device.lastSeenAt).toLocaleDateString());
-            meta.textContent = details.join(' · ');
+                const name = document.createElement('span');
+                name.className = 'modal-device-name';
+                name.textContent = device.name || (device.deviceType === 'PHONE' ? 'Phone' : 'Browser');
+                info.appendChild(name);
 
-            row.append(label, meta);
+                if (device.current) {
+                    const badge = document.createElement('span');
+                    badge.className = 'modal-device-badge';
+                    badge.textContent = 'This Device';
+                    info.appendChild(badge);
+                }
 
-            if (!device.current) {
-                const dropBtn = document.createElement('button');
-                dropBtn.className = 'btn-device-drop';
-                dropBtn.textContent = 'Revoke';
-                dropBtn.type = 'button';
-                dropBtn.addEventListener('click', async () => {
-                    dropBtn.disabled = true;
-                    const res = await api('/api/devices/' + device.id, {method: 'DELETE'});
-                    if (res.ok) {
-                        toast('Device revoked', 'info');
-                        row.remove();
-                    } else {
-                        dropBtn.disabled = false;
-                        toast('Could not revoke device', 'error');
-                    }
-                });
-                row.append(dropBtn);
+                li.appendChild(info);
+
+                if (!device.current) {
+                    const disconnectBtn = document.createElement('button');
+                    disconnectBtn.type = 'button';
+                    disconnectBtn.className = 'btn-device-disconnect';
+                    disconnectBtn.textContent = 'Disconnect';
+                    disconnectBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        disconnectBtn.disabled = true;
+                        try {
+                            const res = await api('/api/devices/' + device.id, {method: 'DELETE'});
+                            if (res.ok) {
+                                toast('Device disconnected', 'info');
+                                loadDevices();
+                            } else {
+                                disconnectBtn.disabled = false;
+                                toast('Could not disconnect device', 'error');
+                            }
+                        } catch (err) {
+                            disconnectBtn.disabled = false;
+                        }
+                    });
+                    li.appendChild(disconnectBtn);
+                }
+                return li;
+            }));
+        }
+
+        if (deviceList) {
+            deviceList.replaceChildren(...devices.map(device => {
+                const row = document.createElement('li');
+                row.className = 'device';
+
+                const label = document.createElement('span');
+                label.className = 'device-name';
+                label.textContent = device.name + (device.current ? ' (this browser)' : '');
+
+                const meta = document.createElement('span');
+                meta.className = 'device-meta';
+                const details = [];
+                if (device.platform) details.push(device.platform.slice(0, 30));
+                if (device.ipAddress) details.push(device.ipAddress);
+                details.push(new Date(device.lastSeenAt).toLocaleDateString());
+                meta.textContent = details.join(' · ');
+
+                row.append(label, meta);
+
+                if (!device.current) {
+                    const dropBtn = document.createElement('button');
+                    dropBtn.className = 'btn-device-drop';
+                    dropBtn.textContent = 'Revoke';
+                    dropBtn.type = 'button';
+                    dropBtn.addEventListener('click', async () => {
+                        dropBtn.disabled = true;
+                        const res = await api('/api/devices/' + device.id, {method: 'DELETE'});
+                        if (res.ok) {
+                            toast('Device revoked', 'info');
+                            loadDevices();
+                        } else {
+                            dropBtn.disabled = false;
+                            toast('Could not revoke device', 'error');
+                        }
+                    });
+                    row.append(dropBtn);
+                }
+                return row;
+            }));
+        }
+    }
+
+    if (modalDisconnectOthersBtn) {
+        modalDisconnectOthersBtn.addEventListener('click', async () => {
+            if (!confirm('Disconnect all other devices?')) return;
+            try {
+                const res = await api('/api/devices/others', {method: 'DELETE'});
+                if (res.ok) {
+                    toast('All other devices disconnected', 'success');
+                    loadDevices();
+                } else {
+                    toast('Failed to disconnect other devices', 'error');
+                }
+            } catch (e) {
+                toast('Failed to disconnect other devices', 'error');
             }
-            return row;
-        }));
+        });
     }
 
     // Revoke all other devices (Task 6.3)
@@ -1564,13 +1779,16 @@
                     displayName: 'Personal Vault',
                     deviceName,
                     deviceType: 'WEB',
-                    devicePublicKey: TeilenCrypto.b64(identity.publicKey)
+                    devicePublicKey: TeilenCrypto.b64(identity.publicKey),
+                    clientFingerprint: getClientFingerprint()
                 })
             });
 
             if (res.ok) {
                 const session = await res.json();
                 token.set(session.token);
+                if (session.userId) setStoredUserId(session.userId);
+                if (session.deviceId) setStoredDeviceId(session.deviceId);
                 toast('Instant vault initialized (' + username + ')', 'success');
                 await showFeed();
                 return true;
@@ -1700,152 +1918,47 @@
         }
     });
 
-    const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    function generateUserCode() {
-        let s = '';
-        for (let i = 0; i < 8; i++) {
-            s += CODE_ALPHABET.charAt(Math.floor(Math.random() * CODE_ALPHABET.length));
-        }
-        return s;
-    }
-
     async function startPairing() {
         clearInterval(pairTimer);
         try {
-            const hasAuth = !!token.get();
-            let data, codeVal, qrSrc;
+            const master = await TeilenCrypto.getMasterKey();
+            const masterB64 = master ? TeilenCrypto.b64(master) : null;
+            const res = await postJson('/api/auth/device/code', {
+                deviceName: navigator.userAgent.includes('Chrome') ? 'Chrome' :
+                            navigator.userAgent.includes('Firefox') ? 'Firefox' :
+                            navigator.userAgent.includes('Safari') ? 'Safari' : 'Browser',
+                deviceType: 'WEB',
+                platform: navigator.platform || 'Web',
+                clientFingerprint: getClientFingerprint(),
+                masterKeyPackage: masterB64
+            });
 
-            if (hasAuth) {
-                // Host Invite Mode: We already have an active vault and messages!
-                // Seal our keys to an ephemeral userCode so scanning devices claim without overwriting.
-                const hostCode = generateUserCode();
-                const bundle = await TeilenCrypto.sealHostInvite(hostCode);
-                const res = await postJson('/api/auth/device/host-invite', {
-                    userCode: hostCode,
-                    encryptedKeyBundle: bundle,
-                    deviceName: 'Browser',
-                    platform: navigator.platform || 'Web'
-                });
-                if (!res.ok) {
-                    console.error('Host invite creation failed with HTTP', res.status);
-                    return;
-                }
-                data = await res.json();
-                codeVal = data.userCode || hostCode;
-                qrSrc = data.qrCodeUrl || `/api/auth/device/qr.svg?code=${encodeURIComponent(codeVal)}`;
-                pairUserCode = codeVal;
-
-                if (pairCode) pairCode.textContent = codeVal;
-                if (qr) qr.src = qrSrc;
-                if (pairState) pairState.textContent = 'Scan with phone or enter code…';
-
-                if (heroQr) heroQr.src = qrSrc;
-                if (heroPairCode) heroPairCode.textContent = codeVal;
-                if (heroPairStatus) heroPairStatus.textContent = 'Scan with phone or enter code below…';
-
-                if (modalQr) modalQr.src = qrSrc;
-                if (modalPairCode) modalPairCode.textContent = codeVal;
-                if (modalPairStatus) modalPairStatus.textContent = 'Scan with phone or enter code below…';
-
-                pairTimer = setInterval(async () => {
-                    try {
-                        const claimRes = await fetch('/api/auth/device/token', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            credentials: 'same-origin',
-                            body: JSON.stringify({deviceCode: data.deviceCode})
-                        });
-                        if (claimRes.status === 200) {
-                            clearInterval(pairTimer);
-                            const claimData = await claimRes.json();
-                            if (claimData.mergeKeyPackage) {
-                                await TeilenCrypto.openHostInvite(claimData.mergeKeyPackage, codeVal, true);
-                            }
-                            if (claimData.token && claimData.token !== token.get()) {
-                                token.set(claimData.token);
-                                connect();
-                            }
-                            toast('Companion device connected!', 'success');
-                            closeModal(modalPairPhone);
-                            const devRes = await api('/api/devices');
-                            if (devRes.ok) renderDevices(await devRes.json());
-                            await loadSessions();
-                            await showFeed();
-                        }
-                    } catch (e) {
-                        console.warn('Pairing poll error:', e);
-                    }
-                }, (data.pollIntervalSeconds || 3) * 1000);
-
-            } else {
-                pairKey = await TeilenCrypto.newPairingKey();
-                const identity = await TeilenCrypto.ensureIdentity();
-                const res = await fetch('/api/auth/device/code', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        deviceName: 'Browser',
-                        deviceType: 'WEB',
-                        platform: navigator.platform || 'Web',
-                        publicKey: pairKey && pairKey.publicKey ? TeilenCrypto.b64(pairKey.publicKey) : undefined,
-                        devicePublicKey: identity && identity.publicKey ? TeilenCrypto.b64(identity.publicKey) : undefined
-                    })
-                });
-                if (!res.ok) {
-                    console.error('Pairing code fetch failed with HTTP', res.status);
-                    return;
-                }
-                data = await res.json();
-                console.log('Pairing code API response:', data);
-
-                codeVal = data.userCode || data.code || pairUserCode;
-                pairUserCode = codeVal;
-
-                qrSrc = data.qrCodeUrl || (codeVal ? `/api/auth/device/qr.svg?code=${encodeURIComponent(codeVal)}` : null);
-
-                if (pairCode && codeVal) pairCode.textContent = codeVal;
-                if (qr && qrSrc) qr.src = qrSrc;
-                if (pairState) pairState.textContent = 'Scan or approve code on phone…';
-
-                if (heroQr && qrSrc) heroQr.src = qrSrc;
-                if (heroPairCode && codeVal) heroPairCode.textContent = codeVal;
-                if (heroPairStatus) heroPairStatus.textContent = 'Scan with phone or enter code below…';
-
-                if (modalQr && qrSrc) modalQr.src = qrSrc;
-                if (modalPairCode && codeVal) modalPairCode.textContent = codeVal;
-                if (modalPairStatus) modalPairStatus.textContent = 'Scan with phone or enter code below…';
-
-                pairTimer = setInterval(async () => {
-                    try {
-                        const claimRes = await fetch('/api/auth/device/token', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            credentials: 'same-origin',
-                            body: JSON.stringify({deviceCode: data.deviceCode})
-                        });
-                        if (claimRes.status === 200) {
-                            clearInterval(pairTimer);
-                            const claim = await claimRes.json();
-                            if (claim.keyPackage && pairKey) {
-                                await TeilenCrypto.openFromApprover(claim.keyPackage, pairKey.privateKey, pairUserCode);
-                            }
-                            token.set(claim.token);
-                            toast('Pairing successful!', 'success');
-                            closeModal(modalPairPhone);
-                            connectSignalWs();
-                            connect();
-                            await loadSessions();
-                            await showFeed();
-                        }
-                    } catch (e) {
-                        console.warn('Pairing poll error:', e);
-                    }
-                }, (data.pollIntervalSeconds || 3) * 1000);
+            if (!res.ok) {
+                console.error('Pairing code fetch failed with HTTP', res.status);
+                return;
             }
+
+            const data = await res.json();
+            const codeVal = data.userCode;
+            pairUserCode = codeVal;
+            const qrSrc = data.qrSvgUrl || (codeVal ? `/api/auth/device/qr.svg?code=${encodeURIComponent(codeVal)}` : null);
+
+            if (pairCode && codeVal) pairCode.textContent = codeVal;
+            if (qr && qrSrc) qr.src = qrSrc;
+            if (pairState) pairState.textContent = 'Scan or enter code on phone…';
+
+            if (heroQr && qrSrc) heroQr.src = qrSrc;
+            if (heroPairCode && codeVal) heroPairCode.textContent = codeVal;
+            if (heroPairStatus) heroPairStatus.textContent = 'Scan with phone or enter code below…';
+
+            if (modalQr && qrSrc) modalQr.src = qrSrc;
+            if (modalPairCode && codeVal) modalPairCode.textContent = codeVal;
+            if (modalPairStatus) modalPairStatus.textContent = 'Scan with phone or enter code below…';
         } catch (e) {
-            console.warn('Pairing failed', e);
+            console.warn('Pairing generation error:', e);
         }
     }
+
     const copyPairCode = async () => {
         if (pairUserCode) {
             await navigator.clipboard.writeText(pairUserCode);
@@ -1858,10 +1971,8 @@
 
     if (btnHeaderPair) {
         btnHeaderPair.addEventListener('click', () => {
-            if (pairUserCode) {
-                if (modalPairCode) modalPairCode.textContent = pairUserCode;
-            }
             openModal(modalPairPhone);
+            loadDevices();
             startPairing();
         });
     }
@@ -1873,88 +1984,58 @@
         });
     }
 
-    async function handleApprove(code, statusEl, inputEl) {
-        if (!code) return;
+    async function handlePairWithCode(userCode, statusEl, inputEl) {
+        if (!userCode) return;
         if (statusEl) {
             statusEl.hidden = false;
             statusEl.textContent = 'Connecting…';
         }
         try {
-            const pendingRes = await api('/api/auth/device/pending?code=' + encodeURIComponent(code));
-            if (!pendingRes.ok) {
-                if (statusEl) statusEl.textContent = 'Invalid code: ' + (await why(pendingRes));
-                return;
-            }
-            const preview = await pendingRes.json();
-
-            if (preview.mode === 'HOST_INVITE') {
-                if (statusEl) statusEl.textContent = 'Connecting to ' + preview.deviceName + '…';
-                const identity = await TeilenCrypto.ensureIdentity();
-                const myMergePkg = await TeilenCrypto.sealHostInvite(code);
-                const claimRes = await fetch('/api/auth/device/claim-invite', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...(token.get() ? {'Authorization': 'Bearer ' + token.get()} : {})
-                    },
-                    body: JSON.stringify({
-                        userCode: code,
-                        deviceName: 'Browser',
-                        deviceType: 'WEB',
-                        platform: navigator.platform || 'Web',
-                        devicePublicKey: identity && identity.publicKey ? TeilenCrypto.b64(identity.publicKey) : undefined,
-                        mergeKeyPackage: myMergePkg,
-                        scannerToken: token.get() || undefined
-                    })
-                });
-                if (!claimRes.ok) {
-                    if (statusEl) statusEl.textContent = 'Claim failed: ' + (await why(claimRes));
-                    return;
-                }
-                const claim = await claimRes.json();
-                if (claim.encryptedKeyBundle) {
-                    await TeilenCrypto.openHostInvite(claim.encryptedKeyBundle, code, claim.isPrimaryHost !== false);
-                }
-                token.set(claim.token);
-                if (inputEl) inputEl.value = '';
-                if (statusEl) statusEl.textContent = 'Connected!';
-                toast('Connected to ' + (claim.username || preview.deviceName) + '!', 'success');
-                closeModal(modalPairPhone);
-                connectSignalWs();
-                connect();
-                const devRes = await api('/api/devices');
-                if (devRes.ok) renderDevices(await devRes.json());
-                await loadSessions();
-                await showFeed();
-                return;
-            }
-
-            let keyPkg = null;
-            let mergePkg = null;
-            if (preview.publicKey) {
-                keyPkg = await TeilenCrypto.sealForNewcomer(preview.publicKey, code);
-            }
-            try {
-                mergePkg = await TeilenCrypto.sealHostInvite(code);
-            } catch (e) {}
-
-            const approveRes = await postJson('/api/auth/device/approve', {
-                userCode: code,
-                keyPackage: keyPkg,
-                mergeKeyPackage: mergePkg
+            const master = await TeilenCrypto.getMasterKey();
+            const masterB64 = master ? TeilenCrypto.b64(master) : null;
+            const res = await postJson('/api/auth/device/pair', {
+                userCode: userCode.trim().toUpperCase(),
+                scannerMasterKey: masterB64,
+                deviceName: navigator.userAgent.includes('Chrome') ? 'Chrome' :
+                            navigator.userAgent.includes('Firefox') ? 'Firefox' :
+                            navigator.userAgent.includes('Safari') ? 'Safari' : 'Browser',
+                deviceType: 'WEB',
+                platform: navigator.platform || 'Web',
+                clientFingerprint: getClientFingerprint()
             });
 
-            if (approveRes.ok) {
-                if (inputEl) inputEl.value = '';
-                if (statusEl) statusEl.textContent = 'Device connected!';
-                toast('Device successfully paired!', 'success');
-                const devRes = await api('/api/devices');
-                if (devRes.ok) renderDevices(await devRes.json());
-                closeModal(modalPairPhone);
-                await showFeed();
-            } else {
-                if (statusEl) statusEl.textContent = 'Approval failed: ' + (await why(approveRes));
+            if (!res.ok) {
+                if (statusEl) statusEl.textContent = 'Pairing failed: ' + (await why(res));
+                return;
             }
+
+            const pairData = await res.json();
+            if (pairData.token) {
+                token.set(pairData.token);
+            }
+            if (pairData.userId) {
+                setStoredUserId(pairData.userId);
+            }
+            if (pairData.deviceId) {
+                setStoredDeviceId(pairData.deviceId);
+            }
+            if (pairData.masterKey) {
+                const incomingKey = TeilenCrypto.unb64(pairData.masterKey);
+                const currentMaster = await TeilenCrypto.getMasterKey();
+                if (currentMaster && TeilenCrypto.b64(currentMaster) !== pairData.masterKey) {
+                    await TeilenCrypto.addLegacyKey(currentMaster);
+                }
+                await TeilenCrypto.setMasterKey(incomingKey);
+            }
+
+            if (inputEl) inputEl.value = '';
+            if (statusEl) statusEl.textContent = 'Connected!';
+            toast('Device successfully paired!', 'success');
+            closeModal(modalPairPhone);
+            connect();
+            await loadSessions();
+            await load();
+            await loadDevices();
         } catch (err) {
             if (statusEl) statusEl.textContent = 'Error: ' + err.message;
         }
@@ -1962,20 +2043,20 @@
 
     approveForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        await handleApprove(approveCode.value.trim(), deviceStatus, approveCode);
+        await handlePairWithCode(approveCode.value.trim(), deviceStatus, approveCode);
     });
 
     if (heroApproveForm && heroApproveCode) {
         heroApproveForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            await handleApprove(heroApproveCode.value.trim(), heroApproveStatus, heroApproveCode);
+            await handlePairWithCode(heroApproveCode.value.trim(), heroApproveStatus, heroApproveCode);
         });
     }
 
     if (modalApproveForm && modalApproveCode) {
         modalApproveForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            await handleApprove(modalApproveCode.value.trim(), modalApproveStatus, modalApproveCode);
+            await handlePairWithCode(modalApproveCode.value.trim(), modalApproveStatus, modalApproveCode);
         });
     }
 
@@ -2024,12 +2105,17 @@
 
     async function initApp() {
         try {
+            // Unbreakable persistence rule: If token exists in storage, 100% preserve it and feed!
+            if (token.get()) {
+                await showFeed();
+                return;
+            }
             const authenticated = await trySilentRefresh();
             if (authenticated) {
                 await showFeed();
                 return;
             }
-            // Auto silent-provision a zero-auth vault
+            // Auto silent-provision a zero-auth vault ONLY if no token exists in storage
             const provisioned = await silentProvisionVault();
             if (!provisioned) {
                 showPairing();

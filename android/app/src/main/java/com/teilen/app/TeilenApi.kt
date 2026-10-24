@@ -47,7 +47,8 @@ object TeilenApi {
         val token: String,
         val phone: String?,
         val deviceName: String?,
-        val deviceId: String?
+        val deviceId: String?,
+        val userId: String? = null
     )
 
     /** a code to show, and the secret to collect its token with */
@@ -120,21 +121,26 @@ object TeilenApi {
         password: String,
         displayName: String,
         deviceName: String,
+        clientFingerprint: String? = null,
         onResult: (CreateResult) -> Unit
     ) {
         Thread {
             val result = try {
+                val json = JSONObject()
+                    .put("username", phone)
+                    .put("phone", phone)
+                    .put("password", password)
+                    .put("displayName", displayName)
+                    .put("deviceName", deviceName)
+                    .put("deviceType", "PHONE")
+                if (!clientFingerprint.isNullOrBlank()) {
+                    json.put("clientFingerprint", clientFingerprint)
+                }
                 val reply = postBlocking(
                     baseUrl,
                     "/api/auth/account",
                     token = null,
-                    JSONObject()
-                        .put("username", phone)
-                        .put("phone", phone)
-                        .put("password", password)
-                        .put("displayName", displayName)
-                        .put("deviceName", deviceName)
-                        .put("deviceType", "PHONE")
+                    json
                 )
                 when {
                     reply.ok -> CreateResult.Created(signedInFrom(reply))
@@ -492,6 +498,109 @@ object TeilenApi {
                 }
             }
         }.apply { name = "teilen-poll-settle" }.start()
+    }
+
+    data class DeviceCodeResult(
+        val userCode: String,
+        val qrSvgUrl: String
+    )
+
+    fun generateDeviceCode(
+        baseUrl: String,
+        token: String,
+        deviceName: String,
+        clientFingerprint: String,
+        masterKeyPackage: String?,
+        onResult: (Result<DeviceCodeResult>) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val json = JSONObject()
+                    .put("deviceName", deviceName)
+                    .put("deviceType", "PHONE")
+                    .put("platform", "Android")
+                    .put("clientFingerprint", clientFingerprint)
+                if (!masterKeyPackage.isNullOrBlank()) {
+                    json.put("masterKeyPackage", masterKeyPackage)
+                }
+                val reply = postBlocking(baseUrl, "/api/auth/device/code", token, json)
+                if (reply.ok && reply.body != null) {
+                    val code = reply.body.getString("userCode")
+                    val qrUrl = reply.body.optString("qrSvgUrl", "/api/auth/device/qr.svg?code=$code")
+                    Result.success(DeviceCodeResult(code, qrUrl))
+                } else {
+                    Result.failure(Exception(reply.message))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+            main.post { onResult(result) }
+        }.apply { name = "teilen-device-code" }.start()
+    }
+
+    data class DevicePairResult(
+        val token: String,
+        val userId: String?,
+        val masterKey: String?
+    )
+
+    fun pairWithCode(
+        baseUrl: String,
+        token: String,
+        userCode: String,
+        scannerMasterKey: String?,
+        deviceName: String,
+        clientFingerprint: String,
+        onResult: (Result<DevicePairResult>) -> Unit
+    ) {
+        Thread {
+            val result = try {
+                val json = JSONObject()
+                    .put("userCode", userCode)
+                    .put("deviceName", deviceName)
+                    .put("deviceType", "PHONE")
+                    .put("platform", "Android")
+                    .put("clientFingerprint", clientFingerprint)
+                if (!scannerMasterKey.isNullOrBlank()) {
+                    json.put("scannerMasterKey", scannerMasterKey)
+                }
+                val reply = postBlocking(baseUrl, "/api/auth/device/pair", token, json)
+                if (reply.ok && reply.body != null) {
+                    val tok = reply.body.optString("token").takeIf { it.isNotBlank() } ?: token
+                    val uid = reply.body.optString("userId").takeIf { it.isNotBlank() }
+                    val mk = reply.body.optString("masterKey").takeIf { it.isNotBlank() }
+                    Result.success(DevicePairResult(tok, uid, mk))
+                } else {
+                    Result.failure(Exception(reply.message))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+            main.post { onResult(result) }
+        }.apply { name = "teilen-device-pair" }.start()
+    }
+
+    fun revokeDevice(baseUrl: String, token: String?, deviceId: String, onDone: (ok: Boolean, message: String) -> Unit) {
+        Thread {
+            val result = try {
+                val connection = open(baseUrl, "/api/devices/$deviceId", token, "DELETE")
+                try {
+                    val status = connection.responseCode
+                    if (status in 200..299 || status == 204) {
+                        true to "Device revoked"
+                    } else if (status == 401) {
+                        false to UNPAIRED_MESSAGE
+                    } else {
+                        false to "server said $status"
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+            } catch (e: Exception) {
+                false to (e.message ?: "Failed to revoke device")
+            }
+            main.post { onDone(result.first, result.second) }
+        }.apply { name = "teilen-device-revoke" }.start()
     }
 
     /**
@@ -1348,11 +1457,13 @@ object TeilenApi {
         val user = reply.body?.optJSONObject("user")
         val username = user?.optString("username")?.takeIf { it.isNotBlank() }
             ?: user?.optString("phone")?.takeIf { it.isNotBlank() }
+        val uid = reply.str("userId") ?: user?.optString("id")?.takeIf { it.isNotBlank() }
         return SignedIn(
             token = reply.str("token").orEmpty(),
             phone = username,
             deviceName = reply.str("deviceName"),
-            deviceId = reply.str("deviceId")
+            deviceId = reply.str("deviceId"),
+            userId = uid
         )
     }
 

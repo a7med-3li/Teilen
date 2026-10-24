@@ -17,6 +17,12 @@ public interface DeviceRepository extends JpaRepository<Device, UUID> {
 
     List<Device> findByUserIdOrderByCreatedAtAsc(UUID userId);
 
+    Optional<Device> findFirstByUserIdAndClientFingerprint(UUID userId, String clientFingerprint);
+
+    Optional<Device> findFirstByUserIdAndNameAndDeviceType(UUID userId, String name, com.backend.auth.enums.DeviceType deviceType);
+
+    List<Device> findByUserIdAndNameAndDeviceType(UUID userId, String name, com.backend.auth.enums.DeviceType deviceType);
+
     /** "is this the last way in?" — the one question self-revocation turns on */
     long countByUserIdAndIdNot(UUID userId, UUID id);
 

@@ -52,16 +52,24 @@ public class Device {
     @Column(name = "platform", length = 160)
     private String platform;
 
+    @Column(name = "client_fingerprint", length = 100)
+    private String clientFingerprint;
+
     protected Device() {
         // for JPA
     }
 
     public Device(UUID id, UUID userId, DeviceType deviceType, String name, String tokenHash, Instant now) {
-        this(id, userId, deviceType, name, tokenHash, null, null, null, now);
+        this(id, userId, deviceType, name, tokenHash, null, null, null, null, now);
     }
 
     public Device(UUID id, UUID userId, DeviceType deviceType, String name, String tokenHash,
                   String devicePublicKey, String ipAddress, String platform, Instant now) {
+        this(id, userId, deviceType, name, tokenHash, devicePublicKey, ipAddress, platform, null, now);
+    }
+
+    public Device(UUID id, UUID userId, DeviceType deviceType, String name, String tokenHash,
+                  String devicePublicKey, String ipAddress, String platform, String clientFingerprint, Instant now) {
         this.id = id;
         this.userId = userId;
         this.deviceType = deviceType;
@@ -70,6 +78,7 @@ public class Device {
         this.devicePublicKey = devicePublicKey;
         this.ipAddress = ipAddress;
         this.platform = platform;
+        this.clientFingerprint = clientFingerprint;
         this.createdAt = now;
         this.lastSeenAt = now;
     }
@@ -80,6 +89,10 @@ public class Device {
 
     public UUID getUserId() {
         return userId;
+    }
+
+    public void setUserId(UUID userId) {
+        this.userId = userId;
     }
 
     public DeviceType getDeviceType() {
@@ -122,11 +135,23 @@ public class Device {
         this.platform = platform;
     }
 
+    public String getClientFingerprint() {
+        return clientFingerprint;
+    }
+
+    public void setClientFingerprint(String clientFingerprint) {
+        this.clientFingerprint = clientFingerprint;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
 
     public Instant getLastSeenAt() {
         return lastSeenAt;
+    }
+
+    public void setLastSeenAt(Instant lastSeenAt) {
+        this.lastSeenAt = lastSeenAt;
     }
 }

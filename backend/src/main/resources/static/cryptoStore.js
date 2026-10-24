@@ -159,23 +159,37 @@ window.TeilenCrypto = (() => {
     /** the stored account key, or null when this device has none yet */
     async function getMasterKey() {
         await ready;
-        return idbGet(MASTER);
+        let key = await idbGet(MASTER);
+        if (!key) {
+            try {
+                const lsKey = localStorage.getItem('teilen_master_key');
+                if (lsKey) {
+                    key = unb64(lsKey);
+                    await idbPut(MASTER, key);
+                }
+            } catch (e) {}
+        }
+        return key;
     }
 
     /** the stored account key, generated on first use — the primary device seeds it */
     async function ensureMasterKey() {
         await ready;
-        let key = await idbGet(MASTER);
+        let key = await getMasterKey();
         if (!key) {
             key = sodium.randombytes_buf(32);
-            await idbPut(MASTER, key);
+            await setMasterKey(key);
         }
         return key;
     }
 
     async function setMasterKey(bytes) {
         await ready;
-        await idbPut(MASTER, new Uint8Array(bytes));
+        const arr = new Uint8Array(bytes);
+        await idbPut(MASTER, arr);
+        try {
+            localStorage.setItem('teilen_master_key', b64(arr));
+        } catch (e) {}
     }
 
     async function hasMasterKey() {

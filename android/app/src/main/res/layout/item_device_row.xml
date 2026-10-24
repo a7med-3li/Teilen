@@ -66,4 +66,19 @@
             android:text="Connected"
             android:textSize="12sp" />
     </LinearLayout>
+
+    <Button
+        android:id="@+id/btn_device_disconnect"
+        style="@style/Button.Outline"
+        android:layout_width="wrap_content"
+        android:layout_height="30dp"
+        android:layout_marginStart="8dp"
+        android:minHeight="30dp"
+        android:minWidth="0dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:text="Disconnect"
+        android:textColor="#F87171"
+        android:textSize="11sp"
+        android:visibility="gone" />
 </LinearLayout>

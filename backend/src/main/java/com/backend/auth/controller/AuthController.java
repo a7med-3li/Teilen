@@ -9,6 +9,10 @@ import com.backend.auth.dto.ClaimInviteRequest;
 import com.backend.auth.dto.ClaimInviteResponse;
 import com.backend.auth.dto.ClaimTokenRequest;
 import com.backend.auth.dto.CreateAccountRequest;
+import com.backend.auth.dto.DeviceCodeRequest;
+import com.backend.auth.dto.DeviceCodeResponse;
+import com.backend.auth.dto.DevicePairRequest;
+import com.backend.auth.dto.DevicePairResponse;
 import com.backend.auth.dto.DeviceResponse;
 import com.backend.auth.dto.HostInviteRequest;
 import com.backend.auth.dto.HostInviteResponse;
@@ -65,7 +69,7 @@ public class AuthController {
         SessionResponse session = auth.createAccount(
                 request.username(), request.password(), request.displayName(),
                 request.deviceName(), request.deviceType(),
-                request.devicePublicKey(), ip, platform
+                request.devicePublicKey(), ip, platform, request.clientFingerprint()
         );
         setSessionCookie(httpResponse, httpRequest, session.token());
         return ResponseEntity.status(HttpStatus.CREATED).body(session);
@@ -81,7 +85,7 @@ public class AuthController {
         SessionResponse session = auth.login(
                 request.username(), request.password(),
                 request.deviceName(), request.deviceType(),
-                request.devicePublicKey(), ip, platform
+                request.devicePublicKey(), ip, platform, request.clientFingerprint()
         );
         setSessionCookie(httpResponse, httpRequest, session.token());
         return ResponseEntity.ok(session);
@@ -131,9 +135,49 @@ public class AuthController {
 
     @PostMapping("/api/auth/device/code")
     @ResponseStatus(HttpStatus.CREATED)
-    public PairingStartResponse startPairing(@Valid @RequestBody StartPairingRequest request) {
-        return auth.startPairing(request.deviceName(), request.deviceType(), request.platform(),
-                request.publicKey(), request.devicePublicKey());
+    public ResponseEntity<?> startPairing(@AuthenticationPrincipal AuthenticatedUser caller,
+                                          @RequestBody(required = false) java.util.Map<String, Object> body,
+                                          HttpServletRequest httpRequest) {
+        String ip = clientIp(httpRequest);
+        String platform = httpRequest.getHeader("User-Agent");
+        if (body == null) {
+            body = java.util.Collections.emptyMap();
+        }
+
+        if (caller != null) {
+            String deviceName = (String) body.get("deviceName");
+            String deviceType = (String) body.get("deviceType");
+            String masterKeyPackage = (String) body.get("masterKeyPackage");
+            if (masterKeyPackage == null) {
+                masterKeyPackage = (String) body.get("keyPackage");
+            }
+            String clientFingerprint = (String) body.get("clientFingerprint");
+            DeviceCodeRequest req = new DeviceCodeRequest(deviceName, deviceType, masterKeyPackage, clientFingerprint);
+            return ResponseEntity.status(HttpStatus.CREATED).body(auth.generateDeviceCode(caller.userId(), req, ip, platform));
+        }
+
+        String deviceName = (String) body.get("deviceName");
+        String deviceType = (String) body.get("deviceType");
+        String newcomerPublicKey = (String) body.get("publicKey");
+        String devicePublicKey = (String) body.get("devicePublicKey");
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                auth.startPairing(deviceName, deviceType, platform, newcomerPublicKey, devicePublicKey));
+    }
+
+    @PostMapping("/api/auth/device/pair")
+    public ResponseEntity<DevicePairResponse> pair(@AuthenticationPrincipal AuthenticatedUser caller,
+                                                   @Valid @RequestBody DevicePairRequest request,
+                                                   HttpServletRequest httpRequest,
+                                                   HttpServletResponse httpResponse) {
+        if (caller == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "authentication required to pair device");
+        }
+        String ip = clientIp(httpRequest);
+        String platform = httpRequest.getHeader("User-Agent");
+        String token = extractBearerToken(httpRequest);
+        DevicePairResponse response = auth.pairDeviceWithCode(caller.userId(), caller.deviceId(), token, request, ip, platform);
+        setSessionCookie(httpResponse, httpRequest, response.token());
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/api/auth/device/host-invite")
@@ -240,6 +284,14 @@ public class AuthController {
                 .sameSite("Strict")
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private String extractBearerToken(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header != null && header.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            return header.substring(7).strip();
+        }
+        return extractCookieToken(request);
     }
 
     private String extractCookieToken(HttpServletRequest request) {

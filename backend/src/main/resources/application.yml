@@ -58,7 +58,7 @@ teilen:
   extend-ttl-seconds: 3600
   # the plan's ephemerality invariant, applied to the /api/v1 relay surface: nothing registered
   # there may outlive this, whatever the client asks for
-  relay-max-ttl-seconds: 600
+  relay-max-ttl-seconds: 86400
   max-content-length: 20000
   # origins allowed to call the API / open the websocket
   allowed-origin-patterns: "*"

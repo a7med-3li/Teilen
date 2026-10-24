@@ -19,6 +19,12 @@ import com.backend.auth.repository.DeviceRepository;
 import com.backend.auth.repository.PairingRequestRepository;
 import com.backend.auth.repository.UserRepository;
 import com.backend.auth.security.AuthRateLimiter;
+import com.backend.auth.dto.DeviceCodeRequest;
+import com.backend.auth.dto.DeviceCodeResponse;
+import com.backend.auth.dto.DevicePairRequest;
+import com.backend.auth.dto.DevicePairResponse;
+import com.backend.item.ShareItemEvent;
+import com.backend.item.ShareItemWebSocketHandler;
 import com.backend.session.SessionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +40,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -51,6 +58,7 @@ public class AuthService {
     private final AuthRateLimiter rateLimiter;
     private final SessionService sessionService;
     private final VaultMergeService vaultMergeService;
+    private final ShareItemWebSocketHandler webSocketHandler;
 
     @Autowired
     public AuthService(UserRepository users,
@@ -60,6 +68,7 @@ public class AuthService {
                        @Autowired(required = false) AuthRateLimiter rateLimiter,
                        @Autowired(required = false) SessionService sessionService,
                        @Autowired(required = false) VaultMergeService vaultMergeService,
+                       @Autowired(required = false) ShareItemWebSocketHandler webSocketHandler,
                        @Value("${teilen.auth.pairing-ttl-seconds:300}") long pairingTtlSeconds,
                        @Value("${teilen.auth.poll-interval-seconds:3}") long pollIntervalSeconds) {
         this.users = users;
@@ -69,6 +78,7 @@ public class AuthService {
         this.rateLimiter = rateLimiter != null ? rateLimiter : new AuthRateLimiter();
         this.sessionService = sessionService;
         this.vaultMergeService = vaultMergeService;
+        this.webSocketHandler = webSocketHandler;
         this.pairingTtl = Duration.ofSeconds(pairingTtlSeconds);
         this.pollInterval = Duration.ofSeconds(pollIntervalSeconds);
     }
@@ -79,7 +89,7 @@ public class AuthService {
                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
                        long pairingTtlSeconds,
                        long pollIntervalSeconds) {
-        this(users, devices, pairings, passwordEncoder, null, null, null, pairingTtlSeconds, pollIntervalSeconds);
+        this(users, devices, pairings, passwordEncoder, null, null, null, null, pairingTtlSeconds, pollIntervalSeconds);
     }
 
     // ------------------------------------------------------------------ accounts
@@ -94,6 +104,15 @@ public class AuthService {
     public SessionResponse createAccount(String rawUsername, String password, String displayName,
                                          String rawDeviceName, String requestedType,
                                          String devicePublicKey, String ipAddress, String platform) {
+        return createAccount(rawUsername, password, displayName, rawDeviceName, requestedType,
+                devicePublicKey, ipAddress, platform, null);
+    }
+
+    @Transactional
+    public SessionResponse createAccount(String rawUsername, String password, String displayName,
+                                         String rawDeviceName, String requestedType,
+                                         String devicePublicKey, String ipAddress, String platform,
+                                         String clientFingerprint) {
         String rateKey = "create:" + (ipAddress != null ? ipAddress : "local");
         rateLimiter.checkAllowed(rateKey);
 
@@ -122,7 +141,7 @@ public class AuthService {
         }
 
         DeviceType type = requestedType != null ? DeviceType.parse(requestedType) : DeviceType.PHONE;
-        SessionResponse session = pairDevice(user, type, rawDeviceName, devicePublicKey, ipAddress, platform, now);
+        SessionResponse session = pairDevice(user, type, rawDeviceName, devicePublicKey, ipAddress, platform, clientFingerprint, now);
         rateLimiter.recordSuccess(rateKey);
         log.info("created account {} and paired device {}", username, session.deviceName());
         return session;
@@ -136,6 +155,13 @@ public class AuthService {
     @Transactional
     public SessionResponse login(String rawUsername, String password, String rawDeviceName, String requestedType,
                                  String devicePublicKey, String ipAddress, String platform) {
+        return login(rawUsername, password, rawDeviceName, requestedType, devicePublicKey, ipAddress, platform, null);
+    }
+
+    @Transactional
+    public SessionResponse login(String rawUsername, String password, String rawDeviceName, String requestedType,
+                                 String devicePublicKey, String ipAddress, String platform,
+                                 String clientFingerprint) {
         String rateKey = "login:" + (ipAddress != null ? ipAddress : "local") + ":" + String.valueOf(rawUsername).toLowerCase();
         rateLimiter.checkAllowed(rateKey);
 
@@ -162,7 +188,7 @@ public class AuthService {
 
         Instant now = Instant.now();
         DeviceType type = requestedType != null ? DeviceType.parse(requestedType) : DeviceType.PHONE;
-        SessionResponse session = pairDevice(user, type, rawDeviceName, devicePublicKey, ipAddress, platform, now);
+        SessionResponse session = pairDevice(user, type, rawDeviceName, devicePublicKey, ipAddress, platform, clientFingerprint, now);
         rateLimiter.recordSuccess(rateKey);
         log.info("logged in account {} on device {}", username, session.deviceName());
         return session;
@@ -528,12 +554,20 @@ public class AuthService {
                             + "account out — pair another one first, or just leave it signed in");
         }
         devices.delete(device);
+        if (webSocketHandler != null) {
+            webSocketHandler.kickDevice(deviceId);
+            webSocketHandler.broadcast(userId, ShareItemEvent.syncAll());
+        }
         log.info("{} revoked device {}", findUser(userId).label(), device.getName());
     }
 
     @Transactional
     public void revokeOtherDevices(UUID userId, UUID currentDeviceId) {
         devices.deleteByUserIdAndIdNot(userId, currentDeviceId);
+        if (webSocketHandler != null) {
+            webSocketHandler.kickOtherDevices(userId, currentDeviceId);
+            webSocketHandler.broadcast(userId, ShareItemEvent.syncAll());
+        }
         log.info("Revoked all other devices for user {} except {}", userId, currentDeviceId);
     }
 
@@ -573,15 +607,140 @@ public class AuthService {
         return new AuthenticatedUser(user.getId(), device.getId(), user.getUsername(), device.getDevicePublicKey());
     }
 
+    @Transactional
+    public DeviceCodeResponse generateDeviceCode(UUID userId, DeviceCodeRequest request, String ipAddress, String platform) {
+        String userCode = Tokens.newUserCode();
+        String userCodeHash = Tokens.hash(Tokens.normalizeUserCode(userCode));
+        String deviceCode = Tokens.newToken();
+        String deviceCodeHash = Tokens.hash(deviceCode);
+
+        DeviceType type = request.deviceType() != null ? DeviceType.parse(request.deviceType()) : DeviceType.WEB;
+        String name = clean(request.deviceName(), 120);
+        if (name == null || name.isBlank()) {
+            name = type == DeviceType.PHONE ? "phone" : "browser";
+        }
+
+        Instant now = Instant.now();
+        Instant expiresAt = now.plus(pairingTtl);
+        PairingRequest pr = new PairingRequest(UUID.randomUUID(), deviceCodeHash, userCodeHash, name, type, clean(platform, 160), now, expiresAt);
+        pr.setUserId(userId);
+        pr.setKeyPackage(request.masterKeyPackage());
+        pr.setHostInvite(true);
+        pairings.save(pr);
+
+        String formattedCode = Tokens.formatUserCode(userCode);
+        return new DeviceCodeResponse(formattedCode, "/api/auth/device/qr.svg?code=" + formattedCode);
+    }
+
+    @Transactional
+    public DevicePairResponse pairDeviceWithCode(UUID callerUserId, UUID callerDeviceId, String callerToken,
+                                                 DevicePairRequest request, String ipAddress, String platform) {
+        String compact = Tokens.normalizeUserCode(request.userCode());
+        if (compact.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "no pairing code given");
+        }
+        PairingRequest pr = pairings.findByUserCodeHash(Tokens.hash(compact))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown_pairing_code"));
+
+        Instant now = Instant.now();
+        if (pr.isExpired(now)) {
+            pairings.delete(pr);
+            throw new ResponseStatusException(HttpStatus.GONE, "pairing code expired");
+        }
+
+        UUID userIdA = pr.getUserId();
+        UUID userIdB = callerUserId;
+
+        String masterKey = pr.getKeyPackage();
+        if (masterKey == null || masterKey.isBlank()) {
+            masterKey = request.scannerMasterKey();
+        }
+
+        if (userIdA != null && !userIdA.equals(userIdB)) {
+            if (vaultMergeService != null) {
+                vaultMergeService.mergeIfDifferent(userIdA, userIdB, true);
+            }
+            if (callerDeviceId != null) {
+                devices.findById(callerDeviceId).ifPresent(d -> {
+                    d.setUserId(userIdA);
+                    d.setLastSeenAt(now);
+                    devices.save(d);
+                });
+            }
+            // Deduplicate devices under userIdA
+            List<Device> allDevices = devices.findByUserIdOrderByCreatedAtAsc(userIdA);
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (Device d : allDevices) {
+                String key = (d.getClientFingerprint() != null && !d.getClientFingerprint().isBlank())
+                        ? "fp:" + d.getClientFingerprint()
+                        : "nt:" + d.getName() + ":" + d.getDeviceType();
+                if (!seen.add(key)) {
+                    if (callerDeviceId == null || !d.getId().equals(callerDeviceId)) {
+                        devices.delete(d);
+                    }
+                }
+            }
+        }
+
+        pr.approve(callerDeviceId, callerToken, now);
+        pr.deliver(now);
+        pairings.save(pr);
+
+        UUID finalUserId = userIdA != null ? userIdA : userIdB;
+        if (webSocketHandler != null) {
+            webSocketHandler.broadcast(finalUserId, ShareItemEvent.syncAll());
+            if (userIdB != null && !userIdB.equals(finalUserId)) {
+                webSocketHandler.broadcast(userIdB, ShareItemEvent.syncAll());
+            }
+        }
+
+        return new DevicePairResponse(callerToken, finalUserId, masterKey);
+    }
+
     private SessionResponse pairDevice(User user, DeviceType type, String rawDeviceName,
                                        String devicePublicKey, String ipAddress, String platform, Instant now) {
+        return pairDevice(user, type, rawDeviceName, devicePublicKey, ipAddress, platform, null, now);
+    }
+
+    private SessionResponse pairDevice(User user, DeviceType type, String rawDeviceName,
+                                       String devicePublicKey, String ipAddress, String platform,
+                                       String clientFingerprint, Instant now) {
         String name = clean(rawDeviceName, 120);
-        if (name.isBlank()) {
+        if (name == null || name.isBlank()) {
             name = type == DeviceType.PHONE ? "phone" : "browser";
         }
         String token = Tokens.newToken();
-        Device device = new Device(UUID.randomUUID(), user.getId(), type, name, Tokens.hash(token),
-                clean(devicePublicKey, 200), clean(ipAddress, 64), clean(platform, 160), now);
+
+        Optional<Device> existing = Optional.empty();
+        if (clientFingerprint != null && !clientFingerprint.isBlank()) {
+            existing = devices.findFirstByUserIdAndClientFingerprint(user.getId(), clientFingerprint);
+        }
+        if (existing.isEmpty()) {
+            existing = devices.findFirstByUserIdAndNameAndDeviceType(user.getId(), name, type);
+        }
+
+        Device device;
+        if (existing.isPresent()) {
+            device = existing.get();
+            device.setTokenHash(Tokens.hash(token));
+            device.setLastSeenAt(now);
+            if (devicePublicKey != null && !devicePublicKey.isBlank()) {
+                device.setDevicePublicKey(clean(devicePublicKey, 200));
+            }
+            if (ipAddress != null && !ipAddress.isBlank()) {
+                device.setIpAddress(clean(ipAddress, 64));
+            }
+            if (platform != null && !platform.isBlank()) {
+                device.setPlatform(clean(platform, 160));
+            }
+            if (clientFingerprint != null && !clientFingerprint.isBlank()) {
+                device.setClientFingerprint(clean(clientFingerprint, 100));
+            }
+        } else {
+            device = new Device(UUID.randomUUID(), user.getId(), type, name, Tokens.hash(token),
+                    clean(devicePublicKey, 200), clean(ipAddress, 64), clean(platform, 160),
+                    clean(clientFingerprint, 100), now);
+        }
         devices.save(device);
         return new SessionResponse(token, device.getId(), device.getName(), UserResponse.from(user));
     }

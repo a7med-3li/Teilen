@@ -128,7 +128,7 @@ public class VaultMergeService {
         .setParameter("secondaryUserId", secondaryUserId)
         .executeUpdate();
 
-        // 4. Move all registered Devices from secondaryUserId to primaryUserId
+        // 4. Move all registered Devices from secondaryUserId to primaryUserId and deduplicate
         entityManager.createNativeQuery("""
             UPDATE devices
             SET user_id = :primaryUserId
@@ -136,6 +136,21 @@ public class VaultMergeService {
         """)
         .setParameter("primaryUserId", primaryUserId)
         .setParameter("secondaryUserId", secondaryUserId)
+        .executeUpdate();
+
+        entityManager.createNativeQuery("""
+            DELETE FROM devices d2
+            USING devices d1
+            WHERE d1.user_id = :primaryUserId
+              AND d2.user_id = :primaryUserId
+              AND d1.id <> d2.id
+              AND (
+                (d1.client_fingerprint IS NOT NULL AND d1.client_fingerprint = d2.client_fingerprint)
+                OR (d1.name = d2.name AND d1.device_type = d2.device_type)
+              )
+              AND d1.last_seen_at >= d2.last_seen_at
+        """)
+        .setParameter("primaryUserId", primaryUserId)
         .executeUpdate();
 
         // 5. Move Push Subscriptions
@@ -181,9 +196,9 @@ public class VaultMergeService {
         .executeUpdate();
 
         // 8. Broadcast real-time WebSocket event to all connected sessions of primary and secondary
-        ShareItemEvent mergeEvent = ShareItemEvent.vaultMerged();
-        webSocketHandler.broadcast(primaryUserId, mergeEvent);
-        webSocketHandler.broadcast(secondaryUserId, mergeEvent);
+        ShareItemEvent syncEvent = ShareItemEvent.syncAll();
+        webSocketHandler.broadcast(primaryUserId, syncEvent);
+        webSocketHandler.broadcast(secondaryUserId, syncEvent);
 
         log.info("Vault merge complete: {} is now unified into {}", secondaryUserId, primaryUserId);
         return new MergeResult(primaryUserId, secondaryUserId, true);

@@ -14,12 +14,38 @@ object Session {
 
     private const val PREFS = "teilen"
     private const val KEY_TOKEN = "device_token"
+    private const val KEY_USER_ID = "user_id"
+    private const val KEY_DEVICE_ID = "device_id"
+    private const val KEY_CLIENT_FINGERPRINT = "client_fingerprint"
     private const val KEY_PHONE = "phone"
     private const val KEY_DEVICE = "device_name"
     private const val KEY_ACTIVE_SESSION = "active_session_id"
 
     /** null when this device is not paired with any account */
     fun token(context: Context): String? = read(context, KEY_TOKEN)
+
+    fun userId(context: Context): String? = read(context, KEY_USER_ID)
+
+    fun setUserId(context: Context, id: String?) {
+        if (id.isNullOrBlank()) prefs(context).edit().remove(KEY_USER_ID).apply()
+        else prefs(context).edit().putString(KEY_USER_ID, id).apply()
+    }
+
+    fun deviceId(context: Context): String? = read(context, KEY_DEVICE_ID)
+
+    fun setDeviceId(context: Context, id: String?) {
+        if (id.isNullOrBlank()) prefs(context).edit().remove(KEY_DEVICE_ID).apply()
+        else prefs(context).edit().putString(KEY_DEVICE_ID, id).apply()
+    }
+
+    fun clientFingerprint(context: Context): String {
+        var fp = read(context, KEY_CLIENT_FINGERPRINT)
+        if (fp.isNullOrBlank()) {
+            fp = java.util.UUID.randomUUID().toString()
+            prefs(context).edit().putString(KEY_CLIENT_FINGERPRINT, fp).apply()
+        }
+        return fp
+    }
 
     /**
      * The number of the account this device last paired with. Kept across sign-out so the number
@@ -73,19 +99,23 @@ object Session {
     /** the only thing that decides whether this device can talk to the backend */
     fun isPaired(context: Context): Boolean = token(context) != null
 
-    fun save(context: Context, token: String, phone: String?, deviceName: String?) {
-        prefs(context).edit()
+    fun save(context: Context, token: String, phone: String?, deviceName: String?, userId: String? = null, deviceId: String? = null) {
+        val editor = prefs(context).edit()
             .putString(KEY_TOKEN, token)
             .putString(KEY_PHONE, phone)
             .putString(KEY_DEVICE, deviceName)
             .remove(KEY_ACTIVE_SESSION)
-            .apply()
+        if (!userId.isNullOrBlank()) editor.putString(KEY_USER_ID, userId)
+        if (!deviceId.isNullOrBlank()) editor.putString(KEY_DEVICE_ID, deviceId)
+        editor.apply()
     }
 
     /** forget the credential; the number stays, so signing back in is one tap less typing */
     fun clear(context: Context) {
         prefs(context).edit()
             .remove(KEY_TOKEN)
+            .remove(KEY_USER_ID)
+            .remove(KEY_DEVICE_ID)
             .remove(KEY_ACTIVE_SESSION)
             .apply()
     }

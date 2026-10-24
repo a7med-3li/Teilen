@@ -88,6 +88,46 @@ public class ShareItemWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    public void kickDevice(UUID deviceId) {
+        if (deviceId == null) return;
+        String payload = serialize(ShareItemEvent.kicked());
+        for (Set<WebSocketSession> userSessions : sessions.values()) {
+            for (WebSocketSession session : userSessions) {
+                Object devAttr = session.getAttributes().get(USER_ID + ".device");
+                if (deviceId.equals(devAttr)) {
+                    try {
+                        synchronized (session) {
+                            session.sendMessage(new TextMessage(payload));
+                            session.close(CloseStatus.POLICY_VIOLATION);
+                        }
+                    } catch (IOException e) {
+                        log.debug("error kicking device session {}: {}", deviceId, e.getMessage());
+                    }
+                }
+            }
+        }
+    }
+
+    public void kickOtherDevices(UUID userId, UUID keepDeviceId) {
+        if (userId == null) return;
+        Set<WebSocketSession> userSessions = sessions.get(userId);
+        if (userSessions == null) return;
+        String payload = serialize(ShareItemEvent.kicked());
+        for (WebSocketSession session : userSessions) {
+            Object devAttr = session.getAttributes().get(USER_ID + ".device");
+            if (devAttr != null && !devAttr.equals(keepDeviceId)) {
+                try {
+                    synchronized (session) {
+                        session.sendMessage(new TextMessage(payload));
+                        session.close(CloseStatus.POLICY_VIOLATION);
+                    }
+                } catch (IOException e) {
+                    log.debug("error kicking other device session: {}", e.getMessage());
+                }
+            }
+        }
+    }
+
     private UUID userIdOf(WebSocketSession session) {
         Object value = session.getAttributes().get(USER_ID);
         return value instanceof UUID userId ? userId : null;
