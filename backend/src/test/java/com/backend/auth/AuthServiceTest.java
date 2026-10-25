@@ -35,6 +35,10 @@ class AuthServiceTest {
     private DeviceRepository devices;
     @Mock
     private PairingRequestRepository pairings;
+    @Mock
+    private com.backend.auth.service.VaultMergeService vaultMergeService;
+    @Mock
+    private jakarta.persistence.EntityManager entityManager;
 
     private PasswordEncoder passwordEncoder;
     private AuthService authService;
@@ -42,7 +46,8 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         passwordEncoder = new BCryptPasswordEncoder();
-        authService = new AuthService(users, devices, pairings, passwordEncoder, 300, 3);
+        authService = new AuthService(users, devices, pairings, passwordEncoder, null, null,
+                vaultMergeService, null, entityManager, 300, 3);
     }
 
     @Test
@@ -210,6 +215,47 @@ class AuthServiceTest {
         assertEquals("keyPackageA", pairResp.masterKey());
         assertEquals("callerTokenB", pairResp.token());
         assertEquals(userAId, deviceB.getUserId());
+    }
+
+    @Test
+    void pairDeviceWithCodeSurvivingUserIsBWhenVaultMergeReturnsB() {
+        UUID userAId = UUID.randomUUID();
+        UUID userBId = UUID.randomUUID();
+        UUID deviceBId = UUID.randomUUID();
+
+        com.backend.auth.dto.DeviceCodeRequest codeReq = new com.backend.auth.dto.DeviceCodeRequest(
+                "Chrome", "WEB", "keyPackageA", "fp-device-a"
+        );
+        com.backend.auth.dto.DeviceCodeResponse codeResp = authService.generateDeviceCode(
+                userAId, codeReq, "127.0.0.1", "Firefox"
+        );
+        ArgumentCaptor<com.backend.auth.entity.PairingRequest> captor =
+                ArgumentCaptor.forClass(com.backend.auth.entity.PairingRequest.class);
+        verify(pairings, atLeastOnce()).save(captor.capture());
+        com.backend.auth.entity.PairingRequest pr = captor.getValue();
+
+        when(pairings.findByUserCodeHash(anyString())).thenReturn(Optional.of(pr));
+        when(pairings.findById(pr.getId())).thenReturn(Optional.of(pr));
+
+        Device deviceB = new Device(deviceBId, userBId, com.backend.auth.enums.DeviceType.PHONE,
+                "Pixel Phone", "tokenHashB", "keyPubB", "127.0.0.1", "Android", "fp-device-b", Instant.now());
+        when(devices.findById(deviceBId)).thenReturn(Optional.of(deviceB));
+
+        // Mock VaultMergeService returning userBId as surviving primary user
+        when(vaultMergeService.mergeIfDifferent(eq(userAId), eq(userBId), eq(true), eq(deviceBId), isNull()))
+                .thenReturn(new com.backend.auth.service.VaultMergeService.MergeResult(userBId, userAId, true));
+
+        com.backend.auth.dto.DevicePairRequest pairReq = new com.backend.auth.dto.DevicePairRequest(
+                codeResp.userCode(), "scannerKeyB", "Pixel Phone", "PHONE", "fp-device-b"
+        );
+        com.backend.auth.dto.DevicePairResponse pairResp = authService.pairDeviceWithCode(
+                userBId, deviceBId, "callerTokenB", pairReq, "127.0.0.1", "Android"
+        );
+
+        assertNotNull(pairResp);
+        assertEquals(userBId, pairResp.userId());
+        assertEquals(userBId, pr.getUserId());
+        assertEquals(userBId, deviceB.getUserId());
     }
 
     @Test

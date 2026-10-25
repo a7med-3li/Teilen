@@ -214,6 +214,7 @@
     let retryDelay = 1000;
     let pollTimer = null;
     let pairTimer = null;
+    let socketConnecting = false;
 
     let pairKey = null;
     let pairUserCode = null;
@@ -1435,15 +1436,19 @@
 
     // ---------- WebSocket Feed & Polling ----------
 
+    let currentWsToken = null;
+    let currentWsSessionId = null;
+    let wsReconnectTimer = null;
+
     async function load() {
         try {
             const path = currentSessionId ? `${API}?sessionId=${encodeURIComponent(currentSessionId)}` : API;
             const response = await api(path);
             if (response.status === 401) {
                 console.warn("Token expired or invalid (401). Clearing and re-provisioning...");
-                localStorage.removeItem("teilen_token"); // check the exact key name used in app.js
-                await provisionAnonymousAccount(); // call your silent account creation function
-                return; // or retry the fetch once with the new token
+                localStorage.removeItem("teilen_token");
+                await silentProvisionVault();
+                return;
             }
             const items = await response.json();
             items.reverse().forEach(item => upsert(item, false));
@@ -1453,15 +1458,28 @@
     }
 
     function connect() {
+        const curToken = token.get() || '';
+        if (!curToken) return;
+
+        if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+            if (currentWsToken === curToken && currentWsSessionId === currentSessionId) {
+                return;
+            }
+        }
+
         stopSocket();
+        currentWsToken = curToken;
+        currentWsSessionId = currentSessionId;
+
         const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-        let wsUrl = `${scheme}://${location.host}/ws?token=${encodeURIComponent(token.get() || '')}`;
+        let wsUrl = `${scheme}://${location.host}/ws?token=${encodeURIComponent(curToken)}`;
         if (currentSessionId) wsUrl += `&sessionId=${encodeURIComponent(currentSessionId)}`;
 
         const live = new WebSocket(wsUrl);
         socket = live;
 
         live.addEventListener('open', () => {
+            if (socket !== live) return;
             retryDelay = 2000;
             setStatus('live', 'live');
             stopPolling();
@@ -1501,16 +1519,32 @@
             socket = null;
             setStatus('reconnecting…', 'offline');
             startPolling();
-            setTimeout(connect, 2000);
+            clearTimeout(wsReconnectTimer);
+            wsReconnectTimer = setTimeout(() => {
+                if (token.get()) {
+                    connect();
+                }
+            }, 2000);
         });
 
-        live.addEventListener('error', () => live.close());
+        live.addEventListener('error', () => {
+            try {
+                live.close();
+            } catch (_) {}
+        });
     }
 
     function stopSocket() {
+        clearTimeout(wsReconnectTimer);
+        currentWsToken = null;
+        currentWsSessionId = null;
         const old = socket;
         socket = null;
-        if (old) old.close();
+        if (old) {
+            try {
+                old.close();
+            } catch (_) {}
+        }
     }
 
     function startPolling() {

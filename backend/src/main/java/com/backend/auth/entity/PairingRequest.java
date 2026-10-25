@@ -210,6 +210,10 @@ public class PairingRequest {
         return deviceId;
     }
 
+    public void setDeviceId(UUID deviceId) {
+        this.deviceId = deviceId;
+    }
+
     public String getTokenValue() {
         return tokenValue;
     }

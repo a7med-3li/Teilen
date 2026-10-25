@@ -82,6 +82,8 @@ class MainActivity : Activity() {
     // WebSocket Real-Time Sync (Part 3)
     private val okHttpClient = OkHttpClient.Builder().build()
     private var feedWebSocket: WebSocket? = null
+    private var lastWsToken: String? = null
+    private var lastWsSessionId: String? = null
     private val wsReconnectHandler = Handler(Looper.getMainLooper())
 
     // Splash overlay
@@ -1936,20 +1938,27 @@ class MainActivity : Activity() {
 
     fun connectFeedWebSocket() {
         val token = Session.token(this) ?: return
+        val activeSession = Session.activeSessionId(this)
+
+        if (feedWebSocket != null && lastWsToken == token && lastWsSessionId == activeSession) {
+            return
+        }
+
+        disconnectFeedWebSocket()
+        lastWsToken = token
+        lastWsSessionId = activeSession
+
         val baseUrl = Server.get(this)
         val wsScheme = if (baseUrl.startsWith("https://", ignoreCase = true)) "wss://" else "ws://"
         val hostAndPort = baseUrl.removePrefix("https://").removePrefix("http://").trimEnd('/')
         var wsUrl = "$wsScheme$hostAndPort/ws?token=${android.net.Uri.encode(token)}"
-        val activeSession = Session.activeSessionId(this)
         if (!activeSession.isNullOrBlank()) {
             wsUrl += "&sessionId=${android.net.Uri.encode(activeSession)}"
         }
 
-        disconnectFeedWebSocket()
-
         try {
             val request = Request.Builder().url(wsUrl).build()
-            feedWebSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
+            val socket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     main.post {
                         refreshFeed(silent = true)
@@ -1963,24 +1972,37 @@ class MainActivity : Activity() {
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                    scheduleWebSocketReconnect()
+                    if (feedWebSocket == webSocket) {
+                        feedWebSocket = null
+                        scheduleWebSocketReconnect()
+                    }
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                    scheduleWebSocketReconnect()
+                    Log.d("MainActivity", "Feed WebSocket failure: ${t.message}")
+                    if (feedWebSocket == webSocket) {
+                        feedWebSocket = null
+                        scheduleWebSocketReconnect()
+                    }
                 }
             })
+            feedWebSocket = socket
         } catch (e: Exception) {
             Log.w("MainActivity", "WebSocket connect error", e)
+            feedWebSocket = null
             scheduleWebSocketReconnect()
         }
     }
 
     fun disconnectFeedWebSocket() {
-        try {
-            feedWebSocket?.close(1000, "Normal Closure")
-        } catch (_: Exception) {}
+        wsReconnectHandler.removeCallbacksAndMessages(null)
+        val ws = feedWebSocket
         feedWebSocket = null
+        lastWsToken = null
+        lastWsSessionId = null
+        try {
+            ws?.close(1000, "Normal Closure")
+        } catch (_: Exception) {}
     }
 
     private fun scheduleWebSocketReconnect() {

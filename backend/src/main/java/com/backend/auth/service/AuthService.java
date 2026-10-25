@@ -672,22 +672,37 @@ public class AuthService {
             masterKey = request.scannerMasterKey();
         }
 
-        if (userIdA != null && !userIdA.equals(userIdB)) {
-            // 1. Move caller's device to userIdA explicitly via JPA before merge
+        UUID survivingUserId = userIdA != null ? userIdA : userIdB;
+
+        if (userIdA != null && userIdB != null && !userIdA.equals(userIdB)) {
+            if (vaultMergeService != null) {
+                try {
+                    com.backend.auth.service.VaultMergeService.MergeResult mergeResult =
+                            vaultMergeService.mergeIfDifferent(userIdA, userIdB, true, callerDeviceId, null);
+                    if (mergeResult != null && mergeResult.primaryUserId() != null) {
+                        survivingUserId = mergeResult.primaryUserId();
+                    }
+                } catch (Exception ex) {
+                    log.error("Vault merge error during pairing: {}", ex.getMessage(), ex);
+                }
+            }
+
+            final UUID targetUserId = survivingUserId;
+            // Crucial: Update in-memory user_id immediately so Hibernate never flushes old secondaryUserId
+            pr.setUserId(targetUserId);
+
             if (callerDeviceId != null) {
                 devices.findById(callerDeviceId).ifPresent(d -> {
-                    d.setUserId(userIdA);
+                    d.setUserId(targetUserId);
                     d.setLastSeenAt(now);
-                    devices.saveAndFlush(d);
+                    try {
+                        devices.saveAndFlush(d);
+                    } catch (Exception ex) {
+                        devices.save(d);
+                    }
                 });
             }
 
-            // 2. Execute database item/session merge
-            if (vaultMergeService != null) {
-                vaultMergeService.mergeIfDifferent(userIdA, userIdB, true, callerDeviceId, null);
-            }
-
-            // 3. Flush and clear persistence context so raw SQL and JPA cache stay synchronized
             if (entityManager != null) {
                 try {
                     entityManager.flush();
@@ -696,31 +711,23 @@ public class AuthService {
                 }
             }
 
-            // 4. Reload PairingRequest in the fresh session to avoid detached state
             pr = pairings.findById(pr.getId()).orElse(pr);
-
-            // 5. Safe deduplication under userIdA (skip callerDeviceId completely)
-            List<Device> allDevices = devices.findByUserIdOrderByCreatedAtAsc(userIdA);
-            java.util.Set<String> seen = new java.util.HashSet<>();
-            for (Device d : allDevices) {
-                if (callerDeviceId != null && d.getId().equals(callerDeviceId)) {
-                    continue;
-                }
-                String key = (d.getClientFingerprint() != null && !d.getClientFingerprint().isBlank())
-                        ? "fp:" + d.getClientFingerprint()
-                        : "nt:" + d.getName() + ":" + d.getDeviceType();
-                if (!seen.add(key)) {
-                    devices.delete(d);
-                }
-            }
+        } else if (userIdA != null) {
+            survivingUserId = userIdA;
+        } else if (userIdB != null) {
+            survivingUserId = userIdB;
         }
 
         try {
+            pr.setUserId(survivingUserId);
+            if (callerDeviceId != null && pr.getDeviceId() == null) {
+                pr.setDeviceId(callerDeviceId);
+            }
             pr.approve(callerDeviceId, callerToken, now);
             pr.deliver(now);
-            if (pairings instanceof org.springframework.data.jpa.repository.JpaRepository<?, ?>) {
+            try {
                 pairings.saveAndFlush(pr);
-            } else {
+            } catch (Exception ex) {
                 pairings.save(pr);
             }
         } catch (Exception ex) {
@@ -728,11 +735,14 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "pairing_failed");
         }
 
-        UUID finalUserId = userIdA != null ? userIdA : userIdB;
+        UUID finalUserId = survivingUserId;
         if (webSocketHandler != null) {
             webSocketHandler.broadcast(finalUserId, ShareItemEvent.syncAll());
             if (userIdB != null && !userIdB.equals(finalUserId)) {
                 webSocketHandler.broadcast(userIdB, ShareItemEvent.syncAll());
+            }
+            if (userIdA != null && !userIdA.equals(finalUserId)) {
+                webSocketHandler.broadcast(userIdA, ShareItemEvent.syncAll());
             }
         }
 

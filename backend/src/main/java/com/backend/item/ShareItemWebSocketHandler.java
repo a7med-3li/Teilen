@@ -49,12 +49,66 @@ public class ShareItemWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        UUID userId = userIdOf(session);
         forget(session);
+        log.info("feed disconnected for {} (status: {})", userId, status);
     }
 
     @Override
     public void handleTextMessage(WebSocketSession session, TextMessage message) {
-        // the feed is read-only; a client sending anything is ignored
+        try {
+            String payload = message.getPayload();
+            if (payload == null) {
+                return;
+            }
+            String trimmed = payload.trim().toLowerCase();
+            if (trimmed.equals("ping") || trimmed.contains("\"ping\"")) {
+                try {
+                    synchronized (session) {
+                        session.sendMessage(new TextMessage("{\"event\":\"pong\"}"));
+                    }
+                } catch (Exception ignored) {
+                }
+                return;
+            }
+        } catch (Exception ignored) {
+            // never throw
+        }
+    }
+
+    @Override
+    public void handleTransportError(WebSocketSession session, Throwable exception) {
+        try {
+            log.debug("feed transport error for session {}: {}", session.getId(),
+                    exception != null ? exception.getMessage() : "unknown");
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    protected void handleBinaryMessage(WebSocketSession session, org.springframework.web.socket.BinaryMessage message) {
+        // Safe no-op: ignore binary frames without dropping the connection
+    }
+
+    @Override
+    protected void handlePongMessage(WebSocketSession session, org.springframework.web.socket.PongMessage message) {
+        // Safe no-op for heartbeat pong responses
+    }
+
+    public void migrateSessions(UUID fromUserId, UUID toUserId) {
+        if (fromUserId == null || toUserId == null || fromUserId.equals(toUserId)) {
+            return;
+        }
+        Set<WebSocketSession> fromSessions = sessions.remove(fromUserId);
+        if (fromSessions != null && !fromSessions.isEmpty()) {
+            for (WebSocketSession session : fromSessions) {
+                if (session.isOpen()) {
+                    session.getAttributes().put(USER_ID, toUserId);
+                    sessions.computeIfAbsent(toUserId, k -> ConcurrentHashMap.newKeySet()).add(session);
+                }
+            }
+            log.info("migrated {} websocket feed sessions from {} to {}", fromSessions.size(), fromUserId, toUserId);
+        }
     }
 
     public void broadcast(UUID userId, ShareItemEvent event) {
@@ -142,7 +196,6 @@ public class ShareItemWebSocketHandler extends TextWebSocketHandler {
         if (open != null && open.remove(session) && open.isEmpty()) {
             sessions.remove(userId, open);
         }
-        log.info("feed disconnected for {}", userId);
     }
 
     private void closeQuietly(WebSocketSession session, CloseStatus status) {

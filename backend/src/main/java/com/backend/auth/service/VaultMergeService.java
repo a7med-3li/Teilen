@@ -108,11 +108,12 @@ public class VaultMergeService {
         Session primaryPersonalSession = sessionService.getOrCreatePersonalSession(primaryUserId);
         UUID primaryPersonalSessionId = primaryPersonalSession.getId();
 
-        // 1. Clear pairing_requests
+        // 1. Reassign pairing_requests to primary to avoid FK violations
         try {
             entityManager.createNativeQuery("""
-                DELETE FROM pairing_requests WHERE user_id = :secondaryUserId
+                UPDATE pairing_requests SET user_id = :primaryUserId, device_id = NULL WHERE user_id = :secondaryUserId
             """)
+            .setParameter("primaryUserId", primaryUserId)
             .setParameter("secondaryUserId", secondaryUserId)
             .executeUpdate();
         } catch (Exception ignored) {
@@ -280,17 +281,16 @@ public class VaultMergeService {
         .setParameter("secondaryUserId", secondaryUserId)
         .executeUpdate();
 
-        // 8. Delete user row
-        entityManager.createNativeQuery("""
-            DELETE FROM users WHERE id = :secondaryUserId
-        """)
-        .setParameter("secondaryUserId", secondaryUserId)
-        .executeUpdate();
+        // 8. Do NOT delete the secondary user row here to avoid FK issues mid-transaction; leave it inert
+        // if possible. (We reassign all references above.)
 
-        // 8. Broadcast real-time WebSocket event to all connected sessions of primary and secondary
-        ShareItemEvent syncEvent = ShareItemEvent.syncAll();
-        webSocketHandler.broadcast(primaryUserId, syncEvent);
-        webSocketHandler.broadcast(secondaryUserId, syncEvent);
+        // 9. Reassign active WebSocket sessions and broadcast sync event
+        if (webSocketHandler != null) {
+            webSocketHandler.migrateSessions(secondaryUserId, primaryUserId);
+            ShareItemEvent syncEvent = ShareItemEvent.syncAll();
+            webSocketHandler.broadcast(primaryUserId, syncEvent);
+            webSocketHandler.broadcast(secondaryUserId, syncEvent);
+        }
 
         log.info("Vault merge complete: {} is now unified into {}", secondaryUserId, primaryUserId);
         return new MergeResult(primaryUserId, secondaryUserId, true);
