@@ -31,12 +31,10 @@
             </div>
             <button id="btn-header-pair" class="btn-header-pair" type="button" title="Pair phone or second device">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="3" width="7" height="7"></rect>
-                    <rect x="14" y="3" width="7" height="7"></rect>
-                    <rect x="3" y="14" width="7" height="7"></rect>
-                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
                 </svg>
-                <span>Pair</span>
+                <span>Pair Device</span>
             </button>
             <button id="account" class="btn-header-account" type="button" hidden aria-expanded="false" style="display:none;">
                 <span id="account-label"></span>
@@ -91,11 +89,7 @@
         </div>
 
         <div id="pair-container">
-            <p class="panel-lead">Scan with Teilen on your phone, or enter this code:</p>
-
-            <div class="qr-wrapper">
-                <img id="qr" class="qr" alt="Pairing code as a QR code" width="220" height="220">
-            </div>
+            <p class="panel-lead">Enter this 8-character pairing code on your phone or second device:</p>
 
             <div class="pair-code-row">
                 <span id="pair-code" class="pair-code-text">····-····</span>
@@ -109,7 +103,7 @@
             </div>
             <div class="pair-state-wrap">
                 <span class="pulsing-dot"></span>
-                <p id="pair-state" class="panel-lead">waiting for approval on your phone…</p>
+                <p id="pair-state" class="panel-lead">waiting for other device…</p>
             </div>
 
             <button id="pair-retry" type="button" class="btn-subtle" hidden>Get a new code</button>
@@ -302,10 +296,7 @@
 <div id="modal-share-session" class="modal-veil" hidden>
     <div class="modal-panel">
         <h3 id="share-session-title">Share Session</h3>
-        <p class="modal-desc">Anyone with this code or QR will join this room and receive its encryption key.</p>
-        <div class="qr-wrapper">
-            <div id="share-session-qr"></div>
-        </div>
+        <p class="modal-desc">Anyone with this 8-character code or link will join this room and receive its encryption key.</p>
         <div class="pair-code-row">
             <p id="share-session-code" class="pair-code">····-····</p>
             <button id="share-session-copy" type="button" class="btn-copy-code" title="Copy invite link">
@@ -347,12 +338,9 @@
             <h3 class="modal-title">Pair Device</h3>
             <button type="button" class="modal-close-btn modal-close" title="Close">✕</button>
         </div>
-        <p class="modal-subtitle">Scan with Teilen on your phone or tablet:</p>
+        <p class="modal-subtitle">Enter this 8-character code on your phone or second browser:</p>
 
-        <div class="modal-qr-container">
-            <div class="qr-wrapper">
-                <img id="modal-qr" class="qr" alt="Pairing QR Code" width="180" height="180">
-            </div>
+        <div class="modal-code-card">
             <div class="pair-code-row">
                 <span id="modal-pair-code" class="pair-code-text">····-····</span>
                 <button id="modal-pair-code-copy" type="button" class="btn-copy-code-styled" title="Copy code">
@@ -363,7 +351,7 @@
                     <span>Copy</span>
                 </button>
             </div>
-            <p id="modal-pair-status" class="pair-status-text">Waiting for phone…</p>
+            <p id="modal-pair-status" class="pair-status-text">Waiting for second device…</p>
         </div>
 
         <div class="modal-divider">

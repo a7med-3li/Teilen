@@ -84,7 +84,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:contentDescription="Pair Devices"
-                    android:src="@drawable/ic_qr_scan"
+                    android:src="@drawable/ic_link"
                     android:tint="@color/accent" />
 
                 <TextView
@@ -1032,30 +1032,6 @@
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:text="@string/pair_intro" />
-
-                            <!-- QR Code Preview Card -->
-                            <FrameLayout
-                                android:id="@+id/pair_qr_card"
-                                android:layout_width="180dp"
-                                android:layout_height="180dp"
-                                android:layout_marginTop="12dp"
-                                android:background="@drawable/bg_input"
-                                android:padding="8dp">
-
-                                <ImageView
-                                    android:id="@+id/pair_qr"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:contentDescription="@string/pair_scan_qr"
-                                    android:scaleType="fitCenter" />
-
-                                <ProgressBar
-                                    android:id="@+id/pair_qr_spinner"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_gravity="center"
-                                    android:indeterminateTint="@color/accent" />
-                            </FrameLayout>
 
                             <!-- 8-Digit Pairing Code & 1-Tap Copy -->
                             <LinearLayout

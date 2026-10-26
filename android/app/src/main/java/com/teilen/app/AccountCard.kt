@@ -14,8 +14,6 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import com.google.zxing.BarcodeFormat
-import com.journeyapps.barcodescanner.BarcodeEncoder
 
 /**
  * The account management component: supports logging in with username & password,
@@ -42,8 +40,6 @@ class AccountCard(
     private val pairStart: Button = activity.findViewById(R.id.account_pair_start)
     private val signOut: Button = activity.findViewById(R.id.sign_out)
     private val pairCode: TextView = activity.findViewById(R.id.pair_code)
-    private val pairQr: ImageView = activity.findViewById(R.id.pair_qr)
-    private val pairQrSpinner: ProgressBar = activity.findViewById(R.id.pair_qr_spinner)
     private val btnCopyPairCode: Button = activity.findViewById(R.id.btn_copy_pair_code)
     private val pairStatus: TextView = activity.findViewById(R.id.pair_status)
     private val pairCancel: Button = activity.findViewById(R.id.pair_cancel)
@@ -297,9 +293,7 @@ class AccountCard(
         val pairingKey = PairingCrypto.newPairingKey()
         var shownCode: String? = null
 
-        pairQrSpinner.visibility = View.VISIBLE
-        pairQr.setImageDrawable(null)
-        pairCode.text = ""
+        pairCode.text = "····-····"
 
         TeilenApi.pairThisDevice(
             url,
@@ -316,21 +310,6 @@ class AccountCard(
                 shownCode = offer.userCode
                 pairCode.text = offer.userCode
                 pairStatus.text = activity.getString(R.string.pair_waiting)
-
-                // Generate QR Code bitmap via ZXing
-                try {
-                    val barcodeEncoder = BarcodeEncoder()
-                    val bitmap = barcodeEncoder.encodeBitmap(
-                        "teilen://pair?code=${offer.userCode}",
-                        BarcodeFormat.QR_CODE,
-                        400,
-                        400
-                    )
-                    pairQr.setImageBitmap(bitmap)
-                    pairQrSpinner.visibility = View.GONE
-                } catch (e: Exception) {
-                    pairQrSpinner.visibility = View.GONE
-                }
 
                 // 1-Tap copy pairing code
                 btnCopyPairCode.setOnClickListener {

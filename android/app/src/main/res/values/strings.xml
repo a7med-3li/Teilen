@@ -22,8 +22,8 @@
     <string name="phone_needed">Enter your username first.</string>
     <string name="username_invalid">Username must be 3–32 characters and contain only letters and numbers.</string>
     <string name="username_taken">This username is already taken. Please choose another.</string>
-    <string name="pair_this_phone">Pair with code / QR instead</string>
-    <string name="pair_intro">Type this code into a device that is already paired with your account, or scan the QR code.</string>
+    <string name="pair_this_phone">Pair with code instead</string>
+    <string name="pair_intro">Type this 8-character code into a device that is already paired with your account.</string>
     <string name="pair_waiting">Waiting for approval. The code stops working in a few minutes.</string>
     <string name="pair_failed">Could not ask for a pairing code — check the backend address below.</string>
     <string name="pair_cancel">Cancel</string>
@@ -248,7 +248,7 @@
     <string name="onboarding_slide1_title">Your Devices, Instantly Connected</string>
     <string name="onboarding_slide1_body">Send text, links, photos, and multi-gigabyte files between your phone and computer. Everything is end-to-end encrypted and self-destructs on your schedule.</string>
     <string name="onboarding_slide2_title">Connect Your Laptop in 3 Seconds</string>
-    <string name="onboarding_slide2_body">Open Teilen in any browser on your computer. Pair right now by scanning the QR code or typing the 8-digit code.</string>
+    <string name="onboarding_slide2_body">Open Teilen in any browser on your computer. Pair right now by typing the 8-character code.</string>
     <string name="onboarding_slide2_scan_qr">Scan QR on Computer</string>
     <string name="onboarding_slide2_enter_code">Enter 8-Digit Code</string>
     <string name="onboarding_slide3_title">No Need to Even Open the App</string>

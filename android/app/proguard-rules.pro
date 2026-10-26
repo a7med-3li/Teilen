@@ -29,10 +29,5 @@
 -keepattributes *Annotation*,InnerClasses,Signature,Exceptions
 -keep class com.teilen.app.** { *; }
  
-# 6. ZXing Barcode Scanner
--keep class com.journeyapps.barcodescanner.** { *; }
--keep class com.google.zxing.** { *; }
--dontwarn com.journeyapps.barcodescanner.**
-
-# 7. Google Play In-App Updates
+# 6. Google Play In-App Updates
 -keep class com.google.android.play.core.** { *; }

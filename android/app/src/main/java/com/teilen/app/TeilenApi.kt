@@ -103,7 +103,9 @@ object TeilenApi {
         val settled: Boolean,
         val mergeKeyPackage: String? = null,
         val token: String? = null,
-        val username: String? = null
+        val username: String? = null,
+        val userId: String? = null,
+        val masterKey: String? = null
     )
 
     /**
@@ -486,7 +488,9 @@ object TeilenApi {
                             settled = true,
                             mergeKeyPackage = reply.str("mergeKeyPackage"),
                             token = reply.str("token"),
-                            username = reply.str("user.username") ?: reply.str("username")
+                            username = reply.str("user.username") ?: reply.str("username"),
+                            userId = reply.str("user.id") ?: reply.str("userId"),
+                            masterKey = reply.str("keyPackage") ?: reply.str("masterKey")
                         )
                     )
                 } else if (reply != null && reply.status == 202) {
@@ -502,7 +506,8 @@ object TeilenApi {
 
     data class DeviceCodeResult(
         val userCode: String,
-        val qrSvgUrl: String
+        val deviceCode: String? = null,
+        val qrSvgUrl: String = ""
     )
 
     fun generateDeviceCode(
@@ -526,8 +531,9 @@ object TeilenApi {
                 val reply = postBlocking(baseUrl, "/api/auth/device/code", token, json)
                 if (reply.ok && reply.body != null) {
                     val code = reply.body.getString("userCode")
-                    val qrUrl = reply.body.optString("qrSvgUrl", "/api/auth/device/qr.svg?code=$code")
-                    Result.success(DeviceCodeResult(code, qrUrl))
+                    val devCode = reply.body.optString("deviceCode").takeIf { it.isNotBlank() }
+                    val qrUrl = reply.body.optString("qrSvgUrl", "")
+                    Result.success(DeviceCodeResult(code, devCode, qrUrl))
                 } else {
                     Result.failure(Exception(reply.message))
                 }

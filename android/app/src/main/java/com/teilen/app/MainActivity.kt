@@ -45,9 +45,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
-import com.google.zxing.BarcodeFormat
-import com.journeyapps.barcodescanner.BarcodeEncoder
-import com.google.zxing.integration.android.IntentIntegrator
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -220,7 +217,7 @@ class MainActivity : Activity() {
 
         account = AccountCard(
             this,
-            onScanQr = { startQrScanner() },
+            onScanQr = {},
             onReplayGuide = { showOnboardingWizard(isReplay = true) },
             onDevicesCountChanged = { count -> updateCompanionBanners(count) }
         ) { applyGating() }
@@ -766,30 +763,9 @@ class MainActivity : Activity() {
     @Deprecated("platform activities only; there is no AndroidX result API here")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode == PortraitCaptureActivity.RESULT_MANUAL_CODE) {
-            promptManualPairCode()
-            return
-        }
         if (requestCode == AppUpdateHelper.REQ_APP_UPDATE) {
             if (resultCode != RESULT_OK) {
                 Log.w("MainActivity", "Update flow failed or canceled by user: $resultCode")
-            }
-            return
-        }
-        val scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
-        if (scanResult != null) {
-            val content = scanResult.contents
-            if (content != null) {
-                if (content.startsWith("teilen://session/join") || (content.startsWith("teilen://session") && content.contains("code="))) {
-                    handleSessionJoinUri(Uri.parse(content))
-                } else {
-                    val code = PairActivity.cleanCode(content)
-                    if (code != null) {
-                        pairWithScannedCode(code)
-                    } else {
-                        account.handleApproveCode(content)
-                    }
-                }
             }
             return
         }
@@ -1286,20 +1262,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun startQrScanner() {
-        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.CAMERA), REQ_CAMERA)
-            return
-        }
-        val integrator = IntentIntegrator(this)
-        integrator.setCaptureActivity(PortraitCaptureActivity::class.java)
-        integrator.setOrientationLocked(true)
-        integrator.setBeepEnabled(false)
-        integrator.setPrompt("")
-        integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
-        integrator.initiateScan()
-    }
-
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
@@ -1312,14 +1274,6 @@ class MainActivity : Activity() {
                 } else {
                     setWatching(false)
                     Toast.makeText(this, R.string.notifications_needed, Toast.LENGTH_LONG).show()
-                }
-            }
-            REQ_CAMERA -> {
-                val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
-                if (granted) {
-                    startQrScanner()
-                } else {
-                    Toast.makeText(this, R.string.camera_permission_required, Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -1509,7 +1463,6 @@ class MainActivity : Activity() {
         // Slide 2 controls
         val txtWebUrl = overlay.findViewById<TextView>(R.id.onboarding_web_url)
         val btnCopyUrl = overlay.findViewById<View>(R.id.onboarding_btn_copy_url)
-        val btnScanQr = overlay.findViewById<View>(R.id.onboarding_btn_scan_qr)
         val btnEnterCode = overlay.findViewById<View>(R.id.onboarding_btn_enter_code)
         val btnShareLink = overlay.findViewById<View>(R.id.onboarding_btn_share_link)
 
@@ -1520,11 +1473,6 @@ class MainActivity : Activity() {
             val cm = getSystemService(ClipboardManager::class.java)
             cm?.setPrimaryClip(ClipData.newPlainText("Teilen Web URL", Server.get(this)))
             Toast.makeText(this, "Web URL copied to clipboard", Toast.LENGTH_SHORT).show()
-        }
-
-        btnScanQr.setOnClickListener {
-            it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-            startQrScanner()
         }
 
         btnEnterCode.setOnClickListener {
@@ -1660,65 +1608,37 @@ class MainActivity : Activity() {
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
         val btnClose = dialogView.findViewById<View>(R.id.dialog_pair_close)
-        val tabScanQr = dialogView.findViewById<TextView>(R.id.tab_scan_qr)
-        val tabMyCode = dialogView.findViewById<TextView>(R.id.tab_my_code)
-        val viewScanQr = dialogView.findViewById<View>(R.id.view_scan_qr)
-        val viewMyCode = dialogView.findViewById<View>(R.id.view_my_code)
+        val pairSpinner = dialogView.findViewById<View>(R.id.dialog_pair_spinner)
+        val pairCode = dialogView.findViewById<TextView>(R.id.dialog_pair_code)
+        val btnCopyCode = dialogView.findViewById<View>(R.id.dialog_btn_copy_code)
+        val btnRefreshCode = dialogView.findViewById<View>(R.id.dialog_btn_refresh_code)
+        val pairStatus = dialogView.findViewById<TextView>(R.id.dialog_pair_status)
 
-        val btnOpenCam = dialogView.findViewById<View>(R.id.btn_open_camera_scanner)
         val inputCode = dialogView.findViewById<EditText>(R.id.input_manual_pair_code)
         val btnSubmitCode = dialogView.findViewById<View>(R.id.btn_submit_manual_code)
         val statusManual = dialogView.findViewById<TextView>(R.id.status_manual_pair)
 
-        val pairQr = dialogView.findViewById<ImageView>(R.id.dialog_pair_qr)
-        val pairSpinner = dialogView.findViewById<View>(R.id.dialog_pair_spinner)
-        val pairCode = dialogView.findViewById<TextView>(R.id.dialog_pair_code)
-        val btnCopyCode = dialogView.findViewById<View>(R.id.dialog_btn_copy_code)
-        val pairStatus = dialogView.findViewById<TextView>(R.id.dialog_pair_status)
-
         btnClose.setOnClickListener { dialog.dismiss() }
 
-        fun setTab(isScan: Boolean) {
-            if (isScan) {
-                tabScanQr.setBackgroundResource(R.drawable.bg_segmented_selected)
-                tabScanQr.setTextColor(getColor(R.color.accent))
-                tabScanQr.setTypeface(null, Typeface.BOLD)
-
-                tabMyCode.background = null
-                tabMyCode.setTextColor(getColor(R.color.text_secondary))
-                tabMyCode.setTypeface(null, Typeface.NORMAL)
-
-                viewScanQr.visibility = View.VISIBLE
-                viewMyCode.visibility = View.GONE
-            } else {
-                tabMyCode.setBackgroundResource(R.drawable.bg_segmented_selected)
-                tabMyCode.setTextColor(getColor(R.color.accent))
-                tabMyCode.setTypeface(null, Typeface.BOLD)
-
-                tabScanQr.background = null
-                tabScanQr.setTextColor(getColor(R.color.text_secondary))
-                tabScanQr.setTypeface(null, Typeface.NORMAL)
-
-                viewScanQr.visibility = View.GONE
-                viewMyCode.visibility = View.VISIBLE
-
-                loadMyPairingCode(pairQr, pairSpinner, pairCode, btnCopyCode, pairStatus, dialog)
-            }
+        var isPollingActive = true
+        dialog.setOnDismissListener {
+            isPollingActive = false
         }
 
-        tabScanQr.setOnClickListener {
+        fun doLoadMyPairingCode() {
+            loadMyPairingCode(
+                pairSpinner = pairSpinner,
+                pairCode = pairCode,
+                btnCopyCode = btnCopyCode,
+                pairStatus = pairStatus,
+                dialog = dialog,
+                isActive = { isPollingActive && dialog.isShowing }
+            )
+        }
+
+        btnRefreshCode.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
-            setTab(true)
-        }
-        tabMyCode.setOnClickListener {
-            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
-            setTab(false)
-        }
-
-        btnOpenCam.setOnClickListener {
-            performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            dialog.dismiss()
-            startQrScanner()
+            doLoadMyPairingCode()
         }
 
         btnSubmitCode.setOnClickListener {
@@ -1742,6 +1662,7 @@ class MainActivity : Activity() {
 
             TeilenApi.pairWithCode(Server.get(this), token ?: "", code, mkB64, devName, fp) { result ->
                 result.onSuccess { pairResult ->
+                    isPollingActive = false
                     statusManual.text = "Connected!"
                     Session.save(this, pairResult.token, Session.phone(this), devName, pairResult.userId)
                     if (!pairResult.masterKey.isNullOrBlank()) {
@@ -1758,6 +1679,7 @@ class MainActivity : Activity() {
                     applyGating()
                     fetchDevicesAndUpdateBanners()
                     refreshFeed()
+                    disconnectFeedWebSocket()
                     connectFeedWebSocket()
                 }.onFailure { err ->
                     statusManual.text = "Pairing failed: ${err.message}"
@@ -1834,16 +1756,17 @@ class MainActivity : Activity() {
         }
 
         loadDevicesList()
+        doLoadMyPairingCode()
         dialog.show()
     }
 
     private fun loadMyPairingCode(
-        pairQr: ImageView,
         pairSpinner: View,
         pairCode: TextView,
         btnCopyCode: View,
         pairStatus: TextView,
-        dialog: AlertDialog
+        dialog: AlertDialog,
+        isActive: () -> Boolean
     ) {
         val url = Server.get(this)
         val devName = listOfNotNull(Build.MANUFACTURER, Build.MODEL)
@@ -1851,8 +1774,7 @@ class MainActivity : Activity() {
             .ifBlank { "Android Device" }
 
         pairSpinner.visibility = View.VISIBLE
-        pairQr.setImageDrawable(null)
-        pairCode.text = ""
+        pairCode.text = "····-····"
 
         val mk = SecureKeyManager.getMasterKey(this)
         val mkB64 = if (mk != null) PairingCrypto.b64(mk) else null
@@ -1866,23 +1788,12 @@ class MainActivity : Activity() {
                 clientFingerprint = fp,
                 masterKeyPackage = mkB64
             ) { result ->
-                if (!dialog.isShowing) return@generateDeviceCode
+                if (!isActive()) return@generateDeviceCode
                 result.onSuccess { offer ->
                     pairSpinner.visibility = View.GONE
                     val code = offer.userCode
                     pairCode.text = code
-                    pairStatus.text = "Scan or enter this code on the other device"
-
-                    try {
-                        val barcodeEncoder = BarcodeEncoder()
-                        val bitmap = barcodeEncoder.encodeBitmap(
-                            "teilen://pair?code=$code",
-                            BarcodeFormat.QR_CODE,
-                            400,
-                            400
-                        )
-                        pairQr.setImageBitmap(bitmap)
-                    } catch (_: Exception) {}
+                    pairStatus.text = "Enter this 8-character code on your phone or computer"
 
                     btnCopyCode.setOnClickListener {
                         val cm = getSystemService(ClipboardManager::class.java)
@@ -1890,13 +1801,42 @@ class MainActivity : Activity() {
                         performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
                         Toast.makeText(this, R.string.code_copied, Toast.LENGTH_SHORT).show()
                     }
+
+                    val devCode = offer.deviceCode
+                    if (!devCode.isNullOrBlank()) {
+                        TeilenApi.pollForSettlement(url, devCode, 2500L) { settleResult ->
+                            if (!isActive()) return@pollForSettlement
+                            if (settleResult.settled) {
+                                val finalToken = settleResult.token ?: token
+                                val finalUserId = settleResult.userId
+                                val finalMasterKey = settleResult.masterKey
+                                Session.save(this, finalToken, Session.phone(this), devName, finalUserId)
+                                if (!finalMasterKey.isNullOrBlank()) {
+                                    val incoming = PairingCrypto.unb64(finalMasterKey)
+                                    val current = SecureKeyManager.getMasterKey(this)
+                                    if (current != null && !current.contentEquals(incoming)) {
+                                        SecureKeyManager.addLegacyKey(this, current)
+                                    }
+                                    SecureKeyManager.setMasterKey(this, incoming)
+                                }
+                                dialog.dismiss()
+                                Toast.makeText(this, "Device paired successfully!", Toast.LENGTH_SHORT).show()
+                                account.render()
+                                applyGating()
+                                fetchDevicesAndUpdateBanners()
+                                refreshFeed()
+                                disconnectFeedWebSocket()
+                                connectFeedWebSocket()
+                            }
+                        }
+                    }
                 }.onFailure { err ->
                     pairSpinner.visibility = View.GONE
                     pairStatus.text = "Failed to generate code: ${err.message}"
                 }
             }
         }, onError = { err ->
-            if (dialog.isShowing) {
+            if (isActive()) {
                 pairSpinner.visibility = View.GONE
                 pairStatus.text = err
             }
@@ -1927,6 +1867,7 @@ class MainActivity : Activity() {
                 applyGating()
                 fetchDevicesAndUpdateBanners()
                 refreshFeed()
+                disconnectFeedWebSocket()
                 connectFeedWebSocket()
             }.onFailure { err ->
                 Toast.makeText(this, "Pairing failed: ${err.message}", Toast.LENGTH_LONG).show()
@@ -2597,19 +2538,9 @@ class MainActivity : Activity() {
                 )
                 val inviteUri = "teilen://session/join?code=$code#key=$keyB64Url"
 
-                val qrView = ImageView(this).apply {
-                    layoutParams = LinearLayout.LayoutParams(400, 400).apply {
-                        gravity = android.view.Gravity.CENTER_HORIZONTAL
-                    }
-                }
-                try {
-                    val bitmap = BarcodeEncoder().encodeBitmap(inviteUri, BarcodeFormat.QR_CODE, 400, 400)
-                    qrView.setImageBitmap(bitmap)
-                } catch (_: Exception) {}
-
                 val textCode = TextView(this).apply {
-                    text = "Code: $code\n\nScan QR or copy invite link to join '${session.name}'."
-                    textSize = 13f
+                    text = "Room Code: $code\n\nShare this 8-character code or invite link to let others join '${session.name}'."
+                    textSize = 14f
                     gravity = android.view.Gravity.CENTER
                     setPadding(0, 16, 0, 0)
                 }
@@ -2617,7 +2548,6 @@ class MainActivity : Activity() {
                 val layout = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     setPadding(32, 24, 32, 16)
-                    addView(qrView)
                     addView(textCode)
                 }
 
@@ -2804,7 +2734,6 @@ class MainActivity : Activity() {
         const val EXTRA_STOP_WATCHING = "teilen.extra.stop_watching"
         private const val REQ_NOTIFICATIONS = 41
         private const val REQ_OPEN_DOCUMENT = 42
-        private const val REQ_CAMERA = 43
         private const val FEED_POLL_MS = 5000L
     }
 }

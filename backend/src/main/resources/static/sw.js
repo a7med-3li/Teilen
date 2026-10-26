@@ -3,7 +3,7 @@
  * leaking — the notification says only that the feed has something new; the feed itself is read
  * with the account token when the tab is focused.
  */
-const CACHE_NAME = 'teilen-v11';
+const CACHE_NAME = 'teilen-v12';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {

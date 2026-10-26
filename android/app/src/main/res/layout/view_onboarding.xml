@@ -328,24 +328,13 @@
                         android:orientation="vertical">
 
                         <Button
-                            android:id="@+id/onboarding_btn_scan_qr"
+                            android:id="@+id/onboarding_btn_enter_code"
                             style="@style/Button.Primary"
                             android:layout_width="match_parent"
                             android:layout_height="50dp"
-                            android:drawableStart="@drawable/ic_qr_scan"
-                            android:drawablePadding="10dp"
-                            android:drawableTint="@color/on_accent"
-                            android:text="@string/onboarding_slide2_scan_qr" />
-
-                        <Button
-                            android:id="@+id/onboarding_btn_enter_code"
-                            style="@style/Button.Outline"
-                            android:layout_width="match_parent"
-                            android:layout_height="48dp"
-                            android:layout_marginTop="10dp"
                             android:drawableStart="@drawable/ic_paste"
                             android:drawablePadding="10dp"
-                            android:drawableTint="@color/text_primary"
+                            android:drawableTint="@color/on_accent"
                             android:text="@string/onboarding_slide2_enter_code" />
 
                         <Button

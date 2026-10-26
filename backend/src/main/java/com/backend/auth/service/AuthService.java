@@ -625,6 +625,11 @@ public class AuthService {
 
     @Transactional
     public DeviceCodeResponse generateDeviceCode(UUID userId, DeviceCodeRequest request, String ipAddress, String platform) {
+        return generateDeviceCode(userId, null, null, request, ipAddress, platform);
+    }
+
+    @Transactional
+    public DeviceCodeResponse generateDeviceCode(UUID userId, UUID deviceId, String token, DeviceCodeRequest request, String ipAddress, String platform) {
         String userCode = Tokens.newUserCode();
         String userCodeHash = Tokens.hash(Tokens.normalizeUserCode(userCode));
         String deviceCode = Tokens.newToken();
@@ -640,12 +645,15 @@ public class AuthService {
         Instant expiresAt = now.plus(pairingTtl);
         PairingRequest pr = new PairingRequest(UUID.randomUUID(), deviceCodeHash, userCodeHash, name, type, clean(platform, 160), now, expiresAt);
         pr.setUserId(userId);
+        if (deviceId != null) {
+            pr.setDeviceId(deviceId);
+        }
         pr.setKeyPackage(request.masterKeyPackage());
         pr.setHostInvite(true);
         pairings.save(pr);
 
         String formattedCode = Tokens.formatUserCode(userCode);
-        return new DeviceCodeResponse(formattedCode, "/api/auth/device/qr.svg?code=" + formattedCode);
+        return new DeviceCodeResponse(formattedCode, deviceCode, "/api/auth/device/qr.svg?code=" + formattedCode);
     }
 
     @Transactional
@@ -723,8 +731,25 @@ public class AuthService {
             if (callerDeviceId != null && pr.getDeviceId() == null) {
                 pr.setDeviceId(callerDeviceId);
             }
-            pr.approve(callerDeviceId, callerToken, now);
-            pr.deliver(now);
+            UUID hostDeviceId = pr.getDeviceId() != null ? pr.getDeviceId() : callerDeviceId;
+            String tokenForClaim = callerToken;
+            final UUID targetUserIdForClaim = survivingUserId;
+            if (hostDeviceId != null) {
+                tokenForClaim = Tokens.newToken();
+                final String finalToken = tokenForClaim;
+                devices.findById(hostDeviceId).ifPresent(d -> {
+                    d.setUserId(targetUserIdForClaim);
+                    d.setTokenHash(Tokens.hash(finalToken));
+                    d.setLastSeenAt(now);
+                    try {
+                        devices.saveAndFlush(d);
+                    } catch (Exception ex) {
+                        devices.save(d);
+                    }
+                });
+            }
+            pr.approve(hostDeviceId, tokenForClaim, now);
+            pr.setKeyPackage(masterKey);
             try {
                 pairings.saveAndFlush(pr);
             } catch (Exception ex) {

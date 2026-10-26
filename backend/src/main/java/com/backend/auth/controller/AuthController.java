@@ -153,7 +153,9 @@ public class AuthController {
             }
             String clientFingerprint = (String) body.get("clientFingerprint");
             DeviceCodeRequest req = new DeviceCodeRequest(deviceName, deviceType, masterKeyPackage, clientFingerprint);
-            return ResponseEntity.status(HttpStatus.CREATED).body(auth.generateDeviceCode(caller.userId(), req, ip, platform));
+            String callerToken = extractBearerToken(httpRequest);
+            return ResponseEntity.status(HttpStatus.CREATED).body(
+                    auth.generateDeviceCode(caller.userId(), caller.deviceId(), callerToken, req, ip, platform));
         }
 
         String deviceName = (String) body.get("deviceName");

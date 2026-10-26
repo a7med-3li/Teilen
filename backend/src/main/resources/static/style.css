@@ -2357,11 +2357,16 @@ button.danger:hover {
     color: #94A3B8;
 }
 
-.modal-qr-container {
+.modal-qr-container,
+.modal-code-card {
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md, 8px);
+    padding: 16px;
 }
 .modal-divider {
     display: flex;

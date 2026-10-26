@@ -111,7 +111,6 @@
     const modalShareSession = el('modal-share-session');
     const shareSessionTitle = el('share-session-title');
     const shareSessionCode = el('share-session-code');
-    const shareSessionQr = el('share-session-qr');
     const shareSessionCopy = el('share-session-copy');
 
     const modalJoinSession = el('modal-join-session');
@@ -134,7 +133,6 @@
     const telemetryCancel = el('telemetry-cancel');
 
     const pairSection = el('pair');
-    const qr = el('qr');
     const pairCode = el('pair-code');
     const pairState = el('pair-state');
     const pairRetry = el('pair-retry');
@@ -179,7 +177,6 @@
     // Header Pair & Modal Pair Elements
     const btnHeaderPair = el('btn-header-pair');
     const modalPairPhone = el('modal-pair-phone');
-    const modalQr = el('modal-qr');
     const modalPairCode = el('modal-pair-code');
     const modalPairCodeCopy = el('modal-pair-code-copy');
     const modalPairStatus = el('modal-pair-status');
@@ -192,7 +189,6 @@
 
     // Hero Pairing Card Elements
     const heroPairingCard = el('hero-pairing-card');
-    const heroQr = el('hero-qr');
     const heroPairCode = el('hero-pair-code');
     const heroCodeCopy = el('hero-code-copy');
     const heroPairStatus = el('hero-pair-status');
@@ -412,6 +408,9 @@
     function closeModal(modal) {
         if (!modal) return;
         modal.hidden = true;
+        if (modal === modalPairPhone) {
+            clearInterval(pairTimer);
+        }
     }
 
     if (sessionSelectorPill) {
@@ -501,11 +500,6 @@
 
             if (shareSessionTitle) shareSessionTitle.textContent = `Share Room: ${current.name}`;
             if (shareSessionCode) shareSessionCode.textContent = invite.inviteCode;
-
-            // Render SVG QR code via backend QR endpoint
-            if (shareSessionQr) {
-                shareSessionQr.innerHTML = `<img src="/api/auth/device/qr.svg?code=${encodeURIComponent(invite.inviteCode)}" width="200" height="200" alt="Room QR">`;
-            }
 
             if (shareSessionCopy) {
                 shareSessionCopy.onclick = async () => {
@@ -1990,19 +1984,57 @@
             const data = await res.json();
             const codeVal = data.userCode;
             pairUserCode = codeVal;
-            const qrSrc = data.qrSvgUrl || (codeVal ? `/api/auth/device/qr.svg?code=${encodeURIComponent(codeVal)}` : null);
 
             if (pairCode && codeVal) pairCode.textContent = codeVal;
-            if (qr && qrSrc) qr.src = qrSrc;
-            if (pairState) pairState.textContent = 'Scan or enter code on phone…';
+            if (pairState) pairState.textContent = 'Enter this 8-character code on your other device…';
 
-            if (heroQr && qrSrc) heroQr.src = qrSrc;
             if (heroPairCode && codeVal) heroPairCode.textContent = codeVal;
-            if (heroPairStatus) heroPairStatus.textContent = 'Scan with phone or enter code below…';
+            if (heroPairStatus) heroPairStatus.textContent = 'Enter this 8-character code on your phone or second browser…';
 
-            if (modalQr && qrSrc) modalQr.src = qrSrc;
             if (modalPairCode && codeVal) modalPairCode.textContent = codeVal;
-            if (modalPairStatus) modalPairStatus.textContent = 'Scan with phone or enter code below…';
+            if (modalPairStatus) modalPairStatus.textContent = 'Enter this 8-character code on your phone or second browser…';
+
+            if (data.deviceCode) {
+                pairTimer = setInterval(async () => {
+                    try {
+                        const tokenRes = await postJson('/api/auth/device/token', {
+                            deviceCode: data.deviceCode
+                        });
+                        if (tokenRes.status === 200) {
+                            clearInterval(pairTimer);
+                            const claimData = await tokenRes.json();
+                            if (claimData.token) {
+                                token.set(claimData.token);
+                            }
+                            if (claimData.user && claimData.user.id) {
+                                setStoredUserId(claimData.user.id);
+                            }
+                            if (claimData.deviceId) {
+                                setStoredDeviceId(claimData.deviceId);
+                            }
+                            if (claimData.keyPackage) {
+                                const incomingKey = TeilenCrypto.unb64(claimData.keyPackage);
+                                const currentMaster = await TeilenCrypto.getMasterKey();
+                                if (currentMaster && TeilenCrypto.b64(currentMaster) !== claimData.keyPackage) {
+                                    await TeilenCrypto.addLegacyKey(currentMaster);
+                                }
+                                await TeilenCrypto.setMasterKey(incomingKey);
+                            }
+                            toast('Device successfully paired!', 'success');
+                            closeModal(modalPairPhone);
+                            stopSocket();
+                            connect();
+                            await loadSessions();
+                            await load();
+                            await loadDevices();
+                        } else if (tokenRes.status !== 202) {
+                            clearInterval(pairTimer);
+                        }
+                    } catch (e) {
+                        // ignore polling error
+                    }
+                }, 2500);
+            }
         } catch (e) {
             console.warn('Pairing generation error:', e);
         }

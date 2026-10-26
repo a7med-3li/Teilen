@@ -86,8 +86,6 @@ dependencies {
     implementation("io.github.webrtc-sdk:android:125.6422.07")
     // the signaling socket only; the data channel carries the actual bytes
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // In-app QR scanner for bidirectional pairing
-    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     // Google Play In-App Updates API
     implementation("com.google.android.play:app-update:2.1.0")
     implementation("com.google.android.play:app-update-ktx:2.1.0")
