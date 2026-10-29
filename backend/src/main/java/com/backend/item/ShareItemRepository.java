@@ -28,4 +28,12 @@ public interface ShareItemRepository extends JpaRepository<ShareItem, UUID> {
 
     /** the sweep looks at everyone at once; broadcasting is sorted out per owner afterwards */
     List<ShareItem> findByExpiresAtLessThanEqual(Instant now);
+
+    long countByExpiresAtGreaterThan(Instant now);
+
+    @Query("SELECT s.type, COUNT(s) FROM ShareItem s WHERE s.expiresAt > :now GROUP BY s.type")
+    List<Object[]> countLiveByType(@Param("now") Instant now);
+
+    @Query("SELECT COUNT(s) FROM ShareItem s WHERE s.expiresAt > :now AND s.expiresAt <= :soon")
+    long countExpiringSoon(@Param("now") Instant now, @Param("soon") Instant soon);
 }

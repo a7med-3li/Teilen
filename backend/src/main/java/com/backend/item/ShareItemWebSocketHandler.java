@@ -206,6 +206,14 @@ public class ShareItemWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    public Set<UUID> getConnectedUserIds() {
+        return new java.util.HashSet<>(sessions.keySet());
+    }
+
+    public int getOpenFeedSocketsCount() {
+        return sessions.values().stream().mapToInt(Set::size).sum();
+    }
+
     private String serialize(ShareItemEvent event) {
         try {
             return objectMapper.writeValueAsString(event);

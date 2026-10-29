@@ -157,4 +157,12 @@ public class SignalWebSocketHandler extends TextWebSocketHandler {
             log.debug("could not close an unidentified signal socket: {}", e.getMessage());
         }
     }
+
+    public Set<UUID> getConnectedUserIds() {
+        return new java.util.HashSet<>(sessions.keySet());
+    }
+
+    public int getOpenSignalSocketsCount() {
+        return sessions.values().stream().mapToInt(Set::size).sum();
+    }
 }

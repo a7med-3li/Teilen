@@ -52,4 +52,9 @@ public class WebConfig implements WebSocketConfigurer, WebMvcConfigurer {
                 .allowedHeaders("*")
                 .maxAge(3600);
     }
+
+    @Override
+    public void addViewControllers(org.springframework.web.servlet.config.annotation.ViewControllerRegistry registry) {
+        registry.addViewController("/admin").setViewName("forward:/admin.html");
+    }
 }

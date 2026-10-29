@@ -27,13 +27,23 @@ public class SessionService {
     private final SessionRepository sessionRepository;
     private final SessionMemberRepository memberRepository;
     private final UserRepository userRepository;
+    private final com.backend.admin.service.TelemetryService telemetryService;
 
     public SessionService(SessionRepository sessionRepository,
                           SessionMemberRepository memberRepository,
                           UserRepository userRepository) {
+        this(sessionRepository, memberRepository, userRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SessionService(SessionRepository sessionRepository,
+                          SessionMemberRepository memberRepository,
+                          UserRepository userRepository,
+                          com.backend.admin.service.TelemetryService telemetryService) {
         this.sessionRepository = sessionRepository;
         this.memberRepository = memberRepository;
         this.userRepository = userRepository;
+        this.telemetryService = telemetryService;
     }
 
     @Transactional
@@ -111,6 +121,9 @@ public class SessionService {
         memberRepository.save(member);
 
         log.info("User {} created shared session {} ({})", userId, sessionId, name);
+        if (telemetryService != null) {
+            telemetryService.recordSessionCreated(userId, name, 1);
+        }
         return new SessionDto(sessionId, name, false, SessionRole.OWNER.name(), 1L, now, request.encryptedSessionKey());
     }
 

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teilen // Admin Telemetry & Live Ops</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+    <!-- Sign-In Gate: Centered Dark-Mode Login Card (No Signup / No Forgot Password) -->
+    <div id="login-view" class="login-overlay">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-badge">
+                    <span class="shield-icon">🛡️</span>
+                    <span>RESTRICTED ACCESS</span>
+                </div>
+                <h1 class="login-title">TEILEN <span class="accent">//</span> ADMIN CONSOLE</h1>
+                <p class="login-subtitle">Zero-Knowledge Telemetry & Operational Analytics</p>
+            </div>
+            <form id="admin-login-form" class="login-form" autocomplete="off">
+                <div class="form-group">
+                    <label for="admin-username">Admin Username</label>
+                    <input type="text" id="admin-username" name="username" placeholder="e.g. admin" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="admin-password">Password</label>
+                    <input type="password" id="admin-password" name="password" placeholder="••••••••••••" required>
+                </div>
+                <div id="login-error" class="login-error" hidden></div>
+                <button type="submit" id="btn-login" class="btn-primary">
+                    <span class="btn-text">Sign In to Console</span>
+                    <span class="btn-icon">→</span>
+                </button>
+            </form>
+            <div class="login-footer">
+                <span class="zk-guarantee">🔒 Direct DB Authentication · Ephemeral Token Sessions</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Authenticated Dashboard View -->
+    <div id="dashboard-view" class="dashboard-wrapper" hidden>
+        <!-- Top Navigation Bar -->
+        <header class="admin-topbar">
+            <div class="topbar-left">
+                <div class="brand">
+                    <span class="brand-logo">⚡</span>
+                    <span class="brand-text">TEILEN <span class="accent">//</span> ADMIN TELEMETRY</span>
+                </div>
+                <div class="live-status-pill">
+                    <span class="pulse-dot"></span>
+                    <span id="auto-refresh-label">Live Auto-Refresh (3s)</span>
+                </div>
+                <div class="privacy-badge">
+                    <svg class="privacy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <span>Zero-Knowledge Privacy Mode Active</span>
+                </div>
+            </div>
+            <div class="topbar-right">
+                <button id="btn-refresh" class="btn-action" title="Refresh Now">
+                    <span class="refresh-icon">↺</span>
+                    <span>Refresh Now</span>
+                </button>
+                <div class="admin-user-pill">
+                    <span class="user-avatar">👤</span>
+                    <span id="admin-username-display">admin</span>
+                </div>
+                <button id="btn-logout" class="btn-secondary" title="Sign Out">
+                    <span>Sign Out</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Container -->
+        <main class="dashboard-content">
+            <!-- Row 1: 4 Hero KPI Cards -->
+            <section class="kpi-grid">
+                <!-- KPI Card 1: Active Right Now -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title">Active Right Now</span>
+                        <span class="kpi-tag live-tag">LIVE PULSE</span>
+                    </div>
+                    <div class="kpi-body">
+                        <div class="kpi-value-row">
+                            <span class="kpi-big-number" id="kpi-online-users">0</span>
+                            <span class="kpi-unit">online</span>
+                        </div>
+                        <div class="kpi-subtitle" id="kpi-active-timeline">0 active in 5m · 0 in 24h</div>
+                    </div>
+                    <div class="kpi-footer">
+                        <div class="kpi-chip">
+                            <span class="chip-dot ws-feed"></span>
+                            <span id="kpi-feed-sockets">0 feed sockets</span>
+                        </div>
+                        <div class="kpi-chip">
+                            <span class="chip-dot ws-signal"></span>
+                            <span id="kpi-signal-sockets">0 signal sockets</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI Card 2: Total Vaults & Users -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title">Total Vaults & Users</span>
+                        <span class="kpi-tag neutral-tag">ACCOUNTS</span>
+                    </div>
+                    <div class="kpi-body">
+                        <div class="kpi-value-row">
+                            <span class="kpi-big-number" id="kpi-total-users">0</span>
+                            <span class="kpi-unit">vaults</span>
+                        </div>
+                        <div class="kpi-subtitle" id="kpi-users-breakdown">0 claimed · 0 anonymous</div>
+                    </div>
+                    <div class="kpi-footer">
+                        <div class="kpi-highlight" id="kpi-multi-device">
+                            <span>0 multi-device vaults</span>
+                        </div>
+                        <div class="kpi-chip" id="kpi-total-devices-chip">
+                            <span>0 paired devices</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI Card 3: Shared Items -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title">Shared Items (Live / All-Time)</span>
+                        <span class="kpi-tag ephemeral-tag">EPHEMERAL</span>
+                    </div>
+                    <div class="kpi-body">
+                        <div class="kpi-value-row">
+                            <span class="kpi-big-number" id="kpi-live-items">0</span>
+                            <span class="kpi-unit">live in feed</span>
+                        </div>
+                        <div class="kpi-subtitle" id="kpi-items-volume">0 shared today · 0 all-time</div>
+                    </div>
+                    <div class="kpi-footer">
+                        <div class="kpi-chip warn-chip" id="kpi-expiring-chip">
+                            <span>⏳ 0 expiring in &lt;10m</span>
+                        </div>
+                        <div class="kpi-chip" id="kpi-custom-rooms-chip">
+                            <span>0 custom rooms</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI Card 4: Encrypted Storage & RAM -->
+                <div class="kpi-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title">Encrypted Storage & JVM</span>
+                        <span class="kpi-tag health-tag">HEALTH</span>
+                    </div>
+                    <div class="kpi-body">
+                        <div class="kpi-value-row">
+                            <span class="kpi-big-number" id="kpi-blob-bytes">0 B</span>
+                            <span class="kpi-unit">disk blobs</span>
+                        </div>
+                        <div class="kpi-subtitle" id="kpi-disk-storage">0 blobs · 0 free disk</div>
+                    </div>
+                    <div class="kpi-footer-column">
+                        <div class="progress-bar-container">
+                            <div class="progress-label-row">
+                                <span>JVM Heap</span>
+                                <span id="kpi-jvm-label">0 / 0 MB (0%)</span>
+                            </div>
+                            <div class="progress-track">
+                                <div id="kpi-jvm-bar" class="progress-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="sys-metrics-row">
+                            <span id="kpi-uptime-label">Uptime: 0s</span>
+                            <span id="kpi-cpu-label">CPU: 0%</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Row 2: Live Activity Stream & Breakdown Charts (2-Column Split) -->
+            <section class="ops-split-grid">
+                <!-- Left (60%): Live Anonymized Activity Stream -->
+                <div class="panel-container activity-stream-panel">
+                    <div class="panel-header">
+                        <div class="panel-title-group">
+                            <h2 class="panel-title">What Users Are Doing Right Now</h2>
+                            <span class="panel-subtitle">Zero-Knowledge Live Action Feed (Capped at 50 events)</span>
+                        </div>
+                        <div class="panel-badge-group">
+                            <span class="feed-counter" id="activity-count-badge">0 events</span>
+                        </div>
+                    </div>
+                    <div class="table-scroll-wrapper">
+                        <table class="activity-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 12%">Time</th>
+                                    <th style="width: 18%">Vault Hash</th>
+                                    <th style="width: 20%">Action</th>
+                                    <th style="width: 32%">Telemetry Summary</th>
+                                    <th style="width: 18%">Platform</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activity-table-body">
+                                <tr>
+                                    <td colspan="5" class="empty-state">Waiting for activity events…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Right (40%): Breakdown Charts (Pure CSS/SVG Bars) -->
+                <div class="panel-container charts-panel">
+                    <!-- Chart 1: Content Type Mix -->
+                    <div class="chart-block">
+                        <div class="chart-header">
+                            <h3 class="chart-title">Content Type Mix (Live Feeds)</h3>
+                            <span class="chart-subtitle" id="content-type-total-label">0 total items</span>
+                        </div>
+                        <div class="chart-body" id="content-type-bars">
+                            <!-- Injected dynamically via admin.js -->
+                        </div>
+                    </div>
+
+                    <!-- Chart 2: Device & Platform Mix -->
+                    <div class="chart-block">
+                        <div class="chart-header">
+                            <h3 class="chart-title">Device & Platform Mix</h3>
+                            <span class="chart-subtitle" id="platform-total-label">0 devices</span>
+                        </div>
+                        <div class="chart-body" id="platform-bars">
+                            <!-- Injected dynamically via admin.js -->
+                        </div>
+                    </div>
+
+                    <!-- Chart 3: TTL Timer Preferences -->
+                    <div class="chart-block">
+                        <div class="chart-header">
+                            <h3 class="chart-title">TTL Timer Preferences (Lifetime)</h3>
+                            <span class="chart-subtitle" id="ttl-total-label">0 choices</span>
+                        </div>
+                        <div class="chart-body" id="ttl-bars">
+                            <!-- Injected dynamically via admin.js -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/admin.js"></script>
+</body>
+</html>

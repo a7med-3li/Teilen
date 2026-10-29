@@ -27,15 +27,26 @@ public class VaultMergeService {
     private final UserRepository userRepository;
     private final SessionService sessionService;
     private final ShareItemWebSocketHandler webSocketHandler;
+    private final com.backend.admin.service.TelemetryService telemetryService;
 
     public VaultMergeService(EntityManager entityManager,
                              UserRepository userRepository,
                              SessionService sessionService,
                              ShareItemWebSocketHandler webSocketHandler) {
+        this(entityManager, userRepository, sessionService, webSocketHandler, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public VaultMergeService(EntityManager entityManager,
+                             UserRepository userRepository,
+                             SessionService sessionService,
+                             ShareItemWebSocketHandler webSocketHandler,
+                             com.backend.admin.service.TelemetryService telemetryService) {
         this.entityManager = entityManager;
         this.userRepository = userRepository;
         this.sessionService = sessionService;
         this.webSocketHandler = webSocketHandler;
+        this.telemetryService = telemetryService;
     }
 
     public static boolean isAnonymous(User u) {
@@ -290,6 +301,10 @@ public class VaultMergeService {
             ShareItemEvent syncEvent = ShareItemEvent.syncAll();
             webSocketHandler.broadcast(primaryUserId, syncEvent);
             webSocketHandler.broadcast(secondaryUserId, syncEvent);
+        }
+
+        if (telemetryService != null) {
+            telemetryService.recordVaultMerged(primaryUserId, secondaryUserId);
         }
 
         log.info("Vault merge complete: {} is now unified into {}", secondaryUserId, primaryUserId);

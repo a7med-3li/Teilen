@@ -40,4 +40,16 @@ public interface DeviceRepository extends JpaRepository<Device, UUID> {
     @Query("update Device d set d.lastSeenAt = :now"
             + " where d.id = :id and d.lastSeenAt < :cutoff")
     int touch(@Param("id") UUID id, @Param("now") Instant now, @Param("cutoff") Instant cutoff);
+
+    @Query("SELECT COUNT(DISTINCT d.userId) FROM Device d WHERE d.lastSeenAt >= :since")
+    long countActiveUsersSince(@Param("since") Instant since);
+
+    @Query("SELECT d.deviceType, COUNT(d) FROM Device d GROUP BY d.deviceType")
+    List<Object[]> countByDeviceType();
+
+    @Query("SELECT d.platform, COUNT(d) FROM Device d GROUP BY d.platform")
+    List<Object[]> countByPlatform();
+
+    @Query(value = "SELECT COUNT(*) FROM (SELECT user_id FROM devices GROUP BY user_id HAVING COUNT(*) >= 2) t", nativeQuery = true)
+    long countMultiDeviceVaults();
 }

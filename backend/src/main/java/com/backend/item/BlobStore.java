@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -102,6 +103,30 @@ public class BlobStore {
 
     public long maxBytes() {
         return maxBytes;
+    }
+
+    public record StorageStats(int fileCount, long totalBytes, long freeBytes, long diskTotalBytes) {
+    }
+
+    public StorageStats getStorageStats() {
+        int count = 0;
+        long totalSize = 0;
+        if (Files.isDirectory(root)) {
+            try (java.util.stream.Stream<Path> stream = Files.list(root)) {
+                List<Path> files = stream.filter(Files::isRegularFile).toList();
+                count = files.size();
+                for (Path p : files) {
+                    try {
+                        totalSize += Files.size(p);
+                    } catch (IOException ignored) {
+                    }
+                }
+            } catch (IOException ignored) {
+            }
+        }
+        long freeBytes = root.toFile().getFreeSpace();
+        long totalDisk = root.toFile().getTotalSpace();
+        return new StorageStats(count, totalSize, freeBytes, totalDisk);
     }
 
     private ResponseStatusException tooLarge() {

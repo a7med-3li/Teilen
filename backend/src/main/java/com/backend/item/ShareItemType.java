@@ -12,6 +12,7 @@ public enum ShareItemType {
     LINK,
     IMAGE,
     PDF,
+    AUDIO,
     FILE;
 
     /**
@@ -38,6 +39,9 @@ public enum ShareItemType {
         if (mime.startsWith("image/")) {
             return IMAGE;
         }
+        if (mime.startsWith("audio/")) {
+            return AUDIO;
+        }
         if (mime.equals("application/pdf")) {
             return PDF;
         }
@@ -51,6 +55,10 @@ public enum ShareItemType {
         String name = fileName.toLowerCase();
         if (name.endsWith(".pdf")) {
             return PDF;
+        }
+        if (name.endsWith(".mp3") || name.endsWith(".wav") || name.endsWith(".m4a")
+                || name.endsWith(".aac") || name.endsWith(".ogg") || name.endsWith(".opus")) {
+            return AUDIO;
         }
         if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg")
                 || name.endsWith(".gif") || name.endsWith(".webp") || name.endsWith(".heic")

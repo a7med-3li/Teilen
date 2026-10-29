@@ -44,7 +44,7 @@ public class ShareItemController {
     @ResponseStatus(HttpStatus.CREATED)
     public ShareItemResponse create(@AuthenticationPrincipal AuthenticatedUser caller,
                                     @Valid @RequestBody CreateShareItemRequest request) {
-        return service.create(caller.userId(), request);
+        return service.create(caller.userId(), caller.deviceId(), request);
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -53,7 +53,7 @@ public class ShareItemController {
                                     @RequestPart("file") MultipartFile file,
                                     @RequestParam(value = "ttlSeconds", required = false) Long ttlSeconds,
                                     @RequestParam(value = "sessionId", required = false) UUID sessionId) {
-        return service.upload(caller.userId(), file, ttlSeconds, sessionId);
+        return service.upload(caller.userId(), caller.deviceId(), file, ttlSeconds, sessionId);
     }
 
     @GetMapping

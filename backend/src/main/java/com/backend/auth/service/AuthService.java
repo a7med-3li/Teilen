@@ -62,6 +62,7 @@ public class AuthService {
     private final VaultMergeService vaultMergeService;
     private final ShareItemWebSocketHandler webSocketHandler;
     private final EntityManager entityManager;
+    private final com.backend.admin.service.TelemetryService telemetryService;
 
     @Autowired
     public AuthService(UserRepository users,
@@ -72,6 +73,7 @@ public class AuthService {
                        @Autowired(required = false) SessionService sessionService,
                        @Autowired(required = false) VaultMergeService vaultMergeService,
                        @Autowired(required = false) ShareItemWebSocketHandler webSocketHandler,
+                       @Autowired(required = false) com.backend.admin.service.TelemetryService telemetryService,
                        EntityManager entityManager,
                        @Value("${teilen.auth.pairing-ttl-seconds:300}") long pairingTtlSeconds,
                        @Value("${teilen.auth.poll-interval-seconds:3}") long pollIntervalSeconds) {
@@ -83,6 +85,7 @@ public class AuthService {
         this.sessionService = sessionService;
         this.vaultMergeService = vaultMergeService;
         this.webSocketHandler = webSocketHandler;
+        this.telemetryService = telemetryService;
         this.entityManager = entityManager;
         this.pairingTtl = Duration.ofSeconds(pairingTtlSeconds);
         this.pollInterval = Duration.ofSeconds(pollIntervalSeconds);
@@ -92,9 +95,23 @@ public class AuthService {
                        DeviceRepository devices,
                        PairingRequestRepository pairings,
                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
+                       AuthRateLimiter rateLimiter,
+                       SessionService sessionService,
+                       VaultMergeService vaultMergeService,
+                       ShareItemWebSocketHandler webSocketHandler,
+                       EntityManager entityManager,
                        long pairingTtlSeconds,
                        long pollIntervalSeconds) {
-        this(users, devices, pairings, passwordEncoder, null, null, null, null, null, pairingTtlSeconds, pollIntervalSeconds);
+        this(users, devices, pairings, passwordEncoder, rateLimiter, sessionService, vaultMergeService, webSocketHandler, null, entityManager, pairingTtlSeconds, pollIntervalSeconds);
+    }
+
+    public AuthService(UserRepository users,
+                       DeviceRepository devices,
+                       PairingRequestRepository pairings,
+                       org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
+                       long pairingTtlSeconds,
+                       long pollIntervalSeconds) {
+        this(users, devices, pairings, passwordEncoder, null, null, null, null, null, null, pairingTtlSeconds, pollIntervalSeconds);
     }
 
     // ------------------------------------------------------------------ accounts
@@ -761,6 +778,12 @@ public class AuthService {
         }
 
         UUID finalUserId = survivingUserId;
+        if (telemetryService != null) {
+            String typeA = pr.getDeviceType() != null ? pr.getDeviceType().name() : "PHONE";
+            String typeB = request.deviceType() != null ? request.deviceType() : "WEB";
+            int totalDevs = devices.findByUserIdOrderByCreatedAtAsc(finalUserId).size();
+            telemetryService.recordDevicePaired(finalUserId, typeA, typeB, totalDevs, platform);
+        }
         if (webSocketHandler != null) {
             webSocketHandler.broadcast(finalUserId, ShareItemEvent.syncAll());
             if (userIdB != null && !userIdB.equals(finalUserId)) {

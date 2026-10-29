@@ -10,4 +10,5 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
     Optional<Session> findByInviteCodeHash(String inviteCodeHash);
     Optional<Session> findByOwnerUserIdAndIsPersonalTrue(UUID ownerUserId);
     List<Session> findByOwnerUserId(UUID ownerUserId);
+    long countByIsPersonalFalse();
 }

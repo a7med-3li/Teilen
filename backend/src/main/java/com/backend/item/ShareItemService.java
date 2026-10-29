@@ -42,6 +42,7 @@ public class ShareItemService {
     private final BlobLinks blobLinks;
     private final PushService pushService;
     private final SessionService sessionService;
+    private final com.backend.admin.service.TelemetryService telemetryService;
 
     private final long defaultTtlSeconds;
     private final long minTtlSeconds;
@@ -53,6 +54,20 @@ public class ShareItemService {
                             BlobLinks blobLinks,
                             PushService pushService,
                             SessionService sessionService,
+                            long defaultTtlSeconds,
+                            long minTtlSeconds,
+                            long maxTtlSeconds) {
+        this(repository, webSocketHandler, blobStore, blobLinks, pushService, sessionService, null, defaultTtlSeconds, minTtlSeconds, maxTtlSeconds);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ShareItemService(ShareItemRepository repository,
+                            ShareItemWebSocketHandler webSocketHandler,
+                            BlobStore blobStore,
+                            BlobLinks blobLinks,
+                            PushService pushService,
+                            SessionService sessionService,
+                            com.backend.admin.service.TelemetryService telemetryService,
                             @Value("${teilen.default-ttl-seconds:3600}") long defaultTtlSeconds,
                             @Value("${teilen.min-ttl-seconds:10}") long minTtlSeconds,
                             @Value("${teilen.max-ttl-seconds:86400}") long maxTtlSeconds) {
@@ -62,6 +77,7 @@ public class ShareItemService {
         this.blobLinks = blobLinks;
         this.pushService = pushService;
         this.sessionService = sessionService;
+        this.telemetryService = telemetryService;
         this.defaultTtlSeconds = defaultTtlSeconds;
         this.minTtlSeconds = minTtlSeconds;
         this.maxTtlSeconds = maxTtlSeconds;
@@ -69,6 +85,11 @@ public class ShareItemService {
 
     @Transactional
     public ShareItemResponse create(UUID userId, CreateShareItemRequest request) {
+        return create(userId, null, request);
+    }
+
+    @Transactional
+    public ShareItemResponse create(UUID userId, UUID deviceId, CreateShareItemRequest request) {
         String content = request.content().strip();
         ShareItemType type = resolveType(request.type(), content);
         Duration ttl = resolveTtl(request.ttlSeconds());
@@ -80,16 +101,26 @@ public class ShareItemService {
 
         log.info("{} created {} item {} in session {} (expires in {}s)", userId, type, item.getId(), sessionId, ttl.toSeconds());
         broadcastToSession(sessionId, userId, ShareItemEvent.created(item, null));
+
+        if (telemetryService != null) {
+            telemetryService.recordItemShared(userId, type, content.getBytes(java.nio.charset.StandardCharsets.UTF_8).length, ttl.toSeconds(), deviceId);
+        }
+
         return ShareItemResponse.from(item, null);
     }
 
     @Transactional
     public ShareItemResponse upload(UUID userId, MultipartFile file, Long requestedTtl) {
-        return upload(userId, file, requestedTtl, null);
+        return upload(userId, null, file, requestedTtl, null);
     }
 
     @Transactional
     public ShareItemResponse upload(UUID userId, MultipartFile file, Long requestedTtl, UUID requestedSessionId) {
+        return upload(userId, null, file, requestedTtl, requestedSessionId);
+    }
+
+    @Transactional
+    public ShareItemResponse upload(UUID userId, UUID deviceId, MultipartFile file, Long requestedTtl, UUID requestedSessionId) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "no file in the upload");
         }
@@ -117,6 +148,11 @@ public class ShareItemService {
                 sessionId, stored.sizeBytes(), ttl.toSeconds());
         String blobUrl = blobLinks.linkFor(id, item.getExpiresAt());
         broadcastToSession(sessionId, userId, ShareItemEvent.created(item, blobUrl));
+
+        if (telemetryService != null) {
+            telemetryService.recordItemShared(userId, type, stored.sizeBytes(), ttl.toSeconds(), deviceId);
+        }
+
         return ShareItemResponse.from(item, blobUrl);
     }
 
@@ -214,8 +250,13 @@ public class ShareItemService {
         if (expired.isEmpty()) {
             return;
         }
+        long freedBytes = expired.stream().mapToLong(it -> it.getSizeBytes() != null ? it.getSizeBytes() : 0).sum();
+        int count = expired.size();
         repository.deleteAll(expired);
-        log.info("reaped {} expired item(s)", expired.size());
+        log.info("reaped {} expired item(s)", count);
+        if (telemetryService != null) {
+            telemetryService.recordReaperPurged(count, freedBytes);
+        }
         expired.forEach(item -> {
             afterCommit(() -> dropBlob(item.getStorageRef()));
             List<UUID> targets = sessionService.getMemberUserIds(item.getSessionId());

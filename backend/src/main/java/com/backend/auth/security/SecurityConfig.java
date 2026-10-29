@@ -29,7 +29,8 @@ public class SecurityConfig {
             "/api/auth/device/pending",
             "/api/auth/device/claim-invite",
             "/api/sessions/join/preview",
-            "/api/version"
+            "/api/version",
+            "/api/admin/login"
     };
 
     @Bean
@@ -43,12 +44,20 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain apiSecurity(HttpSecurity http, BearerTokenFilter bearerTokenFilter)
+    public com.backend.admin.security.AdminAuthFilter adminAuthFilter(com.backend.admin.service.AdminAuthService adminAuthService) {
+        return new com.backend.admin.security.AdminAuthFilter(adminAuthService);
+    }
+
+    @Bean
+    public SecurityFilterChain apiSecurity(HttpSecurity http, BearerTokenFilter bearerTokenFilter,
+                                           com.backend.admin.security.AdminAuthFilter adminAuthFilter)
             throws Exception {
         http
                 .authorizeHttpRequests(rules -> rules
                         .requestMatchers(HttpMethod.GET, "/api/items/*/blob").permitAll()
                         .requestMatchers(OPEN_PATHS).permitAll()
+                        .requestMatchers("/admin", "/admin.html", "/admin.css", "/admin.js").permitAll()
+                        .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers("/ws", "/ws/signal").authenticated()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
@@ -66,6 +75,7 @@ public class SecurityConfig {
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny))
                 .exceptionHandling(exceptions ->
                         exceptions.authenticationEntryPoint(new JsonAuthenticationEntryPoint()))
+                .addFilterBefore(adminAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(bearerTokenFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
