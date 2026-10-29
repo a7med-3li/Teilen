@@ -54,10 +54,11 @@ public class SecurityConfig {
             throws Exception {
         http
                 .authorizeHttpRequests(rules -> rules
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/items/*/blob").permitAll()
                         .requestMatchers(OPEN_PATHS).permitAll()
                         .requestMatchers("/admin", "/admin.html", "/admin.css", "/admin.js").permitAll()
-                        .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
+                        .requestMatchers("/api/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
                         .requestMatchers("/ws", "/ws/signal").authenticated()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())

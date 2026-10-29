@@ -33,6 +33,12 @@ public class AdminAuthFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Allow pre-flight CORS OPTIONS requests
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         // /api/admin/login is open
         if ("/api/admin/login".equals(uri)) {
             filterChain.doFilter(request, response);
@@ -54,7 +60,7 @@ public class AdminAuthFilter extends OncePerRequestFilter {
         var auth = new UsernamePasswordAuthenticationToken(
                 admin,
                 token,
-                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"), new SimpleGrantedAuthority("ADMIN"))
         );
         SecurityContextHolder.getContext().setAuthentication(auth);
 

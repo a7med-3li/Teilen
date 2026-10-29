@@ -78,7 +78,9 @@
 
     function showDashboard() {
         loginView.hidden = true;
+        loginView.style.display = 'none';
         dashboardView.hidden = false;
+        dashboardView.style.display = 'flex';
         const username = sessionStorage.getItem(USERNAME_KEY) || 'admin';
         if (adminUsernameDisplay) adminUsernameDisplay.textContent = username;
         loadStats();
@@ -88,7 +90,9 @@
     function showLogin() {
         stopPolling();
         dashboardView.hidden = true;
+        dashboardView.style.display = 'none';
         loginView.hidden = false;
+        loginView.style.display = 'flex';
         if (loginError) {
             loginError.hidden = true;
             loginError.textContent = '';
@@ -154,7 +158,10 @@
         if (token) {
             fetch('/api/admin/logout', {
                 method: 'POST',
-                headers: { 'X-Admin-Token': token }
+                headers: {
+                    'X-Admin-Token': token,
+                    'Authorization': 'Bearer ' + token
+                }
             }).catch(() => {});
         }
         clearAdminAuth();
@@ -172,10 +179,14 @@
         isFetching = true;
         try {
             const res = await fetch('/api/admin/stats', {
-                headers: { 'X-Admin-Token': token }
+                headers: {
+                    'X-Admin-Token': token,
+                    'Authorization': 'Bearer ' + token
+                }
             });
 
             if (res.status === 401) {
+                console.warn('Admin token unauthorized (401), returning to login');
                 clearAdminAuth();
                 showLogin();
                 return;

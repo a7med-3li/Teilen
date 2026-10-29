@@ -27,6 +27,12 @@ public class BearerTokenFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
+        String uri = request.getRequestURI();
+        if (uri != null && uri.startsWith("/api/admin/")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         String token = resolveToken(request);
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             AuthenticatedUser user = auth.authenticate(token);

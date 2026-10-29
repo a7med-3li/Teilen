@@ -42,6 +42,13 @@ body {
     min-height: 100vh;
 }
 
+[hidden],
+.hidden,
+.login-overlay[hidden],
+.dashboard-wrapper[hidden] {
+    display: none !important;
+}
+
 /* ==========================================================================
    Sign-In Gate: Centered Dark-Mode Login Card
    ========================================================================== */

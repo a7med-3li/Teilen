@@ -9,6 +9,7 @@ import com.backend.admin.dto.AdminStatsResponse;
 import com.backend.admin.service.AdminAuthService;
 import com.backend.admin.service.AdminStatsService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +40,9 @@ class AdminControllersTest {
     @Mock
     private HttpServletRequest httpServletRequest;
 
+    @Mock
+    private HttpServletResponse httpServletResponse;
+
     private AdminAuthController authController;
     private AdminStatsController statsController;
     private AdminViewController viewController;
@@ -58,7 +62,8 @@ class AdminControllersTest {
 
         ResponseEntity<AdminLoginResponse> response = authController.login(
                 new AdminLoginRequest("admin", "pass"),
-                httpServletRequest
+                httpServletRequest,
+                httpServletResponse
         );
 
         assertNotNull(response.getBody());
@@ -68,7 +73,7 @@ class AdminControllersTest {
 
     @Test
     void logoutEndpoint_delegatesToService() {
-        ResponseEntity<Map<String, String>> response = authController.logout("my-token", null);
+        ResponseEntity<Map<String, String>> response = authController.logout("my-token", null, httpServletRequest, httpServletResponse);
         verify(adminAuthService).logout("my-token");
         assertEquals("logged_out", response.getBody().get("status"));
     }
