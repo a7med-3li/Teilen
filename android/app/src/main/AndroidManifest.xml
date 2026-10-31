@@ -45,17 +45,6 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="teilen" android:host="session" />
             </intent-filter>
-            <!-- System Share Sheet file/text receivers -->
-            <intent-filter android:priority="10">
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
-            <intent-filter android:priority="10">
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
         </activity>
 
         <!-- everything this account has shared, read back on the phone -->
@@ -91,37 +80,33 @@
             </intent-filter>
         </activity>
 
-        <!-- zero-friction path: this is what shows up in the system share sheet, for any content type -->
+        <!-- Zero-Friction Headless Share Sheet Receiver: no UI, silent background dispatch -->
         <activity
-            android:name=".ShareActivity"
-            android:excludeFromRecents="true"
+            android:name=".ShareReceiverActivity"
             android:exported="true"
-            android:label="@string/share_label"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
             android:taskAffinity=""
-            android:theme="@style/Theme.Teilen.Share">
-
-            <!-- single item: text, links, images, PDFs, anything at all -->
+            android:launchMode="singleInstance">
             <intent-filter android:priority="10">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="com.teilen.app.category.DIRECT_SHARE" />
-                <data android:mimeType="text/*" />
-                <data android:mimeType="image/*" />
-                <data android:mimeType="application/pdf" />
                 <data android:mimeType="*/*" />
             </intent-filter>
-
-            <!-- multi-select from galleries, file managers, mail attachments -->
             <intent-filter android:priority="10">
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="com.teilen.app.category.DIRECT_SHARE" />
-                <data android:mimeType="text/*" />
-                <data android:mimeType="image/*" />
-                <data android:mimeType="application/pdf" />
                 <data android:mimeType="*/*" />
             </intent-filter>
-
+            <intent-filter android:label="Send to Teilen">
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
             <!-- pins Teilen to the top row of the share sheet (see res/xml/shortcuts.xml) -->
             <meta-data
                 android:name="android.app.shortcuts"

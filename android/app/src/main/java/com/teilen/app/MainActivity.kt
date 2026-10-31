@@ -4,10 +4,12 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -136,6 +138,17 @@ class MainActivity : Activity() {
     // Multi-Session Spaces
     private val currentSessions = ArrayList<TeilenApi.SessionInfo>()
 
+    private val headlessShareReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == TransferService.ACTION_ITEM_SHARED_HEADLESS) {
+                val ok = intent.getBooleanExtra("ok", true)
+                if (ok) {
+                    main.post { refreshFeed(silent = true) }
+                }
+            }
+        }
+    }
+
     // Tab 2: Feed
     private lateinit var feedList: ListView
     private lateinit var feedEmpty: View
@@ -235,6 +248,14 @@ class MainActivity : Activity() {
 
         handleIncomingIntent(intent)
         checkDeepLink(intent)
+
+        val headlessFilter = IntentFilter(TransferService.ACTION_ITEM_SHARED_HEADLESS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(headlessShareReceiver, headlessFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(headlessShareReceiver, headlessFilter)
+        }
 
         if (savedInstanceState == null) {
             startLaunchAnimation()
@@ -356,6 +377,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        runCatching { unregisterReceiver(headlessShareReceiver) }
         appUpdateHelper.stop()
         main.removeCallbacks(feedTicker)
         disconnectFeedWebSocket()
@@ -1429,84 +1451,20 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------------------- Zero-Auth Provisioning & Onboarding
 
-    private var isProvisioningVault = false
-
-    private fun randomAlphanumeric(length: Int): String {
-        val chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-        val bytes = PairingCrypto.randomBytes(length)
-        return bytes.map { chars[(it.toInt() and 0xFF) % chars.length] }.joinToString("")
-    }
-
     fun ensureAuthenticated(onSuccess: (String) -> Unit, onError: ((String) -> Unit)? = null) {
-        val existing = Session.token(this)
-        if (!existing.isNullOrBlank()) {
-            onSuccess(existing)
-            return
-        }
-        provisionSilentVault(
-            onSuccess = onSuccess,
-            onError = onError
-        )
-    }
-
-    private fun provisionSilentVault(onSuccess: ((String) -> Unit)? = null, onError: ((String) -> Unit)? = null) {
-        val existing = Session.token(this)
-        if (!existing.isNullOrBlank()) {
-            onSuccess?.invoke(existing)
-            return
-        }
-        if (isProvisioningVault) {
-            main.postDelayed({
-                val token = Session.token(this)
-                if (!token.isNullOrBlank()) onSuccess?.invoke(token)
-                else onError?.invoke("Vault provisioning in progress")
-            }, 500)
-            return
-        }
-        isProvisioningVault = true
-
-        // 1. Ensure 256-bit K_master and Ed25519 identity keypair
-        SecureKeyManager.ensureMasterKey(this)
-        SecureKeyManager.ensureIdentity(this)
-
-        // 2. Random anonymous workspace handle & cryptographic password (alphanumeric, no hyphens!)
-        val randomChars = randomAlphanumeric(10).lowercase()
-        val handle = "vault$randomChars"
-        val password = randomAlphanumeric(24)
-        val devName = listOf(Build.MANUFACTURER, Build.MODEL)
-            .filterNot { it.isNullOrBlank() }
-            .joinToString(" ")
-            .ifBlank { "Android Device" }
-
-        TeilenApi.createAccount(
-            baseUrl = Server.get(this),
-            phone = handle,
-            password = password,
-            displayName = "Personal Vault",
-            deviceName = devName,
-            clientFingerprint = Session.clientFingerprint(this)
-        ) { result ->
-            isProvisioningVault = false
-            when (result) {
-                is TeilenApi.CreateResult.Created -> {
-                    Session.save(this, result.signedIn.token, handle, devName, result.signedIn.userId, result.signedIn.deviceId)
-                    account.render()
-                    applyGating()
-                    fetchDevicesAndUpdateBanners()
-                    connectFeedWebSocket()
-                    onSuccess?.invoke(result.signedIn.token)
-                }
-                is TeilenApi.CreateResult.Taken -> {
-                    // Retry once with a new random handle
-                    provisionSilentVault(onSuccess, onError)
-                }
-                is TeilenApi.CreateResult.Failed -> {
-                    Log.w("MainActivity", "Silent provisioning failed: ${result.message}")
-                    Toast.makeText(this, "Silent vault setup error: ${result.message}", Toast.LENGTH_LONG).show()
-                    onError?.invoke(result.message)
-                }
+        Session.ensureAuthenticated(this, onSuccess = { token ->
+            main.post {
+                account.render()
+                applyGating()
+                fetchDevicesAndUpdateBanners()
+                connectFeedWebSocket()
+                onSuccess(token)
             }
-        }
+        }, onError = { err ->
+            main.post {
+                onError?.invoke(err)
+            }
+        })
     }
 
     private fun checkFirstLaunchOnboarding() {

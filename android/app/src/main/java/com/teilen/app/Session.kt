@@ -1,6 +1,10 @@
 package com.teilen.app
 
 import android.content.Context
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 
 /**
  * Who this installation is: the bearer token the backend checks on every call, plus what to show
@@ -20,6 +24,80 @@ object Session {
     private const val KEY_PHONE = "phone"
     private const val KEY_DEVICE = "device_name"
     private const val KEY_ACTIVE_SESSION = "active_session_id"
+
+    @Volatile private var isProvisioningVault = false
+
+    /**
+     * Ensures an authenticated session exists silently without opening any UI.
+     * If already paired, invokes [onSuccess] immediately with the existing token.
+     * Otherwise, provisions a silent Personal Vault in the background and saves credentials.
+     */
+    fun ensureAuthenticated(context: Context, onSuccess: (String) -> Unit, onError: ((String) -> Unit)? = null) {
+        val existing = token(context)
+        if (!existing.isNullOrBlank()) {
+            onSuccess(existing)
+            return
+        }
+        provisionSilentVault(context.applicationContext, onSuccess, onError)
+    }
+
+    private fun provisionSilentVault(context: Context, onSuccess: ((String) -> Unit)? = null, onError: ((String) -> Unit)? = null) {
+        val existing = token(context)
+        if (!existing.isNullOrBlank()) {
+            onSuccess?.invoke(existing)
+            return
+        }
+        if (isProvisioningVault) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                val token = token(context)
+                if (!token.isNullOrBlank()) onSuccess?.invoke(token)
+                else onError?.invoke("Vault provisioning in progress")
+            }, 500)
+            return
+        }
+        isProvisioningVault = true
+
+        // 1. Ensure 256-bit K_master and Ed25519 identity keypair
+        SecureKeyManager.ensureMasterKey(context)
+        SecureKeyManager.ensureIdentity(context)
+
+        // 2. Random anonymous workspace handle & cryptographic password
+        val chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+        val bytes = PairingCrypto.randomBytes(10)
+        val randomChars = bytes.map { chars[(it.toInt() and 0xFF) % chars.length] }.joinToString("")
+        val handle = "vault$randomChars"
+        val passBytes = PairingCrypto.randomBytes(24)
+        val password = passBytes.map { chars[(it.toInt() and 0xFF) % chars.length] }.joinToString("")
+        val devName = listOf(Build.MANUFACTURER, Build.MODEL)
+            .filterNot { it.isNullOrBlank() }
+            .joinToString(" ")
+            .ifBlank { "Android Device" }
+
+        TeilenApi.createAccount(
+            baseUrl = Server.get(context),
+            phone = handle,
+            password = password,
+            displayName = "Personal Vault",
+            deviceName = devName,
+            clientFingerprint = clientFingerprint(context)
+        ) { result ->
+            isProvisioningVault = false
+            when (result) {
+                is TeilenApi.CreateResult.Created -> {
+                    save(context, result.signedIn.token, handle, devName, result.signedIn.userId, result.signedIn.deviceId)
+                    onSuccess?.invoke(result.signedIn.token)
+                }
+                is TeilenApi.CreateResult.Taken -> {
+                    // Retry once with a new random handle
+                    provisionSilentVault(context, onSuccess, onError)
+                }
+                is TeilenApi.CreateResult.Failed -> {
+                    Log.w("Session", "Silent provisioning failed: ${result.message}")
+                    onError?.invoke(result.message)
+                }
+            }
+        }
+    }
 
     /** null when this device is not paired with any account */
     fun token(context: Context): String? = read(context, KEY_TOKEN)

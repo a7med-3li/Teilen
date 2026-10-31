@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -16,15 +17,15 @@ import android.os.PowerManager
 import android.net.wifi.WifiManager
 import android.system.Os
 import android.system.OsConstants
+import android.widget.Toast
+import androidx.core.content.IntentCompat
 import java.io.FileInputStream
 
 /**
- * The actual share upload, run away from any screen so it survives the user leaving the share
- * sheet, with its progress in the notification shade instead of an activity window.
- *
- * File descriptors arrive already open rather than as content:// URIs: the read grant for a shared
- * URI lives only as long as the sharing activity's task, so only a descriptor can outlive the tap.
- * Text rides along as its own item, exactly as the share sheet used to send it.
+ * Headless background share upload service.
+ * Runs silently away from any UI so it survives the user staying inside WhatsApp / host app.
+ * Displays a quiet, low-priority progress notification for ongoing transfers, dismisses
+ * it on completion, and shows crisp completion Toasts.
  */
 class TransferService : Service() {
 
@@ -63,17 +64,49 @@ class TransferService : Service() {
         wakeLock?.acquire(60 * 60 * 1000L)
         wifiLock?.acquire()
 
-        currentRoute = getString(R.string.upload_via_relay)
-        startInForeground(workingNotification(getString(R.string.sending), currentRoute))
-
         val text = intent.getStringExtra(EXTRA_TEXT)
-        val fds = fdsOf(intent)
-        val names = intent.getStringArrayListExtra(EXTRA_NAMES).orEmpty()
-        val mimes = intent.getStringArrayListExtra(EXTRA_MIMES).orEmpty()
-        val sizes = sizesOf(intent, fds.size)
+        val uris = urisOf(intent)
+        val fds = fdsOf(intent).toMutableList()
+        val names = intent.getStringArrayListExtra(EXTRA_NAMES)?.toMutableList() ?: mutableListOf()
+        val mimes = intent.getStringArrayListExtra(EXTRA_MIMES)?.toMutableList() ?: mutableListOf()
+        val sizes = sizesOf(intent, fds.size).toMutableList()
         val ttl = intent.getLongExtra(EXTRA_TTL, DEFAULT_TTL_SECONDS)
 
-        transfer(text, fds, names, mimes, sizes, ttl)
+        // If FDs weren't opened in activity, resolve them now via granted URI permissions
+        if (fds.isEmpty() && uris.isNotEmpty()) {
+            for (uri in uris) {
+                val descriptor = runCatching { contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
+                if (descriptor != null) {
+                    fds.add(descriptor)
+                    names.add(TeilenApi.displayName(this, uri))
+                    mimes.add(contentResolver.getType(uri) ?: "application/octet-stream")
+                    sizes.add(TeilenApi.declaredSize(this, uri))
+                }
+            }
+        }
+
+        val initialTitle = if (names.isNotEmpty()) {
+            "Sending ${names.first()} to Teilen..."
+        } else if (!text.isNullOrBlank()) {
+            "Sending to Teilen..."
+        } else {
+            getString(R.string.sending)
+        }
+        currentRoute = getString(R.string.upload_via_relay)
+        startInForeground(workingNotification(initialTitle, currentRoute))
+
+        // Ensure authenticated silently before proceeding
+        Session.ensureAuthenticated(this, onSuccess = {
+            transfer(text, fds, names, mimes, sizes, ttl)
+        }, onError = { err ->
+            val msg = if (err.contains("network", ignoreCase = true) || err.contains("connect", ignoreCase = true)) {
+                "Failed to share: check internet connection"
+            } else {
+                "Failed to share: $err"
+            }
+            done(msg, ok = false, isText = !text.isNullOrBlank(), names = names, text = text)
+        })
+
         return START_NOT_STICKY
     }
 
@@ -97,12 +130,17 @@ class TransferService : Service() {
 
     private fun sendText(text: String, ttl: Long) {
         if (text.isBlank()) {
-            done(getString(R.string.share_empty), ok = false)
+            done(getString(R.string.share_empty), ok = false, isText = true, text = text)
             return
         }
         val activeSession = Session.activeSessionId(this)
-        TeilenApi.send(Server.get(this), Session.token(this), text, ttl, sessionId = activeSession) { ok, message ->
-            done(if (ok) getString(R.string.share_sent) else message, ok)
+        val isUrl = text.startsWith("http://", ignoreCase = true) ||
+                text.startsWith("https://", ignoreCase = true) ||
+                android.util.Patterns.WEB_URL.matcher(text.trim()).matches()
+        val itemType = if (isUrl) "LINK" else "TEXT"
+
+        TeilenApi.send(Server.get(this), Session.token(this), text, ttl, type = itemType, sessionId = activeSession) { ok, message ->
+            done(if (ok) getString(R.string.share_sent) else message, ok = ok, isText = true, text = text)
         }
     }
 
@@ -113,9 +151,6 @@ class TransferService : Service() {
         sizes: List<Long?>,
         ttl: Long
     ) {
-        // The direct LAN path carries exactly one envelope, so a single-file share tries it first
-        // and falls back to the ordinary upload within 2.5 s. A batch goes straight to the server:
-        // one peer connection per file would cost a fallback window each.
         if (fds.size == 1) {
             val name = names.getOrNull(0) ?: "file"
             val mime = mimes.getOrNull(0) ?: "application/octet-stream"
@@ -125,25 +160,24 @@ class TransferService : Service() {
             currentRoute = if (isDirectLanOnly) "⚡ Direct LAN Only (0 Server Bytes)" else getString(R.string.upload_via_lan)
             manager().notify(
                 TeilenNotifications.TRANSFER_ID,
-                workingNotification(getString(R.string.share_uploading, name), currentRoute)
+                workingNotification("Sending $name to Teilen...", currentRoute)
             )
             val engine = LanTransferEngine(this)
             engine.attempt(
                 payload = LanTransferEngine.Payload(name, mime, size) { inputOf(fds[0]) },
                 onProgress = { written, total ->
                     if (!cancelled) {
-                        onProgress(1, 1, written, total)
+                        onProgress(1, 1, written, total, name)
                     }
                 }
             ) { sent ->
                 if (cancelled) return@attempt
                 if (sent) {
-                    done(getString(R.string.share_sent), ok = true)
+                    done(getString(R.string.share_sent), ok = true, isText = false, names = names)
                 } else if (isDirectLanOnly) {
-                    done("Files over 30 MB transfer directly device-to-device. Ensure receiving device is open on same Wi-Fi.", ok = false)
+                    done("Files over 30 MB transfer directly device-to-device. Ensure receiving device is open on same Wi-Fi.", ok = false, isText = false, names = names)
                 } else {
                     currentRoute = getString(R.string.upload_via_relay)
-                    // the LAN read may have moved the descriptor; the server upload starts at zero
                     rewind(fds)
                     uploadViaHttp(fds, names, mimes, sizes, ttl)
                 }
@@ -163,6 +197,11 @@ class TransferService : Service() {
         currentRoute = getString(R.string.upload_via_relay)
         val count = fds.size
         val activeSession = Session.activeSessionId(this)
+        val firstName = names.firstOrNull() ?: "file"
+        manager().notify(
+            TeilenNotifications.TRANSFER_ID,
+            workingNotification("Sending $firstName to Teilen...", currentRoute)
+        )
         TeilenApi.uploadAllFds(
             baseUrl = Server.get(this),
             token = Session.token(this),
@@ -173,16 +212,17 @@ class TransferService : Service() {
             ttlSeconds = ttl,
             sessionId = activeSession,
             onProgress = { index, _, written, total ->
-                if (!cancelled) onProgress(index, count, written, total)
+                val curName = names.getOrNull(index - 1) ?: firstName
+                if (!cancelled) onProgress(index, count, written, total, curName)
             },
             onDone = { outcome ->
                 if (cancelled) return@uploadAllFds
                 val message = when {
                     outcome.failed == 0 && outcome.sent == 1 -> getString(R.string.share_sent)
                     outcome.failed == 0 -> getString(R.string.share_files_sent, outcome.sent)
-                    else -> getString(R.string.file_failed, outcome.lastError ?: "")
+                    else -> outcome.lastError ?: getString(R.string.file_failed, "")
                 }
-                done(message, outcome.failed == 0)
+                done(message, ok = (outcome.failed == 0), isText = false, names = names)
             }
         )
     }
@@ -222,7 +262,7 @@ class TransferService : Service() {
         return builder.build()
     }
 
-    private fun onProgress(index: Int, count: Int, written: Long, total: Long?) {
+    private fun onProgress(index: Int, count: Int, written: Long, total: Long?, fileName: String? = null) {
         if (cancelled) return
         val builder = TeilenNotifications.transferBuilder(this)
             .setContentTitle(getString(R.string.app_name))
@@ -232,21 +272,16 @@ class TransferService : Service() {
         if (!currentRoute.isNullOrBlank()) {
             builder.setSubText(currentRoute)
         }
+        val namePrefix = if (!fileName.isNullOrBlank()) "Sending $fileName to Teilen..." else "Sending to Teilen..."
         if (total != null && total > 0) {
             val percent = ((written * 100) / total).toInt().coerceIn(0, 100)
             builder
-                .setContentText(
-                    getString(
-                        R.string.share_uploading_progress,
-                        TeilenApi.humanSize(written),
-                        TeilenApi.humanSize(total)
-                    )
-                )
+                .setContentText("$namePrefix (${TeilenApi.humanSize(written)} / ${TeilenApi.humanSize(total)})")
                 .setProgress(100, percent, false)
         } else {
             builder
                 .setContentText(
-                    if (count > 1) getString(R.string.share_uploading_n, count) else getString(R.string.sending)
+                    if (count > 1) "Sending $count files to Teilen..." else namePrefix
                 )
                 .setProgress(0, 0, true)
         }
@@ -260,20 +295,56 @@ class TransferService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    /** the last word: detach the ongoing notice and let the outcome replace it, then stop */
-    private fun done(message: String, ok: Boolean) {
+    /** Completion handler: dismisses notification, triggers toast, and broadcasts update */
+    private fun done(
+        message: String,
+        ok: Boolean,
+        isText: Boolean = false,
+        names: List<String> = emptyList(),
+        text: String? = null
+    ) {
         runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
         runCatching { if (wifiLock?.isHeld == true) wifiLock?.release() }
-        val notification = TeilenNotifications.transferBuilder(this)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText(message)
-            .setOngoing(false)
-            .setAutoCancel(true)
-            .setContentIntent(openApp())
-            .setProgress(0, 0, false)
-            .build()
-        stopForeground(STOP_FOREGROUND_DETACH)
-        manager().notify(TeilenNotifications.TRANSFER_ID, notification)
+
+        // Dismiss the progress notification completely on finish
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        manager().cancel(TeilenNotifications.TRANSFER_ID)
+
+        // Toast message on Main thread
+        main.post {
+            val toastText = if (ok) {
+                if (isText || (!text.isNullOrBlank() && names.isEmpty())) {
+                    val isUrl = text?.let {
+                        it.startsWith("http://", ignoreCase = true) ||
+                        it.startsWith("https://", ignoreCase = true) ||
+                        android.util.Patterns.WEB_URL.matcher(it.trim()).matches()
+                    } ?: false
+                    if (isUrl) "✓ Link shared to Teilen" else "✓ Text shared to Teilen"
+                } else {
+                    val filename = names.firstOrNull() ?: "file"
+                    if (names.size > 1) "✓ Shared ${names.size} files to Teilen" else "✓ Shared $filename to Teilen"
+                }
+            } else {
+                if (message.contains("network", ignoreCase = true) ||
+                    message.contains("connect", ignoreCase = true) ||
+                    message.contains("resolve", ignoreCase = true)) {
+                    "Failed to share: check internet connection"
+                } else if (message.startsWith("Failed to share")) {
+                    message
+                } else {
+                    "Failed to share: $message"
+                }
+            }
+            Toast.makeText(applicationContext, toastText, Toast.LENGTH_SHORT).show()
+        }
+
+        // Broadcast local intent so if MainActivity is open in the background, its Feed updates
+        val broadcastIntent = Intent(ACTION_ITEM_SHARED_HEADLESS).apply {
+            setPackage(packageName)
+            putExtra("ok", ok)
+        }
+        sendBroadcast(broadcastIntent)
+
         stopSelf()
     }
 
@@ -294,6 +365,11 @@ class TransferService : Service() {
 
     // ------------------------------------------------------------------ intent plumbing
 
+    private fun urisOf(intent: Intent): List<Uri> {
+        val list = IntentCompat.getParcelableArrayListExtra(intent, EXTRA_URIS, Uri::class.java)
+        return list?.filterNotNull().orEmpty()
+    }
+
     private fun fdsOf(intent: Intent): List<ParcelFileDescriptor> {
         val list = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableArrayListExtra(EXTRA_FDS, ParcelFileDescriptor::class.java)
@@ -312,14 +388,16 @@ class TransferService : Service() {
 
     companion object {
         const val ACTION_CANCEL = "com.teilen.app.action.CANCEL_TRANSFER"
-        private const val ACTION_TRANSFER = "com.teilen.app.action.TRANSFER"
-        private const val EXTRA_TEXT = "text"
-        private const val EXTRA_FDS = "fds"
-        private const val EXTRA_NAMES = "names"
-        private const val EXTRA_MIMES = "mimes"
-        private const val EXTRA_SIZES = "sizes"
-        private const val EXTRA_TTL = "ttl"
-        private const val DEFAULT_TTL_SECONDS = 3600L
+        const val ACTION_TRANSFER = "com.teilen.app.action.TRANSFER"
+        const val ACTION_ITEM_SHARED_HEADLESS = "com.teilen.app.action.ITEM_SHARED_HEADLESS"
+        const val EXTRA_TEXT = "text"
+        const val EXTRA_URIS = "uris"
+        const val EXTRA_FDS = "fds"
+        const val EXTRA_NAMES = "names"
+        const val EXTRA_MIMES = "mimes"
+        const val EXTRA_SIZES = "sizes"
+        const val EXTRA_TTL = "ttl"
+        const val DEFAULT_TTL_SECONDS = 3600L
 
         /**
          * Hands a share to the background. [fds] is null for a text-only share; when present it is
@@ -332,12 +410,16 @@ class TransferService : Service() {
             names: ArrayList<String>?,
             mimes: ArrayList<String>?,
             sizes: LongArray?,
-            ttlSeconds: Long
+            ttlSeconds: Long,
+            uris: ArrayList<Uri>? = null
         ) {
             val intent = Intent(context, TransferService::class.java).apply {
                 action = ACTION_TRANSFER
                 if (!text.isNullOrBlank()) {
                     putExtra(EXTRA_TEXT, text)
+                }
+                if (uris != null && uris.isNotEmpty()) {
+                    putParcelableArrayListExtra(EXTRA_URIS, uris)
                 }
                 if (fds != null && fds.isNotEmpty()) {
                     putParcelableArrayListExtra(EXTRA_FDS, fds)
