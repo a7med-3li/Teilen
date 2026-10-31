@@ -2392,6 +2392,79 @@ button.danger:hover {
     gap: 8px;
     width: 100%;
 }
+.modal-approve-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+.otp-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    flex-wrap: wrap;
+}
+.otp-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.otp-box {
+    width: 36px;
+    height: 44px;
+    background: #0B0F17;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    font-family: var(--font-mono, monospace);
+    font-size: 1.15rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #F1F5F9;
+    text-align: center;
+    outline: none;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+.otp-box:focus {
+    border-color: #38BDF8;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+    background: #111827;
+}
+.otp-separator {
+    color: #64748B;
+    font-weight: 700;
+    font-size: 1.1rem;
+    user-select: none;
+    margin: 0 2px;
+}
+.btn-paste-pill {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #94A3B8;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-left: 4px;
+}
+.btn-paste-pill:hover {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38BDF8;
+    border-color: #38BDF8;
+}
+.session-dropdown-delete-btn,
+.session-modal-delete-btn {
+    color: #EF4444 !important;
+}
+.session-dropdown-delete-btn:hover,
+.session-modal-delete-btn:hover {
+    background: rgba(239, 68, 68, 0.15) !important;
+}
 .modal-code-input {
     flex: 1;
     background: #0B0F17;

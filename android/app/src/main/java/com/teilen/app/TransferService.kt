@@ -91,15 +91,8 @@ class TransferService : Service() {
             sendText(text.orEmpty(), ttl)
             return
         }
-        // a share that carried both text and files becomes two items; text goes first
-        if (!text.isNullOrBlank()) {
-            val activeSession = Session.activeSessionId(this)
-            TeilenApi.send(Server.get(this), Session.token(this), text, ttl, sessionId = activeSession) { _, _ ->
-                sendFiles(fds, names, mimes, sizes, ttl)
-            }
-        } else {
-            sendFiles(fds, names, mimes, sizes, ttl)
-        }
+        // When files are present, upload the actual files without sending fallback captions as text cards
+        sendFiles(fds, names, mimes, sizes, ttl)
     }
 
     private fun sendText(text: String, ttl: Long) {

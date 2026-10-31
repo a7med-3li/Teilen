@@ -101,6 +101,7 @@
     const sessionDropdownJoinBtn = el('session-dropdown-join-btn');
     const sessionPills = el('session-pills');
     const sessionShareBtn = el('session-share-btn');
+    const sessionDeleteBtn = el('session-delete-btn');
     const sessionCreateBtn = el('session-create-btn');
     const sessionJoinBtn = el('session-join-btn');
 
@@ -112,6 +113,7 @@
     const shareSessionTitle = el('share-session-title');
     const shareSessionCode = el('share-session-code');
     const shareSessionCopy = el('share-session-copy');
+    const shareSessionDeleteBtn = el('share-session-delete-btn');
 
     const modalJoinSession = el('modal-join-session');
     const formJoinSession = el('form-join-session');
@@ -349,8 +351,21 @@
         if (activeSessionName) {
             activeSessionName.textContent = activeSession ? activeSession.name : 'Personal Vault';
         }
+        const isCustomRoom = activeSession && !activeSession.isPersonal;
         if (sessionShareBtn) {
-            sessionShareBtn.hidden = !activeSession || activeSession.isPersonal;
+            sessionShareBtn.hidden = !isCustomRoom;
+        }
+        if (sessionDeleteBtn) {
+            sessionDeleteBtn.hidden = !isCustomRoom;
+            if (isCustomRoom) {
+                sessionDeleteBtn.textContent = activeSession.role === 'OWNER' ? '🗑 Delete Room' : '🚪 Leave Room';
+            }
+        }
+        if (shareSessionDeleteBtn) {
+            shareSessionDeleteBtn.hidden = !isCustomRoom;
+            if (isCustomRoom) {
+                shareSessionDeleteBtn.textContent = activeSession.role === 'OWNER' ? '🗑 Delete Room' : '🚪 Leave Room';
+            }
         }
 
         if (sessionDropdownList) {
@@ -513,6 +528,38 @@
             toast('Failed to share session', 'error');
         }
     });
+
+    // Delete / Leave Room Handler
+    async function handleDeleteOrLeaveActiveRoom() {
+        const activeSession = availableSessions.find(s => s.id === currentSessionId);
+        if (!activeSession || activeSession.isPersonal) return;
+        const isOwner = activeSession.role === 'OWNER';
+        const actionWord = isOwner ? 'Delete' : 'Leave';
+        const confirmMsg = isOwner
+            ? `Delete room '${activeSession.name}' and all its shared items?`
+            : `Leave room '${activeSession.name}'?`;
+
+        if (!confirm(confirmMsg)) return;
+
+        try {
+            const response = await api(`${SESSIONS_API}/${activeSession.id}`, { method: 'DELETE' });
+            if (response.ok || response.status === 204) {
+                toast(`Room '${activeSession.name}' ${isOwner ? 'deleted' : 'left'}`, 'success');
+                if (sessionDropdown) sessionDropdown.hidden = true;
+                closeModal(modalShareSession);
+                currentSessionId = 'personal';
+                await loadSessions();
+                await selectSession('personal');
+            } else {
+                toast(`Failed to ${actionWord.toLowerCase()} room: ` + (await why(response)), 'error');
+            }
+        } catch (err) {
+            toast(`Failed to ${actionWord.toLowerCase()} room: ` + err.message, 'error');
+        }
+    }
+
+    sessionDeleteBtn?.addEventListener('click', handleDeleteOrLeaveActiveRoom);
+    shareSessionDeleteBtn?.addEventListener('click', handleDeleteOrLeaveActiveRoom);
 
     // Join Room
     sessionJoinBtn?.addEventListener('click', () => {
@@ -2158,12 +2205,135 @@
         });
     }
 
-    if (modalApproveForm && modalApproveCode) {
+    // 8-Box Segmented Auto-Advancing Pairing Input
+    const otpBoxes = Array.from(document.querySelectorAll('#modal-approve-form .otp-box'));
+    const modalPairPasteBtn = el('modal-pair-paste-btn');
+
+    function getOtpCode() {
+        return otpBoxes.map(b => b.value).join('').toUpperCase();
+    }
+
+    function populateOtpCode(code) {
+        if (!code) return;
+        const clean = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8);
+        otpBoxes.forEach((box, i) => {
+            box.value = clean[i] || '';
+        });
+        if (clean.length === 8) {
+            otpBoxes[7]?.focus();
+            triggerOtpSubmit();
+        } else if (clean.length > 0) {
+            const nextIdx = Math.min(clean.length, 7);
+            otpBoxes[nextIdx]?.focus();
+        }
+    }
+
+    function triggerOtpSubmit() {
+        const raw = getOtpCode();
+        if (raw.length === 8) {
+            const formatted = raw.slice(0, 4) + '-' + raw.slice(4);
+            handlePairWithCode(formatted, modalApproveStatus, otpBoxes[7]);
+        }
+    }
+
+    otpBoxes.forEach((box, index) => {
+        box.addEventListener('input', (e) => {
+            const val = box.value;
+            if (val.length > 1) {
+                populateOtpCode(val);
+                return;
+            }
+            const clean = val.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            box.value = clean;
+            if (clean.length === 1) {
+                if (index < 7) {
+                    otpBoxes[index + 1].focus();
+                    otpBoxes[index + 1].select();
+                } else if (index === 7) {
+                    triggerOtpSubmit();
+                }
+            }
+        });
+
+        box.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace') {
+                if (!box.value && index > 0) {
+                    e.preventDefault();
+                    otpBoxes[index - 1].value = '';
+                    otpBoxes[index - 1].focus();
+                }
+            } else if (e.key === 'ArrowLeft' && index > 0) {
+                e.preventDefault();
+                otpBoxes[index - 1].focus();
+                otpBoxes[index - 1].select();
+            } else if (e.key === 'ArrowRight' && index < 7) {
+                e.preventDefault();
+                otpBoxes[index + 1].focus();
+                otpBoxes[index + 1].select();
+            }
+        });
+
+        box.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+            populateOtpCode(text);
+        });
+
+        box.addEventListener('focus', () => {
+            box.select();
+        });
+    });
+
+    modalPairPasteBtn?.addEventListener('click', async () => {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (text) {
+                populateOtpCode(text);
+            }
+        } catch (err) {
+            toast('Could not access clipboard. Paste manually into the first box.', 'info');
+        }
+    });
+
+    if (modalApproveForm) {
         modalApproveForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            await handlePairWithCode(modalApproveCode.value.trim(), modalApproveStatus, modalApproveCode);
+            const raw = getOtpCode();
+            if (raw.length === 8) {
+                const formatted = raw.slice(0, 4) + '-' + raw.slice(4);
+                await handlePairWithCode(formatted, modalApproveStatus, otpBoxes[0]);
+            } else {
+                if (modalApproveStatus) {
+                    modalApproveStatus.hidden = false;
+                    modalApproveStatus.textContent = 'Please enter all 8 characters';
+                }
+                const firstEmpty = otpBoxes.find(b => !b.value);
+                firstEmpty?.focus();
+            }
         });
     }
+
+    // Global Ctrl+V / Cmd+V Paste-to-Send on Web SPA
+    window.addEventListener('paste', async (e) => {
+        const files = e.clipboardData?.files ? [...e.clipboardData.files] : [];
+        if (files.length === 0) return; // Allow normal text paste to proceed
+
+        e.preventDefault();
+        toast(`Attaching ${files.length} item(s) from clipboard…`, 'info');
+        for (const file of files) {
+            let f = file;
+            if (!f.name || f.name === 'image.png') {
+                const ext = f.type ? (f.type.split('/')[1] || 'png') : 'png';
+                const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                f = new File([f], `pasted-${stamp}.${ext}`, { type: f.type || 'image/png' });
+            }
+            if (f.size > MAX_RELAY_BYTES) {
+                await sendMultiGbLan(f);
+            } else {
+                await uploadCloudFile(f);
+            }
+        }
+    });
 
     // Brand launch animation
     function initLaunchScreen() {
@@ -2204,8 +2374,41 @@
     renderSessionPills();
     refresh();
 
-    document.addEventListener('click', () => {
-        document.querySelectorAll('.card-menu-dropdown').forEach(d => d.hidden = true);
+    // Outside-Click Dismissal for Dropdowns, Card Menus, and Modal Backdrops
+    document.addEventListener('pointerdown', (e) => {
+        // 1. Session switcher dropdown
+        if (sessionDropdown && !sessionDropdown.hidden) {
+            if (!sessionDropdown.contains(e.target) && !sessionSelectorPill?.contains(e.target) && !sessionCreateBtn?.contains(e.target)) {
+                sessionDropdown.hidden = true;
+            }
+        }
+
+        // 2. Card overflow menus
+        document.querySelectorAll('.card-menu-dropdown:not([hidden])').forEach(menu => {
+            const container = menu.closest('.card-menu-container');
+            if (container && !container.contains(e.target)) {
+                menu.hidden = true;
+            }
+        });
+
+        // 3. Modals on backdrop click
+        if (e.target.classList && (e.target.classList.contains('modal-veil') || e.target.classList.contains('modal-backdrop'))) {
+            closeModal(e.target);
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (sessionDropdown && !sessionDropdown.hidden) {
+                sessionDropdown.hidden = true;
+            }
+            document.querySelectorAll('.card-menu-dropdown:not([hidden])').forEach(menu => {
+                menu.hidden = true;
+            });
+            document.querySelectorAll('.modal-veil:not([hidden]), .modal-backdrop:not([hidden])').forEach(m => {
+                closeModal(m);
+            });
+        }
     });
 
     async function initApp() {

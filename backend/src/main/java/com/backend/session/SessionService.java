@@ -3,11 +3,19 @@ package com.backend.session;
 import com.backend.auth.domain.Tokens;
 import com.backend.auth.entity.User;
 import com.backend.auth.repository.UserRepository;
+import com.backend.item.BlobStore;
+import com.backend.item.ShareItem;
+import com.backend.item.ShareItemEvent;
+import com.backend.item.ShareItemRepository;
+import com.backend.item.ShareItemWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
@@ -28,22 +36,38 @@ public class SessionService {
     private final SessionMemberRepository memberRepository;
     private final UserRepository userRepository;
     private final com.backend.admin.service.TelemetryService telemetryService;
+    private final ShareItemRepository shareItemRepository;
+    private final BlobStore blobStore;
+    private final ShareItemWebSocketHandler webSocketHandler;
 
     public SessionService(SessionRepository sessionRepository,
                           SessionMemberRepository memberRepository,
                           UserRepository userRepository) {
-        this(sessionRepository, memberRepository, userRepository, null);
+        this(sessionRepository, memberRepository, userRepository, null, null, null, null);
+    }
+
+    public SessionService(SessionRepository sessionRepository,
+                          SessionMemberRepository memberRepository,
+                          UserRepository userRepository,
+                          com.backend.admin.service.TelemetryService telemetryService) {
+        this(sessionRepository, memberRepository, userRepository, telemetryService, null, null, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public SessionService(SessionRepository sessionRepository,
                           SessionMemberRepository memberRepository,
                           UserRepository userRepository,
-                          com.backend.admin.service.TelemetryService telemetryService) {
+                          com.backend.admin.service.TelemetryService telemetryService,
+                          @Lazy ShareItemRepository shareItemRepository,
+                          @Lazy BlobStore blobStore,
+                          @Lazy ShareItemWebSocketHandler webSocketHandler) {
         this.sessionRepository = sessionRepository;
         this.memberRepository = memberRepository;
         this.userRepository = userRepository;
         this.telemetryService = telemetryService;
+        this.shareItemRepository = shareItemRepository;
+        this.blobStore = blobStore;
+        this.webSocketHandler = webSocketHandler;
     }
 
     @Transactional
@@ -255,15 +279,69 @@ public class SessionService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session not found"));
 
         if (session.isPersonal()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete personal session");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete Personal Vault");
         }
 
-        if (!Objects.equals(session.getOwnerUserId(), callerUserId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the owner can delete this session");
+        boolean isOwner = Objects.equals(session.getOwnerUserId(), callerUserId);
+        SessionMember callerMember = memberRepository.findBySessionIdAndUserId(sessionId, callerUserId).orElse(null);
+
+        if (!isOwner && callerMember == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not a member of this session");
         }
 
-        sessionRepository.delete(session);
-        log.info("Owner {} deleted session {}", callerUserId, sessionId);
+        if (isOwner) {
+            List<UUID> memberUserIds = getMemberUserIds(sessionId);
+            List<String> storageRefs = new ArrayList<>();
+            if (shareItemRepository != null) {
+                List<ShareItem> items = shareItemRepository.findBySessionId(sessionId);
+                for (ShareItem it : items) {
+                    if (it.getStorageRef() != null) {
+                        storageRefs.add(it.getStorageRef());
+                    }
+                }
+                shareItemRepository.deleteAll(items);
+            }
+            memberRepository.deleteBySessionId(sessionId);
+            sessionRepository.delete(session);
+            log.info("Owner {} deleted session {}", callerUserId, sessionId);
+
+            afterCommit(() -> {
+                if (blobStore != null) {
+                    for (String ref : storageRefs) {
+                        try {
+                            blobStore.delete(ref);
+                        } catch (Exception e) {
+                            log.warn("Failed to delete blob {} for session {}", ref, sessionId, e);
+                        }
+                    }
+                }
+                if (webSocketHandler != null && !memberUserIds.isEmpty()) {
+                    webSocketHandler.broadcastToUsers(memberUserIds, ShareItemEvent.syncAll());
+                }
+            });
+        } else {
+            memberRepository.deleteBySessionIdAndUserId(sessionId, callerUserId);
+            log.info("Member {} left session {}", callerUserId, sessionId);
+
+            afterCommit(() -> {
+                if (webSocketHandler != null) {
+                    webSocketHandler.broadcastToUsers(List.of(callerUserId), ShareItemEvent.syncAll());
+                }
+            });
+        }
+    }
+
+    private void afterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                action.run();
+            }
+        });
     }
 
     @Transactional(readOnly = true)

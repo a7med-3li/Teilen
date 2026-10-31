@@ -12,5 +12,6 @@ public interface SessionMemberRepository extends JpaRepository<SessionMember, UU
     Optional<SessionMember> findBySessionIdAndUserId(UUID sessionId, UUID userId);
     boolean existsBySessionIdAndUserId(UUID sessionId, UUID userId);
     void deleteBySessionIdAndUserId(UUID sessionId, UUID userId);
+    void deleteBySessionId(UUID sessionId);
     long countBySessionId(UUID sessionId);
 }

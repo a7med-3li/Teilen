@@ -49,8 +49,9 @@ class ShareActivity : Activity() {
             finish()
             return
         }
-        val text = textOf(incoming)
         val uris = streamUris(incoming)
+        // Strictly prioritize file streams over fallback text captions
+        val text = if (uris.isNullOrEmpty()) textOf(incoming) else null
 
         // nothing can be sent without a token, so the share goes straight to the account card
         // instead of bouncing off a 401 — with the text handed over, so nothing is lost
@@ -184,13 +185,25 @@ class ShareActivity : Activity() {
 
     /** content:// URIs handed over by other apps — not filesystem paths */
     private fun streamUris(intent: Intent): List<Uri>? {
-        val uris = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
+            val list = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+            }
+            val filtered = list?.filterNotNull().orEmpty()
+            if (filtered.isNotEmpty()) return filtered
+            val clipList = (0 until (intent.clipData?.itemCount ?: 0)).mapNotNull { intent.clipData?.getItemAt(it)?.uri }
+            return clipList.ifEmpty { null }
+        }
+        val single = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
         } else {
             @Suppress("DEPRECATION")
-            intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-        }
-        return uris?.filterNotNull()
+            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        } ?: (if (intent.type != "text/plain") intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri else null)
+        return single?.let { listOf(it) }
     }
 
     private fun finishWith(message: String) {

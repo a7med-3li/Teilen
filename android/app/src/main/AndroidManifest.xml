@@ -45,6 +45,17 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="teilen" android:host="session" />
             </intent-filter>
+            <!-- System Share Sheet file/text receivers -->
+            <intent-filter android:priority="10">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter android:priority="10">
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
         </activity>
 
         <!-- everything this account has shared, read back on the phone -->

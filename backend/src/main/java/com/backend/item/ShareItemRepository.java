@@ -17,6 +17,10 @@ public interface ShareItemRepository extends JpaRepository<ShareItem, UUID> {
     /** scoped feed: items belonging to a particular session */
     List<ShareItem> findBySessionIdAndExpiresAtAfterOrderByCreatedAtDesc(UUID sessionId, Instant now);
 
+    List<ShareItem> findBySessionId(UUID sessionId);
+
+    void deleteBySessionId(UUID sessionId);
+
     /** personal feed: items belonging to user where sessionId is null OR sessionId equals personal session */
     @Query("SELECT s FROM ShareItem s WHERE s.userId = :userId AND (s.sessionId IS NULL OR s.sessionId = :personalSessionId) AND s.expiresAt > :now ORDER BY s.createdAt DESC")
     List<ShareItem> findPersonalItems(@Param("userId") UUID userId, @Param("personalSessionId") UUID personalSessionId, @Param("now") Instant now);

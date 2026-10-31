@@ -64,6 +64,7 @@
                     <div class="session-dropdown-footer">
                         <button type="button" id="session-dropdown-join-btn" class="session-dropdown-btn">Join Room by Code</button>
                         <button type="button" id="session-share-btn" class="session-dropdown-btn" hidden>Share Room</button>
+                        <button type="button" id="session-delete-btn" class="session-dropdown-btn session-dropdown-delete-btn" hidden>🗑 Delete Room</button>
                     </div>
                 </div>
             </div>
@@ -308,6 +309,7 @@
         </div>
         <div class="modal-actions">
             <button type="button" class="btn-subtle modal-close">Done</button>
+            <button type="button" id="share-session-delete-btn" class="btn-subtle session-modal-delete-btn" hidden>🗑 Delete Room</button>
         </div>
     </div>
 </div>
@@ -358,9 +360,24 @@
             <span>OR ENTER CODE FROM PHONE</span>
         </div>
 
-        <form id="modal-approve-form" class="modal-approve-row" autocomplete="off">
-            <input id="modal-approve-code" type="text" class="modal-code-input" placeholder="XXXX-XXXX" maxlength="9" autocapitalize="characters" spellcheck="false" required>
-            <button type="submit" class="btn-connect-device">Connect Device</button>
+        <form id="modal-approve-form" class="modal-approve-container" autocomplete="off">
+            <div class="otp-container">
+                <div class="otp-group">
+                    <input type="text" class="otp-box" maxlength="1" data-index="0" inputmode="text" autocomplete="off" spellcheck="false">
+                    <input type="text" class="otp-box" maxlength="1" data-index="1" inputmode="text" autocomplete="off" spellcheck="false">
+                    <input type="text" class="otp-box" maxlength="1" data-index="2" inputmode="text" autocomplete="off" spellcheck="false">
+                    <input type="text" class="otp-box" maxlength="1" data-index="3" inputmode="text" autocomplete="off" spellcheck="false">
+                </div>
+                <span class="otp-separator">—</span>
+                <div class="otp-group">
+                    <input type="text" class="otp-box" maxlength="1" data-index="4" inputmode="text" autocomplete="off" spellcheck="false">
+                    <input type="text" class="otp-box" maxlength="1" data-index="5" inputmode="text" autocomplete="off" spellcheck="false">
+                    <input type="text" class="otp-box" maxlength="1" data-index="6" inputmode="text" autocomplete="off" spellcheck="false">
+                    <input type="text" class="otp-box" maxlength="1" data-index="7" inputmode="text" autocomplete="off" spellcheck="false">
+                </div>
+                <button type="button" id="modal-pair-paste-btn" class="btn-paste-pill" title="Paste 8-character code">Paste</button>
+            </div>
+            <button id="modal-approve-btn" type="submit" class="btn-connect-device">Connect Device</button>
         </form>
         <p id="modal-approve-status" class="panel-status" hidden></p>
 

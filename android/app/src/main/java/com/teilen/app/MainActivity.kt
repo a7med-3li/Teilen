@@ -10,7 +10,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.Typeface
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.KeyEvent
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -41,6 +45,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import androidx.core.content.IntentCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -228,7 +233,7 @@ class MainActivity : Activity() {
             refreshFeed(silent = true)
         })
 
-        takeHandedOverText(intent)
+        handleIncomingIntent(intent)
         checkDeepLink(intent)
 
         if (savedInstanceState == null) {
@@ -612,6 +617,7 @@ class MainActivity : Activity() {
                 selectCustomTtl(ttlSec)
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .create().apply { setCanceledOnTouchOutside(true) }
             .show()
     }
 
@@ -773,6 +779,11 @@ class MainActivity : Activity() {
             return
         }
         val picked = pickedUris(data)
+        if (picked.isEmpty()) return
+        populateSelectedFiles(picked)
+    }
+
+    private fun populateSelectedFiles(picked: List<Uri>) {
         if (picked.isEmpty()) return
 
         // Tiered Size Policy: files <= 30 MB dual-path; files > 30 MB Direct LAN Only
@@ -948,6 +959,7 @@ class MainActivity : Activity() {
                         .setTitle("Direct LAN Peer Unavailable")
                         .setMessage("Files over 30 MB transfer directly device-to-device for free without server storage. Make sure the receiving device is open on the same Wi-Fi/Hotspot.")
                         .setPositiveButton(android.R.string.ok, null)
+                        .create().apply { setCanceledOnTouchOutside(true) }
                         .show()
                     showFileStatus("Direct LAN peer unreachable. Open receiver on same Wi-Fi.", true)
                 }
@@ -1117,7 +1129,7 @@ class MainActivity : Activity() {
                 handToViewer(item.content.trim(), "*/*", item.content)
             }
         }
-        dialog.show()
+        dialog.create().apply { setCanceledOnTouchOutside(true) }.show()
     }
 
     // ------------------------------------------------------------- Tab 3: Account & Compliance
@@ -1170,6 +1182,7 @@ class MainActivity : Activity() {
                     "• Direct LAN: Transfers prioritize local peer-to-peer data channels when available."
                 )
                 .setPositiveButton(android.R.string.ok, null)
+                .create().apply { setCanceledOnTouchOutside(true) }
                 .show()
         }
 
@@ -1185,6 +1198,7 @@ class MainActivity : Activity() {
                     Toast.makeText(this, "Local session and keys wiped", Toast.LENGTH_LONG).show()
                 }
                 .setNegativeButton(R.string.cancel, null)
+                .create().apply { setCanceledOnTouchOutside(true) }
                 .show()
         }
 
@@ -1285,19 +1299,83 @@ class MainActivity : Activity() {
         if (intent.getBooleanExtra(EXTRA_STOP_WATCHING, false)) {
             setWatching(false)
         }
-        takeHandedOverText(intent)
+        handleIncomingIntent(intent)
         checkDeepLink(intent)
     }
 
-    private fun takeHandedOverText(intent: Intent?) {
-        val handedOver = intent?.getStringExtra(EXTRA_TEXT) ?: return
-        intent.removeExtra(EXTRA_TEXT)
-        setSendMode(SendMode.TEXT)
-        content.setText(handedOver)
-        selectTab(Tab.SEND)
-        if (!Session.isPaired(this)) {
-            status.text = getString(R.string.pair_then_send)
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent == null) return
+
+        val action = intent.action
+        val isSend = action == Intent.ACTION_SEND || action == Intent.ACTION_SEND_MULTIPLE
+        if (!isSend && !intent.hasExtra(EXTRA_TEXT)) {
+            return
         }
+
+        // Step 1 & 2: Strictly prioritize EXTRA_STREAM & clipData over EXTRA_TEXT
+        val uris = if (action == Intent.ACTION_SEND_MULTIPLE) {
+            val list = IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)?.filterNotNull().orEmpty()
+            if (list.isNotEmpty()) list
+            else (0 until (intent.clipData?.itemCount ?: 0)).mapNotNull { intent.clipData?.getItemAt(it)?.uri }
+        } else if (action == Intent.ACTION_SEND) {
+            val single = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                ?: (if (intent.type != "text/plain") intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri else null)
+            single?.let { listOf(it) }.orEmpty()
+        } else {
+            emptyList()
+        }
+
+        if (uris.isNotEmpty()) {
+            uris.forEach { uri ->
+                runCatching {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+
+            // Map MIME type accurately
+            val firstUri = uris.first()
+            val mime = contentResolver.getType(firstUri) ?: "application/octet-stream"
+            when {
+                mime.startsWith("image/") -> setSendMode(SendMode.PHOTOS)
+                mime.startsWith("audio/") -> setSendMode(SendMode.AUDIO)
+                else -> setSendMode(SendMode.FILES)
+            }
+
+            // Populate selected files & update UI
+            populateSelectedFiles(uris)
+            selectTab(Tab.SEND)
+
+            // Prevent duplicate sends on screen rotation
+            intent.removeExtra(Intent.EXTRA_STREAM)
+            intent.removeExtra(Intent.EXTRA_TEXT)
+            intent.removeExtra(EXTRA_TEXT)
+            setIntent(Intent())
+
+            // Immediately encrypt and upload/send the actual file
+            if (Session.isPaired(this)) {
+                submitFiles()
+            } else {
+                status.text = getString(R.string.pair_then_send)
+            }
+            return
+        }
+
+        // Step 3: EXTRA_TEXT Fallback Only When No File URI Exists
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: intent.getStringExtra(EXTRA_TEXT)
+        if (!text.isNullOrBlank()) {
+            setSendMode(SendMode.TEXT)
+            content.setText(text)
+            selectTab(Tab.SEND)
+            if (!Session.isPaired(this)) {
+                status.text = getString(R.string.pair_then_send)
+            }
+        }
+
+        // Prevent duplicate sends on screen rotation
+        intent.removeExtra(Intent.EXTRA_STREAM)
+        intent.removeExtra(Intent.EXTRA_TEXT)
+        intent.removeExtra(EXTRA_TEXT)
+        setIntent(Intent())
     }
 
     private fun setBusy(busy: Boolean) {
@@ -1578,6 +1656,22 @@ class MainActivity : Activity() {
             performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
             showSessionSelectorDialog()
         }
+        findViewById<View>(R.id.header_btn_share_room)?.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            val activeId = Session.activeSessionId(this)
+            val activeSession = currentSessions.firstOrNull { it.id == activeId }
+            if (activeSession != null && !activeSession.isPersonal) {
+                showShareRoomDialog(activeSession)
+            }
+        }
+        findViewById<View>(R.id.header_btn_delete_room)?.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            val activeId = Session.activeSessionId(this)
+            val activeSession = currentSessions.firstOrNull { it.id == activeId }
+            if (activeSession != null && !activeSession.isPersonal) {
+                confirmDeleteOrLeaveRoom(activeSession)
+            }
+        }
         findViewById<View>(R.id.header_btn_add_room)?.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
             showCreateRoomDialog()
@@ -1606,6 +1700,7 @@ class MainActivity : Activity() {
             .create()
 
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.setCanceledOnTouchOutside(true)
 
         val btnClose = dialogView.findViewById<View>(R.id.dialog_pair_close)
         val pairSpinner = dialogView.findViewById<View>(R.id.dialog_pair_spinner)
@@ -1614,9 +1709,95 @@ class MainActivity : Activity() {
         val btnRefreshCode = dialogView.findViewById<View>(R.id.dialog_btn_refresh_code)
         val pairStatus = dialogView.findViewById<TextView>(R.id.dialog_pair_status)
 
-        val inputCode = dialogView.findViewById<EditText>(R.id.input_manual_pair_code)
+        val box1 = dialogView.findViewById<EditText>(R.id.otp_box_1)
+        val box2 = dialogView.findViewById<EditText>(R.id.otp_box_2)
+        val box3 = dialogView.findViewById<EditText>(R.id.otp_box_3)
+        val box4 = dialogView.findViewById<EditText>(R.id.otp_box_4)
+        val box5 = dialogView.findViewById<EditText>(R.id.otp_box_5)
+        val box6 = dialogView.findViewById<EditText>(R.id.otp_box_6)
+        val box7 = dialogView.findViewById<EditText>(R.id.otp_box_7)
+        val box8 = dialogView.findViewById<EditText>(R.id.otp_box_8)
+        val btnPaste = dialogView.findViewById<Button>(R.id.btn_pair_paste)
         val btnSubmitCode = dialogView.findViewById<View>(R.id.btn_submit_manual_code)
         val statusManual = dialogView.findViewById<TextView>(R.id.status_manual_pair)
+        val otpBoxes = arrayOf(box1, box2, box3, box4, box5, box6, box7, box8)
+
+        fun getEnteredOtpCode(): String {
+            return otpBoxes.joinToString("") { it.text.toString().trim() }.uppercase()
+        }
+
+        fun populateOtpCode(raw: String) {
+            val clean = raw.filter { it.isLetterOrDigit() }.uppercase().take(8)
+            otpBoxes.forEachIndexed { idx, box ->
+                box.setText(if (idx < clean.length) clean[idx].toString() else "")
+            }
+            if (clean.length == 8) {
+                otpBoxes.last().requestFocus()
+                btnSubmitCode.performClick()
+            } else if (clean.isNotEmpty()) {
+                val next = clean.length.coerceAtMost(7)
+                otpBoxes[next].requestFocus()
+            }
+        }
+
+        btnPaste.setOnClickListener {
+            performHaptic(it, HapticFeedbackConstants.CLOCK_TICK)
+            val cm = getSystemService(ClipboardManager::class.java)
+            val clipText = cm?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
+            if (!clipText.isNullOrBlank()) {
+                populateOtpCode(clipText)
+            } else {
+                Toast.makeText(this, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        otpBoxes.forEachIndexed { index, box ->
+            box.addTextChangedListener(object : TextWatcher {
+                private var selfChange = false
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: Editable?) {
+                    if (selfChange) return
+                    val text = s?.toString() ?: ""
+                    if (text.length > 1) {
+                        selfChange = true
+                        populateOtpCode(text)
+                        selfChange = false
+                        return
+                    }
+                    val clean = text.filter { it.isLetterOrDigit() }.uppercase()
+                    if (clean != text) {
+                        selfChange = true
+                        box.setText(clean)
+                        box.setSelection(clean.length)
+                        selfChange = false
+                    }
+                    if (clean.isNotEmpty()) {
+                        if (index < 7) {
+                            otpBoxes[index + 1].requestFocus()
+                            otpBoxes[index + 1].selectAll()
+                        } else if (index == 7 && getEnteredOtpCode().length == 8) {
+                            btnSubmitCode.performClick()
+                        }
+                    }
+                }
+            })
+
+            box.setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DEL) {
+                    if (box.text.isNullOrEmpty() && index > 0) {
+                        otpBoxes[index - 1].setText("")
+                        otpBoxes[index - 1].requestFocus()
+                        return@setOnKeyListener true
+                    }
+                }
+                false
+            }
+
+            box.setOnClickListener {
+                box.selectAll()
+            }
+        }
 
         btnClose.setOnClickListener { dialog.dismiss() }
 
@@ -1643,7 +1824,7 @@ class MainActivity : Activity() {
 
         btnSubmitCode.setOnClickListener {
             performHaptic(it, HapticFeedbackConstants.VIRTUAL_KEY)
-            val code = PairActivity.cleanCode(inputCode.text.toString())
+            val code = PairActivity.cleanCode(getEnteredOtpCode())
             if (code == null) {
                 statusManual.visibility = View.VISIBLE
                 statusManual.text = getString(R.string.pair_no_code)
@@ -1752,6 +1933,7 @@ class MainActivity : Activity() {
                     }
                 }
                 .setNegativeButton("Cancel", null)
+                .create().apply { setCanceledOnTouchOutside(true) }
                 .show()
         }
 
@@ -2035,18 +2217,17 @@ class MainActivity : Activity() {
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .create().apply { setCanceledOnTouchOutside(true) }
             .show()
     }
 
     // ------------------------------------------------------------- Image Clipboard Copy
 
-    private fun copyImageToClipboard(item: FeedItem) {
+    private fun copyImageToClipboard(item: FeedItem, onSuccess: (() -> Unit)? = null) {
         val url = item.blobUrl(Server.get(this)) ?: return
         val rawExt = item.content.substringAfterLast('.', "png").lowercase()
         val ext = if (rawExt in listOf("png", "jpg", "jpeg", "webp", "gif")) rawExt else "png"
         val fileName = "teilen_${item.id}.$ext"
-
-        Toast.makeText(this, "Copying image to clipboard...", Toast.LENGTH_SHORT).show()
 
         Thread {
             try {
@@ -2079,6 +2260,7 @@ class MainActivity : Activity() {
                         cm?.setPrimaryClip(clip)
                         performHaptic(window.decorView, HapticFeedbackConstants.CONFIRM)
                         Toast.makeText(this, "Image copied to clipboard", Toast.LENGTH_SHORT).show()
+                        onSuccess?.invoke()
                     }
                 } else {
                     main.post {
@@ -2121,6 +2303,7 @@ class MainActivity : Activity() {
                 }
             }
             .setNegativeButton(R.string.cancel, null)
+            .create().apply { setCanceledOnTouchOutside(true) }
             .show()
     }
 
@@ -2236,22 +2419,34 @@ class MainActivity : Activity() {
                 titleText.ellipsize = null
             }
 
-            // Primary 1: Copy Action (Text, Link, Image) with 1-tap feedback
-            if (item.isImage || !item.hasBlob) {
+            // Primary 1: Guaranteed Copy Action (Text, Link, Image) with 1-tap feedback
+            val isCopyable = item.type == "TEXT" || item.type == "LINK" || item.isImage
+            if (isCopyable) {
                 btnCopy.visibility = View.VISIBLE
                 btnCopy.text = "Copy"
+                btnCopy.setTextColor(getColor(R.color.accent))
                 btnCopy.setOnClickListener {
-                    performHaptic(it, HapticFeedbackConstants.KEYBOARD_TAP)
                     if (item.isImage) {
-                        copyImageToClipboard(item)
+                        btnCopy.text = "Copying…"
+                        copyImageToClipboard(item) {
+                            btnCopy.text = "✓ Copied"
+                            btnCopy.setTextColor(Color.parseColor("#10B981"))
+                            btnCopy.postDelayed({
+                                btnCopy.text = "Copy"
+                                btnCopy.setTextColor(getColor(R.color.accent))
+                            }, 1500)
+                        }
                     } else {
+                        performHaptic(it, HapticFeedbackConstants.CONFIRM)
                         val cm = getSystemService(ClipboardManager::class.java)
                         cm?.setPrimaryClip(ClipData.newPlainText("Teilen", item.content))
+                        btnCopy.text = "✓ Copied"
+                        btnCopy.setTextColor(Color.parseColor("#10B981"))
+                        btnCopy.postDelayed({
+                            btnCopy.text = "Copy"
+                            btnCopy.setTextColor(getColor(R.color.accent))
+                        }, 1500)
                     }
-                    btnCopy.text = "✓ Copied"
-                    btnCopy.postDelayed({
-                        btnCopy.text = "Copy"
-                    }, 1500)
                 }
             } else {
                 btnCopy.visibility = View.GONE
@@ -2337,6 +2532,7 @@ class MainActivity : Activity() {
                                     }
                                 }
                                 .setNegativeButton(R.string.cancel, null)
+                                .create().apply { setCanceledOnTouchOutside(true) }
                                 .show()
                         }
                     }
@@ -2369,32 +2565,56 @@ class MainActivity : Activity() {
             loadSessions()
         }
         val options = mutableListOf<String>()
-        val sessionIds = mutableListOf<String?>()
+        val actions = mutableListOf<() -> Unit>()
 
         val personal = currentSessions.firstOrNull { it.isPersonal }
         options.add("🔒 Personal Vault")
-        sessionIds.add(personal?.id)
+        actions.add {
+            Session.setActiveSessionId(this, personal?.id)
+            renderSessionPills()
+            refreshFeed()
+            connectFeedWebSocket()
+        }
 
-        currentSessions.filter { !it.isPersonal }.forEach {
-            options.add("👥 ${it.name} (${it.memberCount})")
-            sessionIds.add(it.id)
+        val activeId = Session.activeSessionId(this)
+        val activeSession = currentSessions.firstOrNull { it.id == activeId }
+            ?: currentSessions.firstOrNull { it.isPersonal }
+        val isCustomRoom = activeSession != null && !activeSession.isPersonal
+
+        currentSessions.filter { !it.isPersonal }.forEach { s ->
+            options.add("👥 ${s.name} (${s.memberCount})")
+            actions.add {
+                Session.setActiveSessionId(this, s.id)
+                renderSessionPills()
+                refreshFeed()
+                connectFeedWebSocket()
+            }
+        }
+
+        if (isCustomRoom && activeSession != null) {
+            options.add("🔗 Share Room '${activeSession.name}'")
+            actions.add {
+                showShareRoomDialog(activeSession)
+            }
+            val deleteLabel = if (activeSession.role == "OWNER") "🗑 Delete Room '${activeSession.name}'" else "🚪 Leave Room '${activeSession.name}'"
+            options.add(deleteLabel)
+            actions.add {
+                confirmDeleteOrLeaveRoom(activeSession)
+            }
         }
 
         options.add("➕ Join Room by Code…")
-        sessionIds.add("ACTION_JOIN")
+        actions.add {
+            showJoinRoomDialog()
+        }
 
         AlertDialog.Builder(this)
             .setTitle("Switch Session / Room")
             .setItems(options.toTypedArray()) { _, which ->
-                val chosenId = sessionIds[which]
-                if (chosenId == "ACTION_JOIN") {
-                    showJoinRoomDialog()
-                } else {
-                    Session.setActiveSessionId(this, chosenId)
-                    renderSessionPills()
-                    refreshFeed()
-                    connectFeedWebSocket()
-                }
+                actions[which].invoke()
+            }
+            .create().apply {
+                setCanceledOnTouchOutside(true)
             }
             .show()
     }
@@ -2431,6 +2651,9 @@ class MainActivity : Activity() {
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .create().apply {
+                setCanceledOnTouchOutside(true)
+            }
             .show()
     }
 
@@ -2440,6 +2663,10 @@ class MainActivity : Activity() {
         val activeSession = currentSessions.firstOrNull { it.id == activeId }
             ?: currentSessions.firstOrNull { it.isPersonal }
         findViewById<TextView>(R.id.header_active_session_name)?.text = activeSession?.name ?: "Personal Vault"
+
+        val isCustomRoom = activeSession != null && !activeSession.isPersonal
+        findViewById<View>(R.id.header_btn_share_room)?.visibility = if (isCustomRoom) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.header_btn_delete_room)?.visibility = if (isCustomRoom) View.VISIBLE else View.GONE
 
         val encryptedUser = findViewById<TextView>(R.id.header_encrypted_username)
         if (encryptedUser != null) {
@@ -2523,6 +2750,9 @@ class MainActivity : Activity() {
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .create().apply {
+                setCanceledOnTouchOutside(true)
+            }
             .show()
     }
 
@@ -2560,6 +2790,9 @@ class MainActivity : Activity() {
                         Toast.makeText(this, "Invite link copied to clipboard", Toast.LENGTH_SHORT).show()
                     }
                     .setNegativeButton("Close", null)
+                    .create().apply {
+                        setCanceledOnTouchOutside(true)
+                    }
                     .show()
             } else {
                 Toast.makeText(this, err ?: "Could not generate invite code", Toast.LENGTH_SHORT).show()
@@ -2567,21 +2800,34 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun showLeaveRoomDialog(session: TeilenApi.SessionInfo) {
+    private fun confirmDeleteOrLeaveRoom(session: TeilenApi.SessionInfo) {
+        val isOwner = session.role == "OWNER"
+        val title = if (isOwner) "Delete Room?" else "Leave Room?"
+        val message = if (isOwner)
+            "Delete room '${session.name}' and all its shared items?"
+        else
+            "Leave room '${session.name}'?"
+        val buttonText = if (isOwner) "Delete" else "Leave"
+
         AlertDialog.Builder(this)
-            .setTitle("Leave Room '${session.name}'?")
-            .setMessage("You will lose access to items in this room unless re-invited.")
-            .setPositiveButton("Leave") { _, _ ->
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton(buttonText) { _, _ ->
                 val url = Server.get(this)
                 val token = Session.token(this)
-                TeilenApi.deleteSession(url, token, session.id) { _, msg ->
+                TeilenApi.deleteSession(url, token, session.id) { ok, msg ->
                     Session.setActiveSessionId(this, null)
-                    Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, if (ok) (if (isOwner) "Room '${session.name}' deleted" else "Left room '${session.name}'") else msg, Toast.LENGTH_SHORT).show()
                     loadSessions()
+                    renderSessionPills()
                     refreshFeed()
+                    connectFeedWebSocket()
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .create().apply {
+                setCanceledOnTouchOutside(true)
+            }
             .show()
     }
 
@@ -2628,6 +2874,7 @@ class MainActivity : Activity() {
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .create().apply { setCanceledOnTouchOutside(true) }
             .show()
     }
 
@@ -2658,6 +2905,7 @@ class MainActivity : Activity() {
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .create().apply { setCanceledOnTouchOutside(true) }
             .show()
     }
 

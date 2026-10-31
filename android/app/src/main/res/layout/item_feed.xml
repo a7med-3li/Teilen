@@ -16,41 +16,49 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <!-- Left: Badge, Countdown Ring, & Meta -->
-        <TextView
-            android:id="@+id/feed_kind"
-            style="@style/Text.Section"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_badge"
-            android:paddingStart="6dp"
-            android:paddingTop="2dp"
-            android:paddingEnd="6dp"
-            android:paddingBottom="2dp"
-            android:textColor="@color/accent"
-            android:textSize="10sp"
-            android:textStyle="bold" />
-
-        <!-- Countdown Ring -->
-        <com.teilen.app.CountdownRingView
-            android:id="@+id/feed_ring"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:layout_marginStart="6dp" />
-
-        <TextView
-            android:id="@+id/feed_meta"
-            style="@style/Text.Tabular"
+        <!-- Left: Badge, Countdown Ring, & Meta (weight="1" and singleLine with ellipsis) -->
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
             android:layout_weight="1"
-            android:ellipsize="end"
-            android:singleLine="true"
-            android:textColor="@color/text_secondary"
-            android:textSize="11sp" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <!-- Right: Compact Action Buttons Toolbar (Strictly non-overflowing) -->
+            <TextView
+                android:id="@+id/feed_kind"
+                style="@style/Text.Section"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_badge"
+                android:paddingStart="6dp"
+                android:paddingTop="2dp"
+                android:paddingEnd="6dp"
+                android:paddingBottom="2dp"
+                android:textColor="@color/accent"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <!-- Countdown Ring -->
+            <com.teilen.app.CountdownRingView
+                android:id="@+id/feed_ring"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="6dp" />
+
+            <TextView
+                android:id="@+id/feed_meta"
+                style="@style/Text.Tabular"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Right: Action Buttons (weight="0" / wrap_content) -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -66,9 +74,9 @@
                 android:layout_marginEnd="4dp"
                 android:minWidth="0dp"
                 android:minHeight="28dp"
-                android:paddingStart="6dp"
+                android:paddingStart="8dp"
                 android:paddingTop="0dp"
-                android:paddingEnd="6dp"
+                android:paddingEnd="8dp"
                 android:paddingBottom="0dp"
                 android:drawableStart="@drawable/ic_copy"
                 android:drawablePadding="3dp"
@@ -91,34 +99,22 @@
                 android:contentDescription="Download"
                 android:visibility="gone" />
 
-            <!-- Extend +1h Button -->
+            <!-- Extend +1h Button (Moved to ⋮ menu, kept hidden in layout for compat) -->
             <Button
                 android:id="@+id/feed_action_extend"
                 style="@style/Button.Outline"
                 android:layout_width="wrap_content"
                 android:layout_height="28dp"
-                android:layout_marginEnd="4dp"
                 android:minWidth="0dp"
                 android:minHeight="28dp"
-                android:paddingStart="6dp"
-                android:paddingTop="0dp"
-                android:paddingEnd="6dp"
-                android:paddingBottom="0dp"
-                android:text="+1h"
-                android:textColor="@color/text_secondary"
-                android:textSize="10.5sp" />
+                android:visibility="gone" />
 
-            <!-- Delete Button (✕) -->
+            <!-- Delete Button (✕) (Moved to ⋮ menu, kept hidden in layout for compat) -->
             <ImageButton
                 android:id="@+id/feed_action_delete"
                 android:layout_width="28dp"
                 android:layout_height="28dp"
-                android:layout_marginEnd="4dp"
-                android:background="@drawable/bg_icon_btn"
-                android:padding="6dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_close"
-                android:tint="@color/text_secondary"
+                android:visibility="gone"
                 android:contentDescription="Delete" />
 
             <!-- Quick Actions Overflow Menu Button (⋮) -->

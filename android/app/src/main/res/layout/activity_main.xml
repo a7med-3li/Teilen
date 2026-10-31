@@ -168,6 +168,34 @@
                 </LinearLayout>
 
                 <TextView
+                    android:id="@+id/header_btn_share_room"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_icon_btn"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="🔗"
+                    android:textColor="@color/accent"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/header_btn_delete_room"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_icon_btn"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="🗑"
+                    android:textColor="#EF4444"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <TextView
                     android:id="@+id/header_btn_add_room"
                     android:layout_width="28dp"
                     android:layout_height="28dp"
