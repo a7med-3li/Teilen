@@ -25,16 +25,17 @@
             </div>
         </div>
         <div class="head-right">
+            <button id="btn-lang-toggle" class="btn-lang-toggle" type="button" title="Switch Language / تبديل اللغة">عربي</button>
             <div id="status" class="status-pill status offline">
                 <span class="status-dot"></span>
-                <span id="status-text">connecting…</span>
+                <span id="status-text" data-i18n="status_connecting">connecting…</span>
             </div>
             <button id="btn-header-pair" class="btn-header-pair" type="button" title="Pair phone or second device">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
                     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
                 </svg>
-                <span>Pair Device</span>
+                <span data-i18n="btn_pair">Pair Device</span>
             </button>
             <button id="account" class="btn-header-account" type="button" hidden aria-expanded="false" style="display:none;">
                 <span id="account-label"></span>
@@ -49,22 +50,22 @@
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                     <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                 </svg>
-                <span>End-to-End Encrypted</span>
+                <span data-i18n="subtitle_encrypted">End-to-End Encrypted</span>
             </span>
         </div>
         <div class="head-sub-right">
             <div class="session-selector-container">
                 <button type="button" id="session-selector-pill" class="session-selector-pill" title="Switch session">
-                    <span id="active-session-name" class="active-session-name">Personal Vault</span>
+                    <span id="active-session-name" class="active-session-name" data-i18n="personal_vault">Personal Vault</span>
                     <span class="session-chevron">▾</span>
                 </button>
-                <button id="session-create-btn" type="button" class="btn-add-room" title="New Room">+</button>
+                <button id="session-create-btn" type="button" class="btn-add-room" title="New Room" data-i18n-title="new_room">+</button>
                 <div id="session-dropdown" class="session-dropdown" hidden>
                     <div id="session-dropdown-list" class="session-dropdown-list"></div>
                     <div class="session-dropdown-footer">
-                        <button type="button" id="session-dropdown-join-btn" class="session-dropdown-btn">Join Room by Code</button>
-                        <button type="button" id="session-share-btn" class="session-dropdown-btn" hidden>Share Room</button>
-                        <button type="button" id="session-delete-btn" class="session-dropdown-btn session-dropdown-delete-btn" hidden>🗑 Delete Room</button>
+                        <button type="button" id="session-dropdown-join-btn" class="session-dropdown-btn" data-i18n="join_room_by_code">Join Room by Code</button>
+                        <button type="button" id="session-share-btn" class="session-dropdown-btn" hidden data-i18n="share_room">Share Room</button>
+                        <button type="button" id="session-delete-btn" class="session-dropdown-btn session-dropdown-delete-btn" hidden data-i18n="delete_room">🗑 Delete Room</button>
                     </div>
                 </div>
             </div>
@@ -76,65 +77,65 @@
 <section id="pair" hidden>
     <div class="panel auth-panel">
         <div class="auth-header">
-            <h2 class="auth-title">Welcome to Teilen</h2>
-            <p class="auth-desc">End-to-end encrypted cross-device sync &amp; Direct LAN</p>
+            <h2 class="auth-title" data-i18n="welcome_title">Welcome to Teilen</h2>
+            <p class="auth-desc" data-i18n="welcome_desc">End-to-end encrypted cross-device sync &amp; Direct LAN</p>
         </div>
 
         <!-- 1-Tap Instant Anonymous Vault Button -->
-        <button id="btn-instant-vault" type="button" class="instant-vault-btn">
+        <button id="btn-instant-vault" type="button" class="instant-vault-btn" data-i18n="instant_vault_btn">
             ⚡ Start Instant Anonymous Vault
         </button>
 
         <div class="auth-divider">
-            <span>or pair with another device</span>
+            <span data-i18n="auth_divider">or pair with another device</span>
         </div>
 
         <div id="pair-container">
-            <p class="panel-lead">Enter this 8-character pairing code on your phone or second device:</p>
+            <p class="panel-lead" data-i18n="pair_lead">Enter this 8-character pairing code on your phone or second device:</p>
 
             <div class="pair-code-row">
-                <span id="pair-code" class="pair-code-text">····-····</span>
+                <span id="pair-code" class="pair-code-text ltr-always">····-····</span>
                 <button id="pair-code-copy" type="button" class="btn-copy-code-styled" title="Copy code">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#F1F5F9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                     </svg>
-                    <span>Copy</span>
+                    <span data-i18n="btn_copy">Copy</span>
                 </button>
             </div>
             <div class="pair-state-wrap">
                 <span class="pulsing-dot"></span>
-                <p id="pair-state" class="panel-lead">waiting for other device…</p>
+                <p id="pair-state" class="panel-lead" data-i18n="pair_code_hint">waiting for other device…</p>
             </div>
 
-            <button id="pair-retry" type="button" class="btn-subtle" hidden>Get a new code</button>
+            <button id="pair-retry" type="button" class="btn-subtle" hidden data-i18n="pair_retry">Get a new code</button>
         </div>
 
         <!-- Expandable Advanced Section for Power Users -->
         <div class="auth-advanced-section">
             <button id="btn-toggle-auth-advanced" type="button" class="toggle-advanced-btn">
-                <span>Advanced: Claim Custom Username / Switch Vault</span>
+                <span data-i18n="auth_advanced_toggle">Advanced: Claim Custom Username / Switch Vault</span>
                 <span id="auth-advanced-chevron">▾</span>
             </button>
 
             <div id="auth-advanced-container" hidden>
                 <div class="auth-toggle">
-                    <button id="auth-tab-login" type="button" class="auth-btn active">Sign in</button>
-                    <button id="auth-tab-register" type="button" class="auth-btn">Create account</button>
+                    <button id="auth-tab-login" type="button" class="auth-btn active" data-i18n="auth_tab_login">Sign in</button>
+                    <button id="auth-tab-register" type="button" class="auth-btn" data-i18n="auth_tab_register">Create account</button>
                 </div>
 
                 <div id="login-container">
                     <form id="login-form" autocomplete="on">
                         <div class="field">
-                            <label for="login-username">Username</label>
-                            <input id="login-username" type="text" pattern="[a-zA-Z0-9]+" minlength="3" maxlength="32" placeholder="Username" required>
-                            <span id="login-username-helper" class="field-helper" hidden>Letters and numbers only, no special characters</span>
+                            <label for="login-username" data-i18n="label_username">Username</label>
+                            <input id="login-username" type="text" pattern="[a-zA-Z0-9]+" minlength="3" maxlength="32" placeholder="Username" data-i18n-placeholder="label_username" required>
+                            <span id="login-username-helper" class="field-helper" hidden data-i18n="username_helper">Letters and numbers only, no special characters</span>
                         </div>
                         <div class="field">
-                            <label for="login-password">Password</label>
+                            <label for="login-password" data-i18n="label_password">Password</label>
                             <input id="login-password" type="password" placeholder="••••••••" required>
                         </div>
-                        <button type="submit" class="submit-btn" id="login-submit">Sign in</button>
+                        <button type="submit" class="submit-btn" id="login-submit" data-i18n="btn_sign_in">Sign in</button>
                     </form>
                     <p id="login-status" class="panel-status" hidden></p>
                 </div>
@@ -142,19 +143,19 @@
                 <div id="register-container" hidden>
                     <form id="register-form" autocomplete="on">
                         <div class="field">
-                            <label for="register-username">Username</label>
-                            <input id="register-username" type="text" pattern="[a-zA-Z0-9]+" minlength="3" maxlength="32" placeholder="Letters and numbers only" required>
-                            <span id="register-username-helper" class="field-helper" hidden>Letters and numbers only, no special characters</span>
+                            <label for="register-username" data-i18n="label_username">Username</label>
+                            <input id="register-username" type="text" pattern="[a-zA-Z0-9]+" minlength="3" maxlength="32" placeholder="Letters and numbers only" data-i18n-placeholder="username_helper" required>
+                            <span id="register-username-helper" class="field-helper" hidden data-i18n="username_helper">Letters and numbers only, no special characters</span>
                         </div>
                         <div class="field">
-                            <label for="register-password">Password</label>
-                            <input id="register-password" type="password" placeholder="At least 6 characters" minlength="6" required>
+                            <label for="register-password" data-i18n="label_password">Password</label>
+                            <input id="register-password" type="password" placeholder="At least 6 characters" data-i18n-placeholder="password_placeholder_min" minlength="6" required>
                         </div>
                         <div class="field">
-                            <label for="register-display-name">Display name (optional)</label>
-                            <input id="register-display-name" type="text" placeholder="e.g. My Laptop" maxlength="50">
+                            <label for="register-display-name" data-i18n="label_display_name">Display name (optional)</label>
+                            <input id="register-display-name" type="text" placeholder="e.g. My Laptop" data-i18n-placeholder="display_name_placeholder" maxlength="50">
                         </div>
-                        <button type="submit" class="submit-btn" id="register-submit">Create account</button>
+                        <button type="submit" class="submit-btn" id="register-submit" data-i18n="btn_create_account">Create account</button>
                     </form>
                     <p id="register-status" class="panel-status" hidden></p>
                 </div>
@@ -166,25 +167,25 @@
 <!-- the account menu: who is signed in, what else is paired, how to add or drop one -->
 <section id="devices" hidden>
     <div class="panel">
-        <h2>Paired devices</h2>
+        <h2 data-i18n="devices_heading">Paired devices</h2>
         <p id="account-phone" class="panel-lead"></p>
         <ul id="device-list" class="devices"></ul>
 
         <div class="account-actions-row">
-            <button id="revoke-others-btn" class="danger-outline" type="button">Sign Out All Other Devices</button>
+            <button id="revoke-others-btn" class="danger-outline" type="button" data-i18n="btn_revoke_others">Sign Out All Other Devices</button>
         </div>
 
         <form id="approve-form" autocomplete="off">
-            <label for="approve-code">Pair another device — enter 8-digit code (e.g. K7PM-3XQD)</label>
+            <label for="approve-code" data-i18n="approve_label">Pair another device — enter 8-digit code (e.g. K7PM-3XQD)</label>
             <div class="row">
                 <input id="approve-code" type="text" placeholder="K7PM-3XQD" maxlength="9"
-                       autocapitalize="characters" spellcheck="false">
-                <button type="submit">Pair Device</button>
+                       autocapitalize="characters" spellcheck="false" class="ltr-always">
+                <button type="submit" data-i18n="btn_pair">Pair Device</button>
             </div>
         </form>
         <p id="device-status" class="panel-status" hidden></p>
 
-        <button id="sign-out" class="danger" type="button">Sign out of this browser</button>
+        <button id="sign-out" class="danger" type="button" data-i18n="btn_sign_out">Sign out of this browser</button>
     </div>
 </section>
 
@@ -194,18 +195,18 @@
     <!-- Unified Multimodal Composer with Unlimited Scrollable Text -->
     <div class="composer-card">
         <form id="compose" class="compose-form" autocomplete="off">
-            <textarea id="compose-input" placeholder="Type or paste unlimited text, links, or code… (Shift+Enter for newline, Enter to send)" rows="3"></textarea>
+            <textarea id="compose-input" placeholder="Type or paste unlimited text, links, or code… (Shift+Enter for newline, Enter to send)" data-i18n-placeholder="composer_placeholder" rows="3" dir="auto"></textarea>
 
             <div class="composer-toolbar">
                 <div class="ttl-control-group">
-                    <span class="ttl-label">Expires in:</span>
+                    <span class="ttl-label" data-i18n="expires_in">Expires in:</span>
                     <div class="ttl-segmented-pills" id="ttl-pills">
                         <button type="button" class="ttl-pill" data-ttl="600">10m</button>
                         <button type="button" class="ttl-pill" data-ttl="1800">30m</button>
                         <button type="button" class="ttl-pill active" data-ttl="3600">1h</button>
                         <button type="button" class="ttl-pill" data-ttl="14400">4h</button>
                         <button type="button" class="ttl-pill" data-ttl="86400">24h</button>
-                        <button type="button" class="ttl-pill" id="ttl-custom-pill">Custom</button>
+                        <button type="button" class="ttl-pill" id="ttl-custom-pill" data-i18n="ttl_custom">Custom</button>
                     </div>
                 </div>
 
@@ -214,10 +215,10 @@
                         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                         </svg>
-                        <span>Attach File</span>
+                        <span data-i18n="btn_attach_file">Attach File</span>
                         <input id="upload-input" type="file" multiple hidden>
                     </label>
-                    <button type="submit" id="compose-submit" class="btn-send">Send</button>
+                    <button type="submit" id="compose-submit" class="btn-send" data-i18n="btn_send">Send</button>
                 </div>
             </div>
         </form>
@@ -229,17 +230,17 @@
         <div class="telemetry-head">
             <div class="telemetry-title">
                 <span class="telemetry-icon">⚡</span>
-                <span id="telemetry-name">Direct LAN P2P Transfer</span>
+                <span id="telemetry-name" data-i18n="telemetry_title">Direct LAN P2P Transfer</span>
             </div>
-            <span class="telemetry-badge">0 Server Bytes Used</span>
+            <span class="telemetry-badge" data-i18n="telemetry_badge">0 Server Bytes Used</span>
         </div>
         <div class="telemetry-bar-wrap">
             <div id="telemetry-bar" class="telemetry-bar" style="width: 0%"></div>
         </div>
-        <div class="telemetry-foot">
+        <div class="telemetry-foot ltr-always">
             <span id="telemetry-stats">0 MB / 0 MB · 0%</span>
             <span id="telemetry-speed" class="telemetry-speed">0 MB/s</span>
-            <button id="telemetry-cancel" type="button" class="btn-telemetry-cancel">✕ Cancel</button>
+            <button id="telemetry-cancel" type="button" class="btn-telemetry-cancel" data-i18n="btn_cancel">✕ Cancel</button>
         </div>
     </div>
 
@@ -250,8 +251,8 @@
                 <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
             </svg>
         </div>
-        <p class="empty-title">Nothing here yet</p>
-        <p class="empty-desc">Share files, logs, or text from your devices. Unlimited paste and multi-gigabyte transfers supported.</p>
+        <p class="empty-title" data-i18n="empty_feed_title">Nothing here yet</p>
+        <p class="empty-desc" data-i18n="empty_feed_subtitle">Share files, logs, or text from your devices. Unlimited paste and multi-gigabyte transfers supported.</p>
     </div>
 
     <!-- Feed list: all card action buttons live strictly in sticky top header -->
@@ -270,7 +271,7 @@
                     <line x1="14" y1="11" x2="14" y2="17"></line>
                 </svg>
             </span>
-            Delete All
+            <span data-i18n="btn_delete_all">Delete All</span>
         </button>
     </div>
 </footer>
@@ -278,16 +279,16 @@
 <!-- Modal: Create New Session -->
 <div id="modal-create-session" class="modal-veil" hidden>
     <div class="modal-panel">
-        <h3>Create New Session Room</h3>
-        <p class="modal-desc">Rooms are end-to-end encrypted with their own independent 256-bit symmetric key.</p>
+        <h3 data-i18n="modal_create_room_title">Create New Session Room</h3>
+        <p class="modal-desc" data-i18n="modal_create_room_desc">Rooms are end-to-end encrypted with their own independent 256-bit symmetric key.</p>
         <form id="form-create-session">
             <div class="field">
-                <label for="create-session-name">Room Name</label>
-                <input id="create-session-name" type="text" placeholder="e.g. Study Group, Project Alpha" maxlength="120" required>
+                <label for="create-session-name" data-i18n="label_room_name">Room Name</label>
+                <input id="create-session-name" type="text" placeholder="e.g. Study Group, Project Alpha" data-i18n-placeholder="placeholder_room_name" maxlength="120" required>
             </div>
             <div class="modal-actions">
-                <button type="button" class="btn-subtle modal-close">Cancel</button>
-                <button type="submit" class="submit-btn">Create Room</button>
+                <button type="button" class="btn-subtle modal-close" data-i18n="btn_cancel">Cancel</button>
+                <button type="submit" class="submit-btn" data-i18n="btn_create_room">Create Room</button>
             </div>
         </form>
     </div>
@@ -296,10 +297,10 @@
 <!-- Modal: Share Session (QR + Link) -->
 <div id="modal-share-session" class="modal-veil" hidden>
     <div class="modal-panel">
-        <h3 id="share-session-title">Share Session</h3>
-        <p class="modal-desc">Anyone with this 8-character code or link will join this room and receive its encryption key.</p>
+        <h3 id="share-session-title" data-i18n="modal_share_room_title">Share Session</h3>
+        <p class="modal-desc" data-i18n="modal_share_room_desc">Anyone with this 8-character code or link will join this room and receive its encryption key.</p>
         <div class="pair-code-row">
-            <p id="share-session-code" class="pair-code">····-····</p>
+            <p id="share-session-code" class="pair-code ltr-always">····-····</p>
             <button id="share-session-copy" type="button" class="btn-copy-code" title="Copy invite link">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -308,8 +309,8 @@
             </button>
         </div>
         <div class="modal-actions">
-            <button type="button" class="btn-subtle modal-close">Done</button>
-            <button type="button" id="share-session-delete-btn" class="btn-subtle session-modal-delete-btn" hidden>🗑 Delete Room</button>
+            <button type="button" class="btn-subtle modal-close" data-i18n="btn_done">Done</button>
+            <button type="button" id="share-session-delete-btn" class="btn-subtle session-modal-delete-btn" hidden data-i18n="delete_room">🗑 Delete Room</button>
         </div>
     </div>
 </div>
@@ -317,17 +318,17 @@
 <!-- Modal: Join Session -->
 <div id="modal-join-session" class="modal-veil" hidden>
     <div class="modal-panel">
-        <h3>Join Session Room</h3>
-        <p class="modal-desc">Enter the 8-character code or paste a teilen:// invite link:</p>
+        <h3 data-i18n="modal_join_room_title">Join Session Room</h3>
+        <p class="modal-desc" data-i18n="modal_join_room_desc">Enter the 8-character code or paste a teilen:// invite link:</p>
         <form id="form-join-session">
             <div class="field">
-                <label for="join-session-input">Invite Code / Link</label>
-                <input id="join-session-input" type="text" placeholder="e.g. K7PM-3XQD or teilen://session/join?code=..." required>
+                <label for="join-session-input" data-i18n="label_invite_code">Invite Code / Link</label>
+                <input id="join-session-input" type="text" placeholder="e.g. K7PM-3XQD or teilen://session/join?code=..." data-i18n-placeholder="placeholder_invite_code" class="ltr-always" required>
             </div>
             <p id="join-session-preview" class="panel-status" hidden></p>
             <div class="modal-actions">
-                <button type="button" class="btn-subtle modal-close">Cancel</button>
-                <button type="submit" class="submit-btn">Join Room</button>
+                <button type="button" class="btn-subtle modal-close" data-i18n="btn_cancel">Cancel</button>
+                <button type="submit" class="submit-btn" data-i18n="btn_join_room">Join Room</button>
             </div>
         </form>
     </div>
@@ -337,31 +338,31 @@
 <div id="modal-pair-phone" class="modal-veil modal-backdrop" hidden>
     <div class="modal-card modal-pair-card">
         <div class="modal-header">
-            <h3 class="modal-title">Pair Device</h3>
+            <h3 class="modal-title" data-i18n="pair_modal_title">Pair Device</h3>
             <button type="button" class="modal-close-btn modal-close" title="Close">✕</button>
         </div>
-        <p class="modal-subtitle">Enter this 8-character code on your phone or second browser:</p>
+        <p class="modal-subtitle" data-i18n="pair_modal_subtitle">Enter this 8-character code on your phone or second browser:</p>
 
         <div class="modal-code-card">
             <div class="pair-code-row">
-                <span id="modal-pair-code" class="pair-code-text">····-····</span>
+                <span id="modal-pair-code" class="pair-code-text ltr-always">····-····</span>
                 <button id="modal-pair-code-copy" type="button" class="btn-copy-code-styled" title="Copy code">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#F1F5F9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                     </svg>
-                    <span>Copy</span>
+                    <span data-i18n="btn_copy">Copy</span>
                 </button>
             </div>
-            <p id="modal-pair-status" class="pair-status-text">Waiting for second device…</p>
+            <p id="modal-pair-status" class="pair-status-text" data-i18n="pair_code_hint">Waiting for second device…</p>
         </div>
 
         <div class="modal-divider">
-            <span>OR ENTER CODE FROM PHONE</span>
+            <span data-i18n="pair_enter_code_label">OR ENTER CODE FROM PHONE</span>
         </div>
 
         <form id="modal-approve-form" class="modal-approve-container" autocomplete="off">
-            <div class="otp-container">
+            <div class="otp-container" dir="ltr">
                 <div class="otp-group">
                     <input type="text" class="otp-box" maxlength="1" data-index="0" inputmode="text" autocomplete="off" spellcheck="false">
                     <input type="text" class="otp-box" maxlength="1" data-index="1" inputmode="text" autocomplete="off" spellcheck="false">
@@ -375,9 +376,9 @@
                     <input type="text" class="otp-box" maxlength="1" data-index="6" inputmode="text" autocomplete="off" spellcheck="false">
                     <input type="text" class="otp-box" maxlength="1" data-index="7" inputmode="text" autocomplete="off" spellcheck="false">
                 </div>
-                <button type="button" id="modal-pair-paste-btn" class="btn-paste-pill" title="Paste 8-character code">Paste</button>
+                <button type="button" id="modal-pair-paste-btn" class="btn-paste-pill" title="Paste 8-character code" data-i18n="btn_paste">Paste</button>
             </div>
-            <button id="modal-approve-btn" type="submit" class="btn-connect-device">Connect Device</button>
+            <button id="modal-approve-btn" type="submit" class="btn-connect-device" data-i18n="btn_connect_device">Connect Device</button>
         </form>
         <p id="modal-approve-status" class="panel-status" hidden></p>
 
@@ -385,7 +386,7 @@
         <div class="modal-devices-section">
             <div class="modal-devices-head">
                 <h4 id="modal-devices-title" class="modal-section-title">Connected Devices (1)</h4>
-                <button type="button" id="modal-disconnect-others-btn" class="btn-disconnect-others" hidden>Disconnect All Other Devices</button>
+                <button type="button" id="modal-disconnect-others-btn" class="btn-disconnect-others" hidden data-i18n="btn_disconnect_all">Disconnect All Other Devices</button>
             </div>
             <ul id="modal-devices-list" class="modal-devices-list"></ul>
         </div>
@@ -395,20 +396,20 @@
 <!-- Modal: Custom TTL Input -->
 <div id="modal-custom-ttl" class="modal-veil" hidden>
     <div class="modal-panel">
-        <h3 id="custom-ttl-title">Set Expiration Timer (TTL)</h3>
-        <p class="modal-desc">Enter custom lifespan for this item (maximum 24 hours):</p>
+        <h3 id="custom-ttl-title" data-i18n="modal_ttl_title">Set Expiration Timer (TTL)</h3>
+        <p class="modal-desc" data-i18n="modal_ttl_desc">Enter custom lifespan for this item (maximum 24 hours):</p>
         <form id="form-custom-ttl">
             <div class="row">
                 <input id="custom-ttl-number" type="number" min="1" max="1440" value="1" required style="width: 100px;">
                 <select id="custom-ttl-unit">
-                    <option value="1">Seconds</option>
-                    <option value="60">Minutes</option>
-                    <option value="3600" selected>Hours</option>
+                    <option value="1" data-i18n="ttl_unit_seconds">Seconds</option>
+                    <option value="60" data-i18n="ttl_unit_minutes">Minutes</option>
+                    <option value="3600" data-i18n="ttl_unit_hours" selected>Hours</option>
                 </select>
             </div>
             <div class="modal-actions">
-                <button type="button" class="btn-subtle modal-close">Cancel</button>
-                <button type="submit" class="submit-btn">Apply</button>
+                <button type="button" class="btn-subtle modal-close" data-i18n="btn_cancel">Cancel</button>
+                <button type="submit" class="submit-btn" data-i18n="btn_apply">Apply</button>
             </div>
         </form>
     </div>
@@ -422,8 +423,8 @@
             <polyline points="17 8 12 3 7 8"></polyline>
             <line x1="12" y1="3" x2="12" y2="15"></line>
         </svg>
-        <span class="drop-title">Drop to encrypt &amp; send</span>
-        <span class="drop-subtitle">Multi-GB Direct LAN P2P · Cloud Relay up to 30 MB</span>
+        <span class="drop-title" data-i18n="drop_title">Drop to encrypt &amp; send</span>
+        <span class="drop-subtitle" data-i18n="drop_subtitle">Multi-GB Direct LAN P2P · Cloud Relay up to 30 MB</span>
     </div>
 </div>
 
@@ -443,7 +444,7 @@
             </div>
         </div>
         <h1 class="launch-title">Teilen</h1>
-        <p id="launch-status" class="launch-status">Initializing Vault…</p>
+        <p id="launch-status" class="launch-status" data-i18n="launch_status">Initializing Vault…</p>
     </div>
 </div>
 

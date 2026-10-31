@@ -95,7 +95,7 @@ class ShareReceiverActivity : Activity() {
 
             // If file > 2 MB, show immediate non-intrusive feedback
             if (maxDeclaredSize > 2 * 1024 * 1024L) {
-                Toast.makeText(this, "Sending to Teilen...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.toast_sending_headless), Toast.LENGTH_SHORT).show()
             }
         } else if (!text.isNullOrBlank()) {
             serviceIntent.putExtra(TransferService.EXTRA_TEXT, text)

@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Teilen</string>
+    <string name="share_label">Teilen</string>
+    <string name="process_text_label">نسخ إلى Teilen</string>
+    <string name="header_subtitle">مزامنة مشفّرة تماماً بين الأجهزة</string>
+
+    <string name="section_account">الحساب</string>
+    <string name="section_feed">المشاركات</string>
+    <string name="section_text">نص أو رابط</string>
+    <string name="section_files">الملفات</string>
+    <string name="section_backend">الخادم</string>
+
+    <!-- the account card: one of these three is on screen at any time -->
+    <string name="account_intro">اسم المستخدم هو حسابك. لا يتم إرسال أي شيء إلى الخادم بدون حساب، والمشاركات أدناه تخصك وحدك.</string>
+    <string name="username_hint">اسم المستخدم، مثلاً ahmed99</string>
+    <string name="phone_hint">اسم المستخدم، مثلاً ahmed99</string>
+    <string name="name_hint">اسمك (اختياري)</string>
+    <string name="create_account">إنشاء حسابي</string>
+    <string name="account_creating">جاري إنشاء الحساب…</string>
+    <string name="username_needed">أدخل اسم المستخدم أولاً.</string>
+    <string name="phone_needed">أدخل اسم المستخدم أولاً.</string>
+    <string name="username_invalid">يجب أن يتكون اسم المستخدم من 3 إلى 32 حرفاً أو رقماً فقط.</string>
+    <string name="username_taken">اسم المستخدم هذا مستخدم بالفعل. يرجى اختيار اسم آخر.</string>
+    <string name="pair_this_phone">الربط باستخدام رمز بدلاً من ذلك</string>
+    <string name="pair_intro">اكتب هذا الرمز المكوّن من 8 خانات في جهاز مرتبط بحسابك بالفعل.</string>
+    <string name="pair_waiting">في انتظار الموافقة. تنتهي صلاحية الرمز خلال دقائق معدودة.</string>
+    <string name="pair_failed">تعذر طلب رمز الربط — تحقق من عنوان الخادم أدناه.</string>
+    <string name="pair_cancel">إلغاء</string>
+    <string name="signed_in">مرتبط</string>
+    <string name="signed_in_as">مرتبط باسم %1$s</string>
+    <string name="account_paired_e2ee">مرتبط ومشفّر بالكامل (E2EE)</string>
+    <string name="sign_out">تسجيل الخروج</string>
+    <string name="pair_before_sharing">اربط هذا الهاتف أولاً — افتح Teilen لإعداد حسابك.</string>
+    <string name="pair_before_files">اربط هذا الهاتف أولاً — لا يمكن إرسال الملفات بعد.</string>
+    <string name="pair_then_send">تم الحفظ لك. اربط هذا الهاتف ثم اضغط إرسال.</string>
+    <string name="sent_when_paired">مرتبط · اضغط إرسال لمشاركة المحتوى في الصندوق</string>
+
+    <!-- the pairing prompt, opened by the phone's own camera -->
+    <string name="pair_title">هل تريد ربط جهاز جديد؟</string>
+    <string name="pair_ask_named">يريد %1$s (%2$s) الارتباط بهذا الحساب. بعد الموافقة، يمكنه قراءة وإضافة كل ما تشاركه — ويمكنك إلغاء ربطه في أي وقت.</string>
+    <string name="pair_code_stale">الرمز %1$s لم يعد صالحاً. ربما تم استخدامه بالفعل أو انتهت صلاحيته. افتح الجهاز الآخر وامسح رمزاً جديداً.</string>
+    <string name="pair_kind_phone">هاتف</string>
+    <string name="pair_kind_web">متصفح</string>
+    <string name="pair_allow">سماح</string>
+    <string name="pair_deny">رفض</string>
+    <string name="pair_close">إغلاق</string>
+    <string name="pair_approving">جاري إرسال الطلب للخادم…</string>
+    <string name="pair_denying">جاري الرفض…</string>
+    <string name="pair_allowed">تم ربط %1$s بنجاح.</string>
+    <string name="pair_refused">لم يتم ربط %1$s.</string>
+    <string name="pair_failed_reason">تعذر الرد: %1$s</string>
+    <string name="pair_not_paired">هذا الهاتف غير مرتبط بأي حساب حتى الآن، لذا لا يمكنه الموافقة على جهاز آخر. افتح Teilen وأعد حسابك أولاً.</string>
+    <string name="pair_open_app">افتح Teilen</string>
+    <string name="pair_no_code">هذا الرابط لا يحتوي على رمز ربط.</string>
+
+    <!-- the feed: everything the account has shared, from any device -->
+    <string name="feed_intro">كل ما تشاركه عبر Teilen من الهاتف والمتصفح. الأحدث أولاً.</string>
+    <string name="open_feed">فتح المشاركات</string>
+    <string name="feed_title">المشاركات المباشرة</string>
+    <string name="feed_subtitle">من جميع أجهزتك المرتبطة</string>
+    <string name="feed_count">%1$d نشط</string>
+    <string name="feed_empty">قائمة المشاركات فارغة.</string>
+    <string name="feed_empty_hint">ستظهر العناصر التي تشاركها هنا مع عد تنازلي تلقائي وتختفي عند انتهاء الوقت.</string>
+    <string name="feed_thumb">صورة مشتركة</string>
+    <string name="feed_open_link">فتح</string>
+    <string name="feed_no_viewer">لا يوجد تطبيق على هذا الهاتف يمكنه فتح %1$s.</string>
+    <string name="image_failed">هذه الصورة غير متوفرة — ربما انتهت صلاحيتها أو لم يعد الرابط صالحاً.</string>
+    <string name="feed_need_pair">اربط هذا الهاتف أولاً — المشاركات تخص حساباً واحداً.</string>
+    <string name="refresh">تحديث</string>
+    <string name="extend_ttl">+1 س</string>
+    <string name="extend_ttl_success">تم التمديد لمدة ساعة واحدة</string>
+    <string name="delete_item">حذف</string>
+
+    <string name="content_hint">الصق نصاً أو ملاحظة أو رابطاً…</string>
+    <string name="expires_in">ينتهي خلال:</string>
+    <string name="send">إرسال</string>
+    <string name="encrypt_and_send">تشفير وإرسال</string>
+    <string name="paste_and_send">لصق</string>
+    <string name="sending">جاري التشفير والإرسال…</string>
+    <string name="ready">جاهز · %1$s</string>
+    <string name="nothing_to_send">لا يوجد شيء لإرساله — الصق شيئاً أولاً.</string>
+    <string name="sent">تم الإرسال · %1$s</string>
+    <string name="sent_toast">تم الإرسال إلى Teilen</string>
+    <string name="copied_toast">تم النسخ إلى Teilen</string>
+    <string name="copied_to_clipboard">تم النسخ</string>
+    <string name="server_hint">عنوان الخادم (الافتراضي هو الخادم المدمج):</string>
+    <string name="server_blank">أدخل عنوان URL أولاً.</string>
+    <string name="server_saved">تم الحفظ: %1$s</string>
+    <string name="save">حفظ</string>
+
+    <!-- files, up to the server-side cap -->
+    <string name="pick_file">اختيار ملفات</string>
+    <string name="files_hint">حتى 30 ميجابايت · مشفّر بـ XChaCha20-Poly1305</string>
+    <string name="files_drop_hint">حتى 30 ميجابايت · مشفّر بـ XChaCha20</string>
+    <string name="chip_photos">الصور</string>
+    <string name="chip_documents">المستندات</string>
+    <string name="chip_any_file">أي ملف</string>
+    <string name="file_too_large_error">الملف المحدد (%1$s) يتجاوز الحد المسموح به (30 ميجابايت).</string>
+    <string name="uploading">جاري رفع %1$s…</string>
+    <string name="uploading_n">جاري رفع %1$d ملفات… (%2$d من %3$d)</string>
+    <string name="uploading_bytes">تم إرسال %1$s حتى الآن · الحد الأقصى 30 ميجابايت</string>
+    <string name="file_sent">تم إرسال %1$s</string>
+    <string name="files_sent">تم إرسال %1$d ملفات</string>
+    <string name="file_failed">تعذر إرسال %1$s</string>
+
+    <string name="share_sending">جاري إرسال “%1$s”…</string>
+    <string name="share_sent">تم الإرسال</string>
+    <string name="share_empty">لا يوجد شيء للمشاركة</string>
+    <string name="share_uploading">جاري تشفير وإرسال %1$s</string>
+    <string name="share_uploading_n">جاري تشفير وإرسال %1$d ملفات</string>
+    <string name="share_uploading_progress">%1$s من %2$s</string>
+    <string name="share_files_sent">تم إرسال %1$d ملفات</string>
+
+    <!-- notifications & foreground service compliance -->
+    <string name="cancel">إلغاء</string>
+    <string name="transfer_cancelling">جاري إلغاء النقل…</string>
+    <string name="share_cancelled">تم إلغاء النقل</string>
+    <string name="upload_via_lan">عبر الشبكة المحلية المباشرة</string>
+    <string name="upload_via_relay">عبر الخادم المشفّر</string>
+    <string name="watch_title">مشاركة ما أنسخه</string>
+    <string name="watch_hint">انسخ أي نص ليظهر إشعار بزر إرسال فوري بضغطة واحدة. لا يُرسل شيء إلا بموافقتك.</string>
+    <string name="watch_idle_title">Teilen في وضع الاستعداد</string>
+    <string name="watch_idle_text">انسخ نصاً أو رابطاً ثم اضغط إرسال للنقل</string>
+    <string name="watch_offer_title">تم النسخ — هل تريد الإرسال إلى Teilen؟</string>
+    <string name="watch_offer_text">اضغط إرسال لتشفير ونقل الحافظة</string>
+    <string name="stop_watching">إيقاف المراقبة</string>
+    <string name="try_clipboard">جرّب الآن</string>
+    <string name="notifications_needed">اسمح بالإشعارات، وإلا فلن يظهر زر الإرسال.</string>
+    <string name="watching_on">جاري مراقبة الحافظة</string>
+    <string name="watching_off">تم إيقاف المراقبة</string>
+    <string name="copied_sample">تم نسخ نص تجريبي — تفقد شريط الإشعارات.</string>
+    <string name="channel_clipboard">التقاط الحافظة</string>
+    <string name="channel_clipboard_description">إشعار مستمر بزر لإرسال ما نسخته</string>
+    <string name="channel_transfer">عمليات النقل</string>
+    <string name="channel_transfer_description">شريط التقدم أثناء رفع المشاركة في الخلفية</string>
+    <string name="sending_toast">جاري الإرسال إلى Teilen…</string>
+
+    <!-- auth and login -->
+    <string name="password_hint">كلمة المرور (6 أحرف على الأقل)</string>
+    <string name="password_needed">أدخل كلمة المرور.</string>
+    <string name="password_short">يجب ألا تقل كلمة المرور عن 6 أحرف.</string>
+    <string name="tab_login">تسجيل الدخول</string>
+    <string name="tab_register">إنشاء حساب</string>
+    <string name="login_button">تسجيل الدخول</string>
+    <string name="logging_in">جاري تسجيل الدخول…</string>
+    <string name="login_failed">فشل تسجيل الدخول: %1$s</string>
+    <string name="account_mode_register_hint">أنشئ حساباً باستخدام اسم المستخدم وكلمة المرور.</string>
+    <string name="account_mode_login_hint">سجّل الدخول إلى حسابك باستخدام اسم المستخدم وكلمة المرور.</string>
+
+    <!-- privacy & compliance -->
+    <string name="privacy_policy">سياسة الخصوصية</string>
+    <string name="account_delete">حذف الحساب والبيانات</string>
+
+    <!-- status badges -->
+    <string name="status_direct_lan">شبكة محلية مباشرة</string>
+    <string name="status_encrypted_relay">خادم مشفّر</string>
+    <string name="status_lan_ready">مسار شبكة محلية سريع</string>
+
+    <!-- TTL segmented pills -->
+    <string name="ttl_10m">10 د</string>
+    <string name="ttl_30m">30 د</string>
+    <string name="ttl_1h">1 س</string>
+    <string name="ttl_4h">4 س</string>
+    <string name="ttl_24h">24 س</string>
+
+    <!-- bottom navigation tabs -->
+    <string name="nav_send">إرسال</string>
+    <string name="nav_files">الملفات</string>
+    <string name="nav_feed">المشاركات</string>
+    <string name="nav_account">الحساب</string>
+    <string name="sign_in_required_banner">سجّل الدخول أو أنشئ حساباً في تبويب الحساب لبدء المشاركة بأمان.</string>
+    <string name="go_to_account">الانتقال إلى الحساب</string>
+
+    <!-- Send mode selector -->
+    <string name="mode_text">نص</string>
+    <string name="mode_files">ملفات</string>
+    <string name="mode_photos">صور</string>
+    <string name="mode_audio">صوت</string>
+    <string name="mode_media">صور</string>
+    <string name="mode_file">ملفات</string>
+    <string name="selected_file">الملف المحدد</string>
+    <string name="change_file">تغيير</string>
+    <string name="remove_file">إزالة</string>
+    <string name="no_file_chosen">لم يتم تحديد أي ملف بعد</string>
+    <string name="choose_file_prompt">حدد ملفاً لتشفيره ونقله</string>
+    <string name="select_file_first">يرجى تحديد ملف لإرساله.</string>
+
+    <!-- Clipboard & Trampoline strings -->
+    <string name="send_current_clipboard">إرسال الحافظة الحالية</string>
+    <string name="quick_paste_with_preview">لصق: %1$s</string>
+
+    <!-- Brand Launch Screen -->
+    <string name="launch_status_vault">تهيئة الخزنة المشفّرة…</string>
+    <string name="launch_status_feed">مزامنة المشاركات…</string>
+
+    <!-- Downloads & Bidirectional Pairing -->
+    <string name="feed_download">تنزيل</string>
+    <string name="saved_to_downloads">تم حفظ %1$s في التنزيلات</string>
+    <string name="open_downloaded_file">فتح</string>
+    <string name="downloading_file">جاري تنزيل %1$s…</string>
+    <string name="pair_another_device">ربط جهاز آخر</string>
+    <string name="pair_enter_code_hint">أدخل رمزاً مكوّناً من 8 خانات (مثلاً K7PM-3XQD)</string>
+    <string name="pair_scan_qr">مسح رمز QR</string>
+    <string name="pair_device_button">ربط الجهاز</string>
+    <string name="copy_code">نسخ الرمز</string>
+    <string name="code_copied">تم نسخ الرمز إلى الحافظة</string>
+    <string name="camera_permission_required">إذن الكاميرا مطلوب لمسح رموز QR الخاصة بالربط.</string>
+
+    <!-- In-App Updates & Versioning -->
+    <string name="update_ready_banner">إصدار جديد من Teilen جاهز ومحمّل.</string>
+    <string name="btn_restart_update">إعادة التشغيل والتحديث</string>
+    <string name="update_required_title">التحديث مطلوب</string>
+    <string name="update_required_body">هذا الإصدار من Teilen لم يعد متوافقاً مع أحدث بروتوكول أمان. يرجى التحديث عبر متجر Google Play للمتابعة.</string>
+    <string name="btn_update_now">تحديث الآن</string>
+    <string name="btn_check_updates">التحقق من التحديثات</string>
+    <string name="app_up_to_date">Teilen محدّث لأحدث إصدار</string>
+    <string name="checking_for_updates">جاري التحقق من التحديثات…</string>
+    <string name="app_version_format">الإصدار %1$s (%2$d)</string>
+
+    <!-- QR Scanner UI -->
+    <string name="scanner_title">مسح رمز QR للربط</string>
+    <string name="scanner_prompt_text">وجّه الكاميرا نحو رمز QR على شاشة حاسوبك</string>
+    <string name="scanner_enter_manual_code">إدخال رمز من 8 خانات يدوياً</string>
+    <string name="pair_manual_code_desc">أدخل رمز الربط المكوّن من 8 خانات المعروض على حاسوبك أو جهازك:</string>
+
+    <!-- Companion Banner & Web Link Prominence -->
+    <string name="companion_banner_title">افتح على حاسوبك: %1$s</string>
+    <string name="companion_banner_subtitle">اربط في 3 ثوانٍ لنقل الملفات والنصوص والحافظة بسلاسة.</string>
+    <string name="btn_scan_qr_short">مسح QR</string>
+    <string name="btn_enter_code_short">إدخال رمز</string>
+    <string name="btn_copy_link_short">نسخ الرابط</string>
+    <string name="web_companion_title">TEILEN على الكمبيوتر</string>
+    <string name="web_companion_subtitle">افتح هذا الرابط في أي متصفح لنقل الملفات والنصوص والحافظة بتشفير كامل.</string>
+    <string name="btn_copy_url">نسخ الرابط</string>
+    <string name="btn_share_link">مشاركة الرابط</string>
+    <string name="devices_connected_pill">⚡ %1$d أجهزة متصلة · %2$s</string>
+    <string name="devices_title">الأجهزة المرتبطة</string>
+    <string name="replay_guide_title">إعادة تشغيل الدليل التفاعلي</string>
+    <string name="replay_guide_subtitle">جولة سريعة حول مزامنة الأجهزة وميزات النظام</string>
+    <string name="advanced_auth_title">متقدم: تخصيص اسم المستخدم / تبديل الخزنة</string>
+    <string name="advanced_auth_subtitle">اختر بيانات دخول مميزة أو بدّل بين الحسابات المختلفة</string>
+
+    <!-- First-Launch Onboarding Wizard -->
+    <string name="onboarding_skip">تخطي</string>
+    <string name="onboarding_next">التالي ←</string>
+    <string name="onboarding_slide1_badge">بدون تتبع سحابي · بدون إعداد معقد</string>
+    <string name="onboarding_slide1_title">أجهزتك، متصلة فوراً</string>
+    <string name="onboarding_slide1_body">أرسل النصوص والروابط والصور والملفات الضخمة بين هاتفك وحاسوبك. كل شيء مشفّر بين طرفين ويُحذف تلقائياً وفقاً لاختيارك.</string>
+    <string name="onboarding_slide2_title">اربط حاسوبك في 3 ثوانٍ</string>
+    <string name="onboarding_slide2_body">افتح Teilen في أي متصفح على حاسوبك. اربط الآن بكتابة الرمز المكوّن من 8 خانات.</string>
+    <string name="onboarding_slide2_scan_qr">مسح QR على الحاسوب</string>
+    <string name="onboarding_slide2_enter_code">إدخال رمز من 8 خانات</string>
+    <string name="onboarding_slide3_title">لا حاجة لفتح التطبيق حتى</string>
+    <string name="onboarding_slide3_body">حدد نصاً في أي تطبيق واضغط \"نسخ إلى Teilen\"، أو شارك من خلال قائمة المشاركة في أندرويد في أقل من 50 مللي ثانية.</string>
+    <string name="onboarding_slide3_toggle_clip">تفعيل إشعار الحافظة بلمسة واحدة</string>
+    <string name="onboarding_slide3_cta">الدخول إلى خزنتي ←</string>
+
+    <!-- Bilingual Localization Keys -->
+    <string name="subtitle_encrypted">مشفّر تماماً بين طرفين</string>
+    <string name="status_encrypted_short">مشفّر</string>
+    <string name="status_live">متصل</string>
+    <string name="status_connecting">جاري الاتصال...</string>
+    <string name="status_offline">غير متصل</string>
+    <string name="btn_pair">ربط جهاز</string>
+    <string name="personal_vault">الخزنة الشخصية</string>
+    <string name="new_room">+ غرفة جديدة</string>
+    <string name="join_room">انضمام لغرفة</string>
+    <string name="share_room">مشاركة الغرفة</string>
+    <string name="delete_room">حذف الغرفة</string>
+    <string name="leave_room">مغادرة الغرفة</string>
+    <string name="confirm_delete_room">هل تريد حذف غرفة \"%1$s\" وجميع العناصر المشتركة فيها؟</string>
+    <string name="confirm_leave_room">هل تريد مغادرة غرفة \"%1$s\"؟</string>
+    <string name="tab_send">إرسال</string>
+    <string name="tab_feed">المشاركات</string>
+    <string name="tab_account">الحساب</string>
+    <string name="composer_placeholder">اكتب أو الصق نصاً أو رابطاً أو كوداً بلا حدود...</string>
+    <string name="ttl_custom">مخصص</string>
+    <string name="btn_attach_file">إرفاق ملف</string>
+    <string name="btn_send">إرسال</string>
+    <string name="btn_copy">نسخ</string>
+    <string name="btn_copied">✓ تم النسخ</string>
+    <string name="btn_save">حفظ</string>
+    <string name="btn_saved">✓ تم الحفظ</string>
+    <string name="btn_extend_1h">+1 س</string>
+    <string name="btn_delete">حذف</string>
+    <string name="btn_cancel">إلغاء</string>
+    <string name="badge_text">نص</string>
+    <string name="badge_link">رابط</string>
+    <string name="badge_image">صورة</string>
+    <string name="badge_file">ملف</string>
+    <string name="badge_pdf">PDF</string>
+    <string name="badge_audio">صوت</string>
+    <string name="empty_feed_title">خزنتك فارغة حالياً</string>
+    <string name="empty_feed_subtitle">أي شيء تشاركه من أجهزتك المرتبطة يظهر هنا فوراً ويُحذف تلقائياً عند انتهاء المؤقت.</string>
+    <string name="pair_modal_title">ربط الأجهزة</string>
+    <string name="pair_modal_subtitle">مزامنة مشفّرة عبر الأجهزة</string>
+    <string name="pair_your_code_label">رمز الربط الخاص بك</string>
+    <string name="pair_your_code_hint">أدخل هذا الرمز المكوّن من 8 خانات في جهازك الآخر:</string>
+    <string name="pair_enter_code_label">أو أدخل الرمز من جهاز آخر</string>
+    <string name="btn_connect_device">ربط الجهاز</string>
+    <string name="btn_paste">لصق</string>
+    <string name="connected_devices_title">الأجهزة المرتبطة (%1$d)</string>
+    <string name="this_device_badge">هذا الجهاز</string>
+    <string name="btn_disconnect">فصل</string>
+    <string name="btn_disconnect_all">فصل جميع الأجهزة الأخرى</string>
+    <string name="toast_paired_success">تم ربط الجهاز ومزامنة المشاركات</string>
+    <string name="toast_sending_headless">جاري الإرسال إلى Teilen...</string>
+    <string name="toast_shared_text">✓ تمت مشاركة النص عبر Teilen</string>
+    <string name="toast_shared_link">✓ تمت مشاركة الرابط عبر Teilen</string>
+    <string name="toast_shared_file">✓ تمت مشاركة %1$s عبر Teilen</string>
+    <string name="toast_shared_files_multi">✓ تمت مشاركة %1$d ملفات عبر Teilen</string>
+    <string name="toast_share_failed_offline">فشلت المشاركة: يرجى التحقق من الاتصال بالإنترنت</string>
+    <string name="account_computer_title">TEILEN على الكمبيوتر</string>
+    <string name="account_computer_desc">افتح هذا الرابط في أي متصفح لنقل الملفات والنصوص والحافظة بتشفير كامل.</string>
+    <string name="account_identity_title">الحساب</string>
+    <string name="account_paired_as">مسجّل باسم %1$s</string>
+    <string name="pref_send_what_i_copy">مشاركة ما أنسخه</string>
+    <string name="pref_send_what_i_copy_desc">انسخ أي نص ليظهر إشعار بزر إرسال فوري بضغطة واحدة. لا يُرسل شيء إلا بموافقتك.</string>
+    <string name="btn_delete_account">حذف الحساب والبيانات</string>
+    <string name="btn_privacy_policy">سياسة الخصوصية</string>
+</resources>

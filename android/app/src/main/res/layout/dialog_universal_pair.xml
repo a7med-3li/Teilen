@@ -18,7 +18,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Pair Devices"
+            android:text="@string/pair_modal_title"
             android:textSize="18sp" />
 
         <ImageButton
@@ -36,7 +36,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
-        android:text="Multi-device encrypted sync" />
+        android:text="@string/pair_modal_subtitle" />
 
     <!-- Section 1: This Device's Code -->
     <LinearLayout
@@ -52,7 +52,7 @@
             style="@style/Text.Caption"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="THIS DEVICE'S CODE"
+            android:text="@string/pair_your_code_label"
             android:textColor="@color/text_secondary"
             android:textSize="11sp"
             android:textStyle="bold" />
@@ -82,7 +82,8 @@
                 android:text="····-····"
                 android:textColor="@color/text_primary"
                 android:textSize="22sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:textDirection="ltr" />
 
             <Button
                 android:id="@+id/dialog_btn_copy_code"
@@ -94,7 +95,7 @@
                 android:minWidth="0dp"
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp"
-                android:text="Copy"
+                android:text="@string/btn_copy"
                 android:textColor="@color/accent"
                 android:textSize="12sp" />
 
@@ -118,7 +119,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:gravity="center"
-            android:text="Enter this 8-character code on your phone or computer"
+            android:text="@string/pair_your_code_hint"
             android:textColor="@color/text_secondary"
             android:textSize="12sp" />
     </LinearLayout>
@@ -130,7 +131,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:gravity="center"
-        android:text="— OR ENTER CODE FROM ANOTHER DEVICE —"
+        android:text="@string/pair_enter_code_label"
         android:textColor="@color/text_secondary"
         android:textSize="10sp"
         android:textStyle="bold" />
@@ -146,7 +147,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:layoutDirection="ltr">
 
             <!-- First 4 Boxes -->
             <EditText
@@ -290,7 +292,7 @@
                 android:minHeight="36dp"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:text="Paste"
+                android:text="@string/btn_paste"
                 android:textColor="@color/accent"
                 android:textSize="11sp" />
         </LinearLayout>
@@ -303,7 +305,7 @@
             android:layout_height="42dp"
             android:layout_marginTop="8dp"
             android:minHeight="42dp"
-            android:text="Connect"
+            android:text="@string/btn_connect_device"
             android:textSize="13sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -356,7 +358,7 @@
                 android:minWidth="0dp"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:text="Disconnect Others"
+                android:text="@string/btn_disconnect_all"
                 android:textColor="#F87171"
                 android:textSize="11sp"
                 android:visibility="gone" />

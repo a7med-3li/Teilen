@@ -55,7 +55,8 @@
                 android:ellipsize="end"
                 android:singleLine="true"
                 android:textColor="@color/text_secondary"
-                android:textSize="11sp" />
+                android:textSize="11sp"
+                android:textDirection="ltr" />
         </LinearLayout>
 
         <!-- Right: Action Buttons (weight="0" / wrap_content) -->
@@ -81,7 +82,7 @@
                 android:drawableStart="@drawable/ic_copy"
                 android:drawablePadding="3dp"
                 android:drawableTint="@color/accent"
-                android:text="Copy"
+                android:text="@string/btn_copy"
                 android:textColor="@color/accent"
                 android:textSize="10.5sp" />
 
@@ -162,7 +163,8 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:autoLink="web"
-            android:linksClickable="true" />
+            android:linksClickable="true"
+            android:textDirection="firstStrong" />
     </LinearLayout>
 
 </LinearLayout>

@@ -1813,7 +1813,7 @@ class MainActivity : Activity() {
                         SecureKeyManager.setMasterKey(this, incoming)
                     }
                     dialog.dismiss()
-                    Toast.makeText(this, "Device paired successfully!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.toast_paired_success), Toast.LENGTH_SHORT).show()
                     account.render()
                     applyGating()
                     fetchDevicesAndUpdateBanners()
@@ -1836,7 +1836,7 @@ class MainActivity : Activity() {
             val token = Session.token(this) ?: return
             TeilenApi.getDevices(Server.get(this), token) { devs ->
                 val list = devs ?: emptyList()
-                devicesTitle?.text = "CONNECTED DEVICES (${list.size})"
+                devicesTitle?.text = getString(R.string.connected_devices_title, list.size)
                 btnDisconnectOthers?.visibility = if (list.size > 1) View.VISIBLE else View.GONE
                 devicesContainer?.removeAllViews()
 
@@ -2328,7 +2328,14 @@ class MainActivity : Activity() {
             val btnDelete = view.findViewById<ImageButton>(R.id.feed_action_delete)
             val btnMore = view.findViewById<ImageButton>(R.id.feed_action_more)
 
-            kindBadge.text = item.kind.uppercase()
+            kindBadge.text = when (item.kind.uppercase()) {
+                "TEXT" -> getString(R.string.badge_text)
+                "LINK" -> getString(R.string.badge_link)
+                "IMAGE" -> getString(R.string.badge_image)
+                "PDF" -> getString(R.string.badge_pdf)
+                "AUDIO" -> getString(R.string.badge_audio)
+                else -> getString(R.string.badge_file)
+            }
             metaText.text = item.meta()
 
             // Calculate countdown ring progress
@@ -2381,16 +2388,16 @@ class MainActivity : Activity() {
             val isCopyable = item.type == "TEXT" || item.type == "LINK" || item.isImage
             if (isCopyable) {
                 btnCopy.visibility = View.VISIBLE
-                btnCopy.text = "Copy"
+                btnCopy.text = getString(R.string.btn_copy)
                 btnCopy.setTextColor(getColor(R.color.accent))
                 btnCopy.setOnClickListener {
                     if (item.isImage) {
-                        btnCopy.text = "Copying…"
+                        btnCopy.text = getString(R.string.status_connecting)
                         copyImageToClipboard(item) {
-                            btnCopy.text = "✓ Copied"
+                            btnCopy.text = getString(R.string.btn_copied)
                             btnCopy.setTextColor(Color.parseColor("#10B981"))
                             btnCopy.postDelayed({
-                                btnCopy.text = "Copy"
+                                btnCopy.text = getString(R.string.btn_copy)
                                 btnCopy.setTextColor(getColor(R.color.accent))
                             }, 1500)
                         }
@@ -2398,10 +2405,10 @@ class MainActivity : Activity() {
                         performHaptic(it, HapticFeedbackConstants.CONFIRM)
                         val cm = getSystemService(ClipboardManager::class.java)
                         cm?.setPrimaryClip(ClipData.newPlainText("Teilen", item.content))
-                        btnCopy.text = "✓ Copied"
+                        btnCopy.text = getString(R.string.btn_copied)
                         btnCopy.setTextColor(Color.parseColor("#10B981"))
                         btnCopy.postDelayed({
-                            btnCopy.text = "Copy"
+                            btnCopy.text = getString(R.string.btn_copy)
                             btnCopy.setTextColor(getColor(R.color.accent))
                         }, 1500)
                     }
@@ -2526,7 +2533,7 @@ class MainActivity : Activity() {
         val actions = mutableListOf<() -> Unit>()
 
         val personal = currentSessions.firstOrNull { it.isPersonal }
-        options.add("🔒 Personal Vault")
+        options.add("🔒 " + getString(R.string.personal_vault))
         actions.add {
             Session.setActiveSessionId(this, personal?.id)
             renderSessionPills()
@@ -2550,18 +2557,18 @@ class MainActivity : Activity() {
         }
 
         if (isCustomRoom && activeSession != null) {
-            options.add("🔗 Share Room '${activeSession.name}'")
+            options.add("🔗 " + getString(R.string.share_room) + " '${activeSession.name}'")
             actions.add {
                 showShareRoomDialog(activeSession)
             }
-            val deleteLabel = if (activeSession.role == "OWNER") "🗑 Delete Room '${activeSession.name}'" else "🚪 Leave Room '${activeSession.name}'"
+            val deleteLabel = if (activeSession.role == "OWNER") "🗑 " + getString(R.string.delete_room) + " '${activeSession.name}'" else "🚪 " + getString(R.string.leave_room) + " '${activeSession.name}'"
             options.add(deleteLabel)
             actions.add {
                 confirmDeleteOrLeaveRoom(activeSession)
             }
         }
 
-        options.add("➕ Join Room by Code…")
+        options.add("➕ " + getString(R.string.join_room) + "…")
         actions.add {
             showJoinRoomDialog()
         }
@@ -2620,7 +2627,7 @@ class MainActivity : Activity() {
 
         val activeSession = currentSessions.firstOrNull { it.id == activeId }
             ?: currentSessions.firstOrNull { it.isPersonal }
-        findViewById<TextView>(R.id.header_active_session_name)?.text = activeSession?.name ?: "Personal Vault"
+        findViewById<TextView>(R.id.header_active_session_name)?.text = if (activeSession == null || activeSession.isPersonal) getString(R.string.personal_vault) else activeSession.name
 
         val isCustomRoom = activeSession != null && !activeSession.isPersonal
         findViewById<View>(R.id.header_btn_share_room)?.visibility = if (isCustomRoom) View.VISIBLE else View.GONE
@@ -2629,7 +2636,7 @@ class MainActivity : Activity() {
         val encryptedUser = findViewById<TextView>(R.id.header_encrypted_username)
         if (encryptedUser != null) {
             val username = Session.phone(this) ?: getString(R.string.signed_in)
-            encryptedUser.text = "Encrypted · " + username
+            encryptedUser.text = getString(R.string.status_encrypted_short) + " · " + username
             encryptedUser.isSingleLine = true
             encryptedUser.ellipsize = android.text.TextUtils.TruncateAt.END
         }
@@ -2760,12 +2767,12 @@ class MainActivity : Activity() {
 
     private fun confirmDeleteOrLeaveRoom(session: TeilenApi.SessionInfo) {
         val isOwner = session.role == "OWNER"
-        val title = if (isOwner) "Delete Room?" else "Leave Room?"
+        val title = if (isOwner) getString(R.string.delete_room) else getString(R.string.leave_room)
         val message = if (isOwner)
-            "Delete room '${session.name}' and all its shared items?"
+            getString(R.string.confirm_delete_room, session.name)
         else
-            "Leave room '${session.name}'?"
-        val buttonText = if (isOwner) "Delete" else "Leave"
+            getString(R.string.confirm_leave_room, session.name)
+        val buttonText = if (isOwner) getString(R.string.btn_delete) else getString(R.string.leave_room)
 
         AlertDialog.Builder(this)
             .setTitle(title)

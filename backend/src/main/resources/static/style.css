@@ -39,6 +39,16 @@
     --radius-full: 9999px;
 }
 
+html[lang="ar"],
+html[dir="rtl"] {
+    --font-sans: 'IBM Plex Sans Arabic', 'Cairo', system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+html[dir="rtl"] body {
+    font-family: var(--font-sans);
+    line-height: 1.65;
+}
+
 @media (prefers-color-scheme: light) {
     :root {
         --bg: #F8FAFC;
@@ -233,6 +243,30 @@ header,
 .btn-header-pair:hover {
     background: rgba(56, 189, 248, 0.2) !important;
     border-color: #38BDF8 !important;
+}
+
+/* Language Toggle Pill */
+.btn-lang-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--line);
+    color: var(--fg);
+    border-radius: var(--radius-full);
+    padding: 5px 11px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    line-height: 1;
+}
+
+.btn-lang-toggle:hover {
+    background: var(--accent-tint);
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 .btn-header-account {
@@ -2826,6 +2860,71 @@ button.danger:hover {
     background: var(--danger-tint);
     color: var(--danger);
 }
+
+/* ==========================================================================
+   Bilingual & RTL Layout Rules
+   ========================================================================== */
+
+/* Strict LTR Enforcement for Codes, Timers, URLs, and Segmented Inputs */
+[dir="ltr"],
+.otp-container,
+.otp-group,
+.otp-box,
+.pair-code-row,
+.pair-code-text,
+.pair-code,
+#pair-code,
+#modal-pair-code,
+#share-session-code,
+.item-timer,
+.card-timer,
+.ttl,
+.ttl-text,
+.card-time,
+.link-content,
+.telemetry-foot,
+.card-text-scroll.code-mode,
+.ltr-always {
+    direction: ltr !important;
+    text-align: left;
+    unicode-bidi: isolate;
+}
+
+.otp-box {
+    text-align: center !important;
+}
+
+/* Auto-bidi detection for messages, input, and titles */
+#compose-input,
+.card-text-scroll,
+.card-title-snippet,
+.file-name {
+    direction: auto;
+    unicode-bidi: plaintext;
+    text-align: start;
+}
+
+/* RTL layout symmetry */
+html[dir="rtl"] .card-head-right {
+    margin-right: auto;
+    margin-left: 0;
+}
+
+html[dir="rtl"] .session-dropdown,
+html[dir="rtl"] .card-menu-dropdown {
+    right: auto;
+    left: 0;
+}
+
+html[dir="rtl"] .btn-paste-pill {
+    margin-left: 0;
+    margin-right: 4px;
+}
+
+html[dir="rtl"] .card-menu-item {
+    text-align: right;
+}
+
 
 
 

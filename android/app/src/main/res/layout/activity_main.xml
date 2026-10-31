@@ -350,7 +350,8 @@
                                 android:lines="4"
                                 android:maxHeight="220dp"
                                 android:overScrollMode="always"
-                                android:scrollbars="vertical" />
+                                android:scrollbars="vertical"
+                                android:textDirection="firstStrong" />
                         </LinearLayout>
 
                         <!-- File Composer Layout -->
@@ -1204,7 +1205,8 @@
                             android:layout_height="wrap_content"
                             android:layout_marginTop="10dp"
                             android:inputType="textUri"
-                            android:singleLine="true" />
+                            android:singleLine="true"
+                            android:textDirection="ltr" />
 
                         <Button
                             android:id="@+id/save_server"

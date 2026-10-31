@@ -22,6 +22,296 @@
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const MAX_RELAY_BYTES = 30 * 1024 * 1024; // 30 MB ceiling for Cloud Relay
 
+    // ---------- Bilingual Localization (English & Arabic) ----------
+    const I18N = {
+        en: {
+            brand: 'Teilen',
+            subtitle_encrypted: 'End-to-End Encrypted',
+            status_encrypted_short: 'Encrypted',
+            status_live: 'Live',
+            status_connecting: 'Connecting…',
+            status_reconnecting: 'Reconnecting…',
+            status_offline: 'Offline',
+            btn_pair: 'Pair Device',
+            personal_vault: 'Personal Vault',
+            new_room: 'New Room',
+            join_room: 'Join Room',
+            join_room_by_code: 'Join Room by Code',
+            share_room: 'Share Room',
+            delete_room: 'Delete Room',
+            leave_room: 'Leave Room',
+            confirm_delete_room: 'Delete this room and all its shared content permanently?',
+            confirm_leave_room: 'Leave this room? You will need an invite code to rejoin.',
+            welcome_title: 'Welcome to Teilen',
+            welcome_desc: 'End-to-end encrypted cross-device sync & Direct LAN',
+            instant_vault_btn: '⚡ Start Instant Anonymous Vault',
+            auth_divider: 'or pair with another device',
+            pair_lead: 'Enter this 8-character pairing code on your phone or second device:',
+            pair_code_hint: 'Waiting for other device…',
+            pair_retry: 'Get a new code',
+            auth_advanced_toggle: 'Advanced: Claim Custom Username / Switch Vault',
+            auth_tab_login: 'Sign in',
+            auth_tab_register: 'Create account',
+            label_username: 'Username',
+            label_password: 'Password',
+            label_display_name: 'Display name (optional)',
+            username_helper: 'Letters and numbers only, no special characters',
+            password_placeholder_min: 'At least 6 characters',
+            display_name_placeholder: 'e.g. My Laptop',
+            btn_sign_in: 'Sign in',
+            btn_create_account: 'Create account',
+            devices_heading: 'Paired devices',
+            btn_revoke_others: 'Sign Out All Other Devices',
+            approve_label: 'Pair another device — enter 8-digit code (e.g. K7PM-3XQD)',
+            btn_sign_out: 'Sign out of this browser',
+            composer_placeholder: 'Type or paste unlimited text, links, or code… (Shift+Enter for newline, Enter to send)',
+            expires_in: 'Expires in:',
+            ttl_custom: 'Custom',
+            btn_attach_file: 'Attach File',
+            btn_send: 'Send',
+            btn_copy: 'Copy',
+            btn_copied: 'Copied!',
+            btn_save: 'Save',
+            btn_saved: 'Saved!',
+            btn_extend_1h: '+1h',
+            btn_extend_1h_menu: '+1 Hour Expiration',
+            btn_custom_timer_menu: 'Custom Timer (TTL)…',
+            btn_toggle_code_menu: 'Toggle Code Font',
+            btn_toggle_full_menu: 'Toggle Full View',
+            share_link_menu: 'Share Link',
+            btn_delete: 'Delete',
+            btn_cancel: 'Cancel',
+            btn_done: 'Done',
+            btn_apply: 'Apply',
+            badge_text: 'TEXT',
+            badge_link: 'LINK',
+            badge_image: 'IMAGE',
+            badge_file: 'FILE',
+            badge_pdf: 'PDF',
+            badge_audio: 'AUDIO',
+            telemetry_title: 'Direct LAN P2P Transfer',
+            telemetry_badge: '0 Server Bytes Used',
+            empty_feed_title: 'Nothing here yet',
+            empty_feed_subtitle: 'Share files, logs, or text from your devices. Unlimited paste and multi-gigabyte transfers supported.',
+            item_count_single: '1 active item',
+            item_count_multi: '%d active items',
+            btn_delete_all: 'Delete All',
+            modal_create_room_title: 'Create New Session Room',
+            modal_create_room_desc: 'Rooms are end-to-end encrypted with their own independent 256-bit symmetric key.',
+            label_room_name: 'Room Name',
+            placeholder_room_name: 'e.g. Study Group, Project Alpha',
+            btn_create_room: 'Create Room',
+            modal_share_room_title: 'Share Session',
+            modal_share_room_desc: 'Anyone with this 8-character code or link will join this room and receive its encryption key.',
+            modal_join_room_title: 'Join Session Room',
+            modal_join_room_desc: 'Enter the 8-character code or paste a teilen:// invite link:',
+            label_invite_code: 'Invite Code / Link',
+            placeholder_invite_code: 'e.g. K7PM-3XQD or teilen://session/join?code=...',
+            btn_join_room: 'Join Room',
+            pair_modal_title: 'Pair Device',
+            pair_modal_subtitle: 'Enter this 8-character code on your phone or second browser:',
+            pair_enter_code_label: 'OR ENTER CODE FROM PHONE',
+            btn_connect_device: 'Connect Device',
+            btn_paste: 'Paste',
+            connected_devices_title: 'Connected Devices',
+            this_device_badge: 'This Device',
+            btn_disconnect: 'Disconnect',
+            btn_disconnect_all: 'Disconnect All Other Devices',
+            modal_ttl_title: 'Set Expiration Timer (TTL)',
+            modal_ttl_desc: 'Enter custom lifespan for this item (maximum 24 hours):',
+            ttl_unit_seconds: 'Seconds',
+            ttl_unit_minutes: 'Minutes',
+            ttl_unit_hours: 'Hours',
+            drop_title: 'Drop to encrypt & send',
+            drop_subtitle: 'Multi-GB Direct LAN P2P · Cloud Relay up to 30 MB',
+            launch_status: 'Initializing Vault…',
+            toast_paired_success: 'Device successfully connected!',
+            toast_sending_headless: 'Encrypting & sharing to Teilen…',
+            toast_shared_text: 'Text shared successfully',
+            toast_shared_link: 'Link shared successfully',
+            toast_shared_file: 'File shared successfully',
+            toast_shared_files_multi: '%d files shared successfully',
+            toast_share_failed_offline: 'Cannot share: No network connection'
+        },
+        ar: {
+            brand: 'Teilen',
+            subtitle_encrypted: 'مشفّر طرفاً لطرف',
+            status_encrypted_short: 'مشفّر',
+            status_live: 'متصل',
+            status_connecting: 'جارٍ الاتصال…',
+            status_reconnecting: 'جارٍ إعادة الاتصال…',
+            status_offline: 'غير متصل',
+            btn_pair: 'ربط جهاز',
+            personal_vault: 'الخزنة الشخصية',
+            new_room: 'غرفة جديدة',
+            join_room: 'الانضمام لغرفة',
+            join_room_by_code: 'الانضمام لغرفة برمز',
+            share_room: 'مشاركة الغرفة',
+            delete_room: 'حذف الغرفة',
+            leave_room: 'مغادرة الغرفة',
+            confirm_delete_room: 'هل تريد حذف هذه الغرفة وجميع محتوياتها نهائياً؟',
+            confirm_leave_room: 'هل تريد مغادرة هذه الغرفة؟ ستحتاج إلى رمز دعوة للعودة.',
+            welcome_title: 'مرحباً بك في Teilen',
+            welcome_desc: 'مزامنة مشفّرة طرفاً لطرف بين الأجهزة وشبكة محلية مباشرة (Direct LAN)',
+            instant_vault_btn: '⚡ بدء خزنة فورية مجهولة',
+            auth_divider: 'أو قم بالربط مع جهاز آخر',
+            pair_lead: 'أدخل هذا الرمز المكوّن من 8 خانات على هاتفك أو جهازك الآخر:',
+            pair_code_hint: 'بانتظار الجهاز الآخر…',
+            pair_retry: 'الحصول على رمز جديد',
+            auth_advanced_toggle: 'متقدم: تسجيل اسم مستخدم مخصص / تبديل الخزنة',
+            auth_tab_login: 'تسجيل الدخول',
+            auth_tab_register: 'إنشاء حساب',
+            label_username: 'اسم المستخدم',
+            label_password: 'كلمة المرور',
+            label_display_name: 'الاسم المعروض (اختياري)',
+            username_helper: 'حروف وأرقام إنجليزية فقط، بدون رموز خاصة',
+            password_placeholder_min: '6 أحرف على الأقل',
+            display_name_placeholder: 'مثلاً: حاسوبي المحمول',
+            btn_sign_in: 'تسجيل الدخول',
+            btn_create_account: 'إنشاء حساب',
+            devices_heading: 'الأجهزة المرتبطة',
+            btn_revoke_others: 'تسجيل الخروج من كافة الأجهزة الأخرى',
+            approve_label: 'ربط جهاز آخر — أدخل الرمز المكوّن من 8 خانات (مثلاً K7PM-3XQD)',
+            btn_sign_out: 'تسجيل الخروج من هذا المتصفح',
+            composer_placeholder: 'اكتب أو الصق نصوصاً غير محدودة، روابط، أو كود… (Shift+Enter لسطر جديد، Enter للإرسال)',
+            expires_in: 'الصلاحية:',
+            ttl_custom: 'مخصص',
+            btn_attach_file: 'إرفاق ملف',
+            btn_send: 'إرسال',
+            btn_copy: 'نسخ',
+            btn_copied: 'تم النسخ!',
+            btn_save: 'حفظ',
+            btn_saved: 'تم الحفظ!',
+            btn_extend_1h: '+ساعة',
+            btn_extend_1h_menu: '+ساعة صلاحية إضافية',
+            btn_custom_timer_menu: 'مؤقت مخصص (TTL)…',
+            btn_toggle_code_menu: 'تبديل خط الكود',
+            btn_toggle_full_menu: 'تبديل العرض الكامل',
+            share_link_menu: 'مشاركة الرابط',
+            btn_delete: 'حذف',
+            btn_cancel: 'إلغاء',
+            btn_done: 'تم',
+            btn_apply: 'تطبيق',
+            badge_text: 'نص',
+            badge_link: 'رابط',
+            badge_image: 'صورة',
+            badge_file: 'ملف',
+            badge_pdf: 'مستند PDF',
+            badge_audio: 'صوت',
+            telemetry_title: 'نقل مباشر عبر الشبكة المحلية (Direct LAN P2P)',
+            telemetry_badge: 'استهلاك 0 بايت من السيرفر',
+            empty_feed_title: 'لا توجد عناصر بعد',
+            empty_feed_subtitle: 'شارك الملفات أو السجلات أو النصوص من أجهزتك فورياً. يدعم اللصق غير المحدود ونقل عدة غيغابايت.',
+            item_count_single: 'عنصر نشط واحد',
+            item_count_multi: '%d عناصر نشطة',
+            btn_delete_all: 'حذف الكل',
+            modal_create_room_title: 'إنشاء غرفة محادثة جديدة',
+            modal_create_room_desc: 'الغرف مشفّرة طرفاً لطرف بمفتاح متناظر مستقل 256 بت.',
+            label_room_name: 'اسم الغرفة',
+            placeholder_room_name: 'مثلاً: فريق العمل، مشروع ألفا',
+            btn_create_room: 'إنشاء الغرفة',
+            modal_share_room_title: 'مشاركة الغرفة',
+            modal_share_room_desc: 'أي شخص يملك هذا الرمز المكوّن من 8 خانات أو الرابط سينضم إلى هذه الغرفة ويتلقى مفتاح التشفير.',
+            modal_join_room_title: 'الانضمام لغرفة',
+            modal_join_room_desc: 'أدخل الرمز المكوّن من 8 خانات أو الصق رابط teilen:// للدعوة:',
+            label_invite_code: 'رمز / رابط الدعوة',
+            placeholder_invite_code: 'مثلاً K7PM-3XQD أو رابط teilen://session/join?code=...',
+            btn_join_room: 'الانضمام للغرفة',
+            pair_modal_title: 'ربط جهاز',
+            pair_modal_subtitle: 'أدخل هذا الرمز المكوّن من 8 خانات على هاتفك أو متصفحك الآخر:',
+            pair_enter_code_label: 'أو أدخل الرمز من الهاتف',
+            btn_connect_device: 'توصيل الجهاز',
+            btn_paste: 'لصق',
+            connected_devices_title: 'الأجهزة المتصلة',
+            this_device_badge: 'هذا الجهاز',
+            btn_disconnect: 'قطع الاتصال',
+            btn_disconnect_all: 'قطع اتصال كافة الأجهزة الأخرى',
+            modal_ttl_title: 'تحديد مؤقت الصلاحية (TTL)',
+            modal_ttl_desc: 'أدخل مدة صلاحية مخصصة لهذا العنصر (بحد أقصى 24 ساعة):',
+            ttl_unit_seconds: 'ثوانٍ',
+            ttl_unit_minutes: 'دقائق',
+            ttl_unit_hours: 'ساعات',
+            drop_title: 'أفلت للتشفير والإرسال',
+            drop_subtitle: 'نقل محلي مباشر Direct LAN لعدة غيغابايت · ترحيل سحابي حتى 30 ميغابايت',
+            launch_status: 'جارٍ تهيئة الخزنة…',
+            toast_paired_success: 'تم توصيل الجهاز بنجاح!',
+            toast_sending_headless: 'جارٍ التشفير والمشاركة إلى Teilen…',
+            toast_shared_text: 'تمت مشاركة النص بنجاح',
+            toast_shared_link: 'تمت مشاركة الرابط بنجاح',
+            toast_shared_file: 'تمت مشاركة الملف بنجاح',
+            toast_shared_files_multi: 'تمت مشاركة %d ملفات بنجاح',
+            toast_share_failed_offline: 'تعذر المشاركة: لا يوجد اتصال بالشبكة'
+        }
+    };
+
+    function detectLocale() {
+        try {
+            const saved = localStorage.getItem('teilen_lang');
+            if (saved === 'ar' || saved === 'en') return saved;
+            const browser = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+            return browser.startsWith('ar') ? 'ar' : 'en';
+        } catch (e) {
+            return 'en';
+        }
+    }
+
+    let currentLang = detectLocale();
+
+    function t(key, ...args) {
+        const dict = I18N[currentLang] || I18N['en'];
+        let val = dict[key] !== undefined ? dict[key] : (I18N['en'][key] !== undefined ? I18N['en'][key] : key);
+        if (typeof val === 'string' && args.length > 0) {
+            args.forEach(arg => {
+                val = val.replace('%d', arg).replace('%s', arg);
+            });
+        }
+        return val;
+    }
+
+    function applyLocale(lang) {
+        currentLang = (lang === 'ar') ? 'ar' : 'en';
+        try {
+            localStorage.setItem('teilen_lang', currentLang);
+        } catch (e) {}
+
+        document.documentElement.lang = currentLang;
+        document.documentElement.dir = (currentLang === 'ar') ? 'rtl' : 'ltr';
+
+        const langToggleBtn = el('btn-lang-toggle');
+        if (langToggleBtn) {
+            langToggleBtn.textContent = (currentLang === 'ar') ? 'EN' : 'عربي';
+            langToggleBtn.setAttribute('title', (currentLang === 'ar') ? 'Switch to English' : 'التبديل إلى العربية');
+        }
+
+        document.querySelectorAll('[data-i18n]').forEach(elem => {
+            const k = elem.getAttribute('data-i18n');
+            if (k) elem.textContent = t(k);
+        });
+
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(elem => {
+            const k = elem.getAttribute('data-i18n-placeholder');
+            if (k) elem.setAttribute('placeholder', t(k));
+        });
+
+        document.querySelectorAll('[data-i18n-title]').forEach(elem => {
+            const k = elem.getAttribute('data-i18n-title');
+            if (k) elem.setAttribute('title', t(k));
+        });
+
+        if (typeof renderSessionPills === 'function') renderSessionPills();
+        if (typeof refresh === 'function') refresh();
+        if (typeof updateStatusDisplay === 'function') updateStatusDisplay();
+
+        document.querySelectorAll('#feed .card').forEach(cardEl => {
+            const id = cardEl.dataset.id;
+            const entry = cards.get(id);
+            if (entry && entry.item) {
+                const badge = cardEl.querySelector('.badge');
+                if (badge) badge.textContent = badgeLabel(entry.item);
+            }
+        });
+    }
+
     // ---------- Clean-Slate Identity & Persistent Storage (Part 1) ----------
     function getClientFingerprint() {
         let fp = null;
@@ -177,6 +467,7 @@
     const dropVeil = el('drop-veil');
 
     // Header Pair & Modal Pair Elements
+    const btnLangToggle = el('btn-lang-toggle');
     const btnHeaderPair = el('btn-header-pair');
     const modalPairPhone = el('modal-pair-phone');
     const modalPairCode = el('modal-pair-code');
@@ -340,7 +631,7 @@
         if (!availableSessions || availableSessions.length === 0) {
             availableSessions = [{
                 id: 'personal',
-                name: 'Personal Vault',
+                name: t('personal_vault'),
                 isPersonal: true,
                 role: 'OWNER',
                 memberCount: 1
@@ -349,7 +640,7 @@
 
         const activeSession = availableSessions.find(s => s.id === currentSessionId) || availableSessions[0];
         if (activeSessionName) {
-            activeSessionName.textContent = activeSession ? activeSession.name : 'Personal Vault';
+            activeSessionName.textContent = activeSession ? (activeSession.isPersonal ? t('personal_vault') : activeSession.name) : t('personal_vault');
         }
         const isCustomRoom = activeSession && !activeSession.isPersonal;
         if (sessionShareBtn) {
@@ -358,13 +649,13 @@
         if (sessionDeleteBtn) {
             sessionDeleteBtn.hidden = !isCustomRoom;
             if (isCustomRoom) {
-                sessionDeleteBtn.textContent = activeSession.role === 'OWNER' ? '🗑 Delete Room' : '🚪 Leave Room';
+                sessionDeleteBtn.textContent = activeSession.role === 'OWNER' ? ('🗑 ' + t('delete_room')) : ('🚪 ' + t('leave_room'));
             }
         }
         if (shareSessionDeleteBtn) {
             shareSessionDeleteBtn.hidden = !isCustomRoom;
             if (isCustomRoom) {
-                shareSessionDeleteBtn.textContent = activeSession.role === 'OWNER' ? '🗑 Delete Room' : '🚪 Leave Room';
+                shareSessionDeleteBtn.textContent = activeSession.role === 'OWNER' ? ('🗑 ' + t('delete_room')) : ('🚪 ' + t('leave_room'));
             }
         }
 
@@ -375,7 +666,8 @@
                 const isActive = session.id === currentSessionId || (session.isPersonal && (!currentSessionId || currentSessionId === 'personal'));
                 btn.className = 'session-dropdown-item' + (isActive ? ' active' : '');
                 const icon = session.isPersonal ? '🔒' : '👥';
-                btn.innerHTML = `<span>${icon}</span> <span class="session-dropdown-name">${session.name}</span>` +
+                const sName = session.isPersonal ? t('personal_vault') : session.name;
+                btn.innerHTML = `<span>${icon}</span> <span class="session-dropdown-name">${sName}</span>` +
                     (!session.isPersonal && session.memberCount > 1 ? ` <span class="session-dropdown-count">${session.memberCount}</span>` : '');
                 btn.addEventListener('click', () => {
                     if (sessionDropdown) sessionDropdown.hidden = true;
@@ -394,7 +686,8 @@
                 pill.dataset.id = session.id || 'personal';
 
                 const icon = session.isPersonal ? '🔒' : '👥';
-                pill.innerHTML = `<span>${icon}</span> <span>${session.name}</span>` +
+                const sName = session.isPersonal ? t('personal_vault') : session.name;
+                pill.innerHTML = `<span>${icon}</span> <span>${sName}</span>` +
                     (!session.isPersonal && session.memberCount > 1 ? ` <span class="session-pill-badge">${session.memberCount}</span>` : '');
 
                 pill.addEventListener('click', () => selectSession(session.id));
@@ -535,9 +828,7 @@
         if (!activeSession || activeSession.isPersonal) return;
         const isOwner = activeSession.role === 'OWNER';
         const actionWord = isOwner ? 'Delete' : 'Leave';
-        const confirmMsg = isOwner
-            ? `Delete room '${activeSession.name}' and all its shared items?`
-            : `Leave room '${activeSession.name}'?`;
+        const confirmMsg = isOwner ? t('confirm_delete_room') : t('confirm_leave_room');
 
         if (!confirm(confirmMsg)) return;
 
@@ -843,8 +1134,8 @@
             const copyImgBtn = document.createElement('button');
             copyImgBtn.type = 'button';
             copyImgBtn.className = 'btn-head-action';
-            copyImgBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span>Copy</span>`;
-            copyImgBtn.title = 'Copy image to clipboard';
+            copyImgBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span>${t('btn_copy')}</span>`;
+            copyImgBtn.title = t('btn_copy');
             copyImgBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 copyImageToClipboard(item, href, copyImgBtn);
@@ -853,8 +1144,8 @@
             const dlBtn = document.createElement('button');
             dlBtn.type = 'button';
             dlBtn.className = 'btn-head-action';
-            dlBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> <span>Save</span>`;
-            dlBtn.title = 'Download / Save file';
+            dlBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> <span>${t('btn_save')}</span>`;
+            dlBtn.title = t('btn_save');
             dlBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 triggerBlobDownload(item, href);
@@ -866,8 +1157,8 @@
             const dlBtn = document.createElement('button');
             dlBtn.type = 'button';
             dlBtn.className = 'btn-head-action';
-            dlBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> <span>Save</span>`;
-            dlBtn.title = 'Download / Save file';
+            dlBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> <span>${t('btn_save')}</span>`;
+            dlBtn.title = t('btn_save');
             dlBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 triggerBlobDownload(item, href);
@@ -878,16 +1169,16 @@
             const copyBtn = document.createElement('button');
             copyBtn.type = 'button';
             copyBtn.className = 'btn-head-action';
-            copyBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span>Copy</span>`;
-            copyBtn.title = 'Copy to clipboard';
+            copyBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> <span>${t('btn_copy')}</span>`;
+            copyBtn.title = t('btn_copy');
             copyBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 if (navigator.vibrate) navigator.vibrate(15);
                 await navigator.clipboard.writeText(item.content);
                 copyBtn.classList.add('copied');
                 const orig = copyBtn.innerHTML;
-                copyBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>✓ Copied</span>`;
-                toast('Copied to clipboard', 'success');
+                copyBtn.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>✓ ${t('btn_copied')}</span>`;
+                toast(t('btn_copied'), 'success');
                 setTimeout(() => {
                     copyBtn.classList.remove('copied');
                     copyBtn.innerHTML = orig;
@@ -901,8 +1192,8 @@
             const extBtn = document.createElement('button');
             extBtn.type = 'button';
             extBtn.className = 'btn-head-action subtle';
-            extBtn.innerHTML = `<span>+1h</span>`;
-            extBtn.title = 'Extend expiration by 1 hour';
+            extBtn.innerHTML = `<span>${t('btn_extend_1h')}</span>`;
+            extBtn.title = t('btn_extend_1h_menu');
             extBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 extendItem(item.id);
@@ -915,7 +1206,7 @@
         delBtn.type = 'button';
         delBtn.className = 'btn-head-action danger';
         delBtn.innerHTML = `<span>✕</span>`;
-        delBtn.title = 'Delete item';
+        delBtn.title = t('btn_delete');
         delBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             if (isLan) {
@@ -959,7 +1250,7 @@
             const optExtend = document.createElement('button');
             optExtend.type = 'button';
             optExtend.className = 'card-menu-item';
-            optExtend.innerHTML = `<span>⏳</span> <span>+1 Hour Expiration</span>`;
+            optExtend.innerHTML = `<span>⏳</span> <span>${t('btn_extend_1h_menu')}</span>`;
             optExtend.addEventListener('click', (e) => {
                 e.stopPropagation();
                 dropdown.hidden = true;
@@ -970,12 +1261,12 @@
             const optCustomTtl = document.createElement('button');
             optCustomTtl.type = 'button';
             optCustomTtl.className = 'card-menu-item';
-            optCustomTtl.innerHTML = `<span>⏱</span> <span>Custom Timer (TTL)…</span>`;
+            optCustomTtl.innerHTML = `<span>⏱</span> <span>${t('btn_custom_timer_menu')}</span>`;
             optCustomTtl.addEventListener('click', (e) => {
                 e.stopPropagation();
                 dropdown.hidden = true;
                 activeCustomTtlItemId = item.id;
-                customTtlTitle.textContent = 'Edit Timer (TTL)';
+                customTtlTitle.textContent = t('modal_ttl_title');
                 openModal(modalCustomTtl);
             });
             dropdown.append(optCustomTtl);
@@ -986,7 +1277,7 @@
             const optCode = document.createElement('button');
             optCode.type = 'button';
             optCode.className = 'card-menu-item';
-            optCode.innerHTML = `<span>&lt;&gt;</span> <span>Toggle Code Font</span>`;
+            optCode.innerHTML = `<span>&lt;&gt;</span> <span>${t('btn_toggle_code_menu')}</span>`;
             optCode.addEventListener('click', (e) => {
                 e.stopPropagation();
                 dropdown.hidden = true;
@@ -996,7 +1287,7 @@
             const optFull = document.createElement('button');
             optFull.type = 'button';
             optFull.className = 'card-menu-item';
-            optFull.innerHTML = `<span>⤢</span> <span>Toggle Full View</span>`;
+            optFull.innerHTML = `<span>⤢</span> <span>${t('btn_toggle_full_menu')}</span>`;
             optFull.addEventListener('click', (e) => {
                 e.stopPropagation();
                 dropdown.hidden = true;
@@ -1010,7 +1301,7 @@
         const optShare = document.createElement('button');
         optShare.type = 'button';
         optShare.className = 'card-menu-item';
-        optShare.innerHTML = `<span>🔗</span> <span>Share Link</span>`;
+        optShare.innerHTML = `<span>🔗</span> <span>${t('share_link_menu')}</span>`;
         optShare.addEventListener('click', async (e) => {
             e.stopPropagation();
             dropdown.hidden = true;
@@ -1034,7 +1325,7 @@
         const optDelete = document.createElement('button');
         optDelete.type = 'button';
         optDelete.className = 'card-menu-item danger';
-        optDelete.innerHTML = `<span>🗑</span> <span>Delete</span>`;
+        optDelete.innerHTML = `<span>🗑</span> <span>${t('btn_delete')}</span>`;
         optDelete.addEventListener('click', async (e) => {
             e.stopPropagation();
             dropdown.hidden = true;
@@ -1137,12 +1428,12 @@
     }
 
     function badgeLabel(item) {
-        if (item.type === 'LINK') return 'link';
-        if (item.type === 'IMAGE') return 'image';
-        if (item.type === 'PDF') return 'pdf';
-        if (item.type === 'AUDIO') return 'audio';
-        if (item.type === 'FILE') return 'file';
-        return 'text';
+        if (item.type === 'LINK') return t('badge_link');
+        if (item.type === 'IMAGE') return t('badge_image');
+        if (item.type === 'PDF') return t('badge_pdf');
+        if (item.type === 'AUDIO') return t('badge_audio');
+        if (item.type === 'FILE') return t('badge_file');
+        return t('badge_text');
     }
 
     async function triggerBlobDownload(item, href) {
@@ -1224,7 +1515,7 @@
 
     function refresh() {
         const count = cards.size;
-        countEl.textContent = count === 1 ? '1 active item' : count + ' active items';
+        countEl.textContent = count === 1 ? t('item_count_single') : t('item_count_multi', count);
         empty.hidden = count > 0;
         clearBtn.hidden = count === 0;
     }
@@ -1522,7 +1813,7 @@
         live.addEventListener('open', () => {
             if (socket !== live) return;
             retryDelay = 2000;
-            setStatus('live', 'live');
+            setStatus('status_live', 'live');
             stopPolling();
             load();
         });
@@ -1558,7 +1849,7 @@
         live.addEventListener('close', () => {
             if (socket !== live) return;
             socket = null;
-            setStatus('reconnecting…', 'offline');
+            setStatus('status_reconnecting', 'offline');
             startPolling();
             clearTimeout(wsReconnectTimer);
             wsReconnectTimer = setTimeout(() => {
@@ -1612,12 +1903,22 @@
         pollTimer = null;
     }
 
-    function setStatus(text, kind) {
+    let currentStatusKey = 'status_connecting';
+    let currentStatusKind = 'offline';
+
+    function setStatus(textOrKey, kind) {
+        currentStatusKey = textOrKey;
+        currentStatusKind = kind;
         const statusText = el('status-text');
-        if (statusText) statusText.textContent = text;
+        if (statusText) statusText.textContent = t(textOrKey);
         if (statusEl) {
             statusEl.className = 'status ' + kind;
         }
+    }
+
+    function updateStatusDisplay() {
+        const statusText = el('status-text');
+        if (statusText) statusText.textContent = t(currentStatusKey);
     }
 
     // ---------- Devices & Account Section ----------
@@ -1649,10 +1950,11 @@
 
         const devCount = devices.length;
         if (modalDevicesTitle) {
-            modalDevicesTitle.textContent = `Connected Devices (${devCount})`;
+            modalDevicesTitle.textContent = `${t('connected_devices_title')} (${devCount})`;
         }
         if (modalDisconnectOthersBtn) {
             modalDisconnectOthersBtn.hidden = devCount <= 1;
+            modalDisconnectOthersBtn.textContent = t('btn_disconnect_all');
         }
 
         if (modalDevicesList) {
@@ -1671,7 +1973,7 @@
                 if (device.current) {
                     const badge = document.createElement('span');
                     badge.className = 'modal-device-badge';
-                    badge.textContent = 'This Device';
+                    badge.textContent = t('this_device_badge');
                     info.appendChild(badge);
                 }
 
@@ -1681,7 +1983,7 @@
                     const disconnectBtn = document.createElement('button');
                     disconnectBtn.type = 'button';
                     disconnectBtn.className = 'btn-device-disconnect';
-                    disconnectBtn.textContent = 'Disconnect';
+                    disconnectBtn.textContent = t('btn_disconnect');
                     disconnectBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         disconnectBtn.disabled = true;
@@ -1813,7 +2115,7 @@
         foot.hidden = true;
         deviceSection.hidden = true;
         accountBtn.hidden = true;
-        setStatus('offline', 'offline');
+        setStatus('status_offline', 'offline');
         startPairing();
     }
 
@@ -2033,13 +2335,13 @@
             pairUserCode = codeVal;
 
             if (pairCode && codeVal) pairCode.textContent = codeVal;
-            if (pairState) pairState.textContent = 'Enter this 8-character code on your other device…';
+            if (pairState) pairState.textContent = t('pair_code_hint');
 
             if (heroPairCode && codeVal) heroPairCode.textContent = codeVal;
-            if (heroPairStatus) heroPairStatus.textContent = 'Enter this 8-character code on your phone or second browser…';
+            if (heroPairStatus) heroPairStatus.textContent = t('pair_modal_subtitle');
 
             if (modalPairCode && codeVal) modalPairCode.textContent = codeVal;
-            if (modalPairStatus) modalPairStatus.textContent = 'Enter this 8-character code on your phone or second browser…';
+            if (modalPairStatus) modalPairStatus.textContent = t('pair_modal_subtitle');
 
             if (data.deviceCode) {
                 pairTimer = setInterval(async () => {
@@ -2067,7 +2369,7 @@
                                 }
                                 await TeilenCrypto.setMasterKey(incomingKey);
                             }
-                            toast('Device successfully paired!', 'success');
+                            toast(t('toast_paired_success'), 'success');
                             closeModal(modalPairPhone);
                             stopSocket();
                             connect();
@@ -2090,12 +2392,18 @@
     const copyPairCode = async () => {
         if (pairUserCode) {
             await navigator.clipboard.writeText(pairUserCode);
-            toast('Pairing code copied', 'success');
+            toast(t('btn_copied'), 'success');
         }
     };
     if (pairCodeCopy) pairCodeCopy.addEventListener('click', copyPairCode);
     if (heroCodeCopy) heroCodeCopy.addEventListener('click', copyPairCode);
     if (modalPairCodeCopy) modalPairCodeCopy.addEventListener('click', copyPairCode);
+
+    if (btnLangToggle) {
+        btnLangToggle.addEventListener('click', () => {
+            applyLocale(currentLang === 'ar' ? 'en' : 'ar');
+        });
+    }
 
     if (btnHeaderPair) {
         btnHeaderPair.addEventListener('click', () => {
@@ -2182,7 +2490,7 @@
 
             if (inputEl) inputEl.value = '';
             if (statusEl) statusEl.textContent = 'Connected!';
-            toast('Device successfully paired!', 'success');
+            toast(t('toast_paired_success'), 'success');
             closeModal(modalPairPhone);
             connect();
             await loadSessions();
@@ -2369,6 +2677,7 @@
     }
 
     // Initialize SPA
+    applyLocale(currentLang);
     initLaunchScreen();
     initServiceWorkerAutoUpdate();
     renderSessionPills();

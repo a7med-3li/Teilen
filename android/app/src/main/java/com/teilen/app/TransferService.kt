@@ -319,16 +319,16 @@ class TransferService : Service() {
                         it.startsWith("https://", ignoreCase = true) ||
                         android.util.Patterns.WEB_URL.matcher(it.trim()).matches()
                     } ?: false
-                    if (isUrl) "✓ Link shared to Teilen" else "✓ Text shared to Teilen"
+                    if (isUrl) getString(R.string.toast_shared_link) else getString(R.string.toast_shared_text)
                 } else {
                     val filename = names.firstOrNull() ?: "file"
-                    if (names.size > 1) "✓ Shared ${names.size} files to Teilen" else "✓ Shared $filename to Teilen"
+                    if (names.size > 1) getString(R.string.toast_shared_files_multi, names.size) else getString(R.string.toast_shared_file, filename)
                 }
             } else {
                 if (message.contains("network", ignoreCase = true) ||
                     message.contains("connect", ignoreCase = true) ||
                     message.contains("resolve", ignoreCase = true)) {
-                    "Failed to share: check internet connection"
+                    getString(R.string.toast_share_failed_offline)
                 } else if (message.startsWith("Failed to share")) {
                     message
                 } else {
