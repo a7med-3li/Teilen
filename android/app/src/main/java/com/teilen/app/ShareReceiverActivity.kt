@@ -1,12 +1,12 @@
 package com.teilen.app
 
 import android.app.Activity
-import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.widget.Toast
 import androidx.core.content.IntentCompat
@@ -47,50 +47,58 @@ class ShareReceiverActivity : Activity() {
         // Strictly prioritize file streams over fallback text captions
         val text = if (uris.isNullOrEmpty()) extractText(incoming) else null
 
+        Log.i("TeilenShare", "handleIncoming: action=${incoming.action}, type=${incoming.type}, uris=$uris, text=$text")
+
         if (uris.isNullOrEmpty() && text.isNullOrBlank()) {
+            Log.w("TeilenShare", "Nothing to share (uris empty, text blank)")
             Toast.makeText(this, R.string.share_empty, Toast.LENGTH_SHORT).show()
             return
         }
 
         val serviceIntent = Intent(this, TransferService::class.java).apply {
             action = TransferService.ACTION_TRANSFER
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
         if (!uris.isNullOrEmpty()) {
-            // Transfer temporary URI permissions across finish() to TransferService
-            val clip = ClipData.newRawUri("shared_file", uris[0])
-            for (i in 1 until uris.size) {
-                clip.addItem(ClipData.Item(uris[i]))
-            }
-            serviceIntent.clipData = clip
             serviceIntent.putParcelableArrayListExtra(TransferService.EXTRA_URIS, ArrayList(uris))
 
             // Open descriptors immediately so they survive activity finish without any permission loss
             val fds = ArrayList<ParcelFileDescriptor>()
             val names = ArrayList<String>()
             val mimes = ArrayList<String>()
-            val sizes = ArrayList<Long>()
+            val sizes = ArrayList<Long?>()
 
             var maxDeclaredSize = 0L
             for (uri in uris) {
-                val descriptor = runCatching { contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
+                val descriptor = try {
+                    contentResolver.openFileDescriptor(uri, "r")
+                } catch (e: Throwable) {
+                    Log.e("TeilenShare", "Failed to open FD for $uri", e)
+                    null
+                }
                 if (descriptor != null) {
+                    Log.i("TeilenShare", "Successfully opened FD for $uri: $descriptor")
                     fds.add(descriptor)
                     val name = TeilenApi.displayName(this, uri)
                     names.add(name)
                     mimes.add(contentResolver.getType(uri) ?: "application/octet-stream")
-                    val size = TeilenApi.declaredSize(this, uri) ?: -1L
+                    val size = TeilenApi.declaredSize(this, uri)
                     sizes.add(size)
-                    if (size > maxDeclaredSize) maxDeclaredSize = size
+                    if (size != null && size > maxDeclaredSize) maxDeclaredSize = size
                 }
             }
 
             if (fds.isNotEmpty()) {
-                serviceIntent.putParcelableArrayListExtra(TransferService.EXTRA_FDS, fds)
+                val transferId = java.util.UUID.randomUUID().toString()
+                PendingTransferHolder.put(
+                    transferId,
+                    PendingTransferHolder.Entry(fds, names, mimes, sizes)
+                )
+                serviceIntent.putExtra(TransferService.EXTRA_TRANSFER_ID, transferId)
                 serviceIntent.putStringArrayListExtra(TransferService.EXTRA_NAMES, names)
                 serviceIntent.putStringArrayListExtra(TransferService.EXTRA_MIMES, mimes)
-                serviceIntent.putExtra(TransferService.EXTRA_SIZES, sizes.toLongArray())
+            } else {
+                Log.w("TeilenShare", "All FDs failed to open for uris: $uris")
             }
 
             // If file > 2 MB, show immediate non-intrusive feedback
@@ -105,6 +113,7 @@ class ShareReceiverActivity : Activity() {
         haptic()
 
         // Start background service
+        Log.i("TeilenShare", "Starting TransferService...")
         startForegroundService(serviceIntent)
     }
 

@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -17,6 +18,7 @@ import android.os.PowerManager
 import android.net.wifi.WifiManager
 import android.system.Os
 import android.system.OsConstants
+import android.util.Log
 import android.widget.Toast
 import androidx.core.content.IntentCompat
 import java.io.FileInputStream
@@ -66,21 +68,31 @@ class TransferService : Service() {
 
         val text = intent.getStringExtra(EXTRA_TEXT)
         val uris = urisOf(intent)
-        val fds = fdsOf(intent).toMutableList()
-        val names = intent.getStringArrayListExtra(EXTRA_NAMES)?.toMutableList() ?: mutableListOf()
-        val mimes = intent.getStringArrayListExtra(EXTRA_MIMES)?.toMutableList() ?: mutableListOf()
-        val sizes = sizesOf(intent, fds.size).toMutableList()
+        val transferId = intent.getStringExtra(EXTRA_TRANSFER_ID)
+        val entry = if (!transferId.isNullOrBlank()) PendingTransferHolder.remove(transferId) else null
+
+        val fds = entry?.fds?.toMutableList() ?: fdsOf(intent).toMutableList()
+        val names = entry?.names?.toMutableList()
+            ?: intent.getStringArrayListExtra(EXTRA_NAMES)?.toMutableList()
+            ?: mutableListOf()
+        val mimes = entry?.mimes?.toMutableList()
+            ?: intent.getStringArrayListExtra(EXTRA_MIMES)?.toMutableList()
+            ?: mutableListOf()
+        val sizes = entry?.sizes?.toMutableList()
+            ?: sizesOf(intent, fds.size).toMutableList()
         val ttl = intent.getLongExtra(EXTRA_TTL, DEFAULT_TTL_SECONDS)
 
-        // If FDs weren't opened in activity, resolve them now via granted URI permissions
+        Log.i("TeilenShare", "TransferService onStartCommand: transferId=$transferId, fds=${fds.size}, names=$names, uris=${uris.size}, text=${text?.take(30)}")
+
+        // If FDs weren't in memory holder, resolve them now via granted URI permissions
         if (fds.isEmpty() && uris.isNotEmpty()) {
             for (uri in uris) {
                 val descriptor = runCatching { contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
                 if (descriptor != null) {
                     fds.add(descriptor)
-                    names.add(TeilenApi.displayName(this, uri))
-                    mimes.add(contentResolver.getType(uri) ?: "application/octet-stream")
-                    sizes.add(TeilenApi.declaredSize(this, uri))
+                    if (names.size < fds.size) names.add(TeilenApi.displayName(this, uri))
+                    if (mimes.size < fds.size) mimes.add(contentResolver.getType(uri) ?: "application/octet-stream")
+                    if (sizes.size < fds.size) sizes.add(TeilenApi.declaredSize(this, uri))
                 }
             }
         }
@@ -151,13 +163,13 @@ class TransferService : Service() {
         sizes: List<Long?>,
         ttl: Long
     ) {
-        if (fds.size == 1) {
+        val size = sizes.getOrNull(0) ?: -1L
+        val isDirectLanOnly = (fds.size == 1 && size > TeilenApi.MAX_UPLOAD_BYTES)
+
+        if (isDirectLanOnly) {
             val name = names.getOrNull(0) ?: "file"
             val mime = mimes.getOrNull(0) ?: "application/octet-stream"
-            val size = sizes.getOrNull(0) ?: -1L
-            val isDirectLanOnly = size > TeilenApi.MAX_UPLOAD_BYTES
-
-            currentRoute = if (isDirectLanOnly) "⚡ Direct LAN Only (0 Server Bytes)" else getString(R.string.upload_via_lan)
+            currentRoute = "⚡ Direct LAN Only (0 Server Bytes)"
             manager().notify(
                 TeilenNotifications.TRANSFER_ID,
                 workingNotification("Sending $name to Teilen...", currentRoute)
@@ -174,16 +186,14 @@ class TransferService : Service() {
                 if (cancelled) return@attempt
                 if (sent) {
                     done(getString(R.string.share_sent), ok = true, isText = false, names = names)
-                } else if (isDirectLanOnly) {
-                    done("Files over 30 MB transfer directly device-to-device. Ensure receiving device is open on same Wi-Fi.", ok = false, isText = false, names = names)
                 } else {
-                    currentRoute = getString(R.string.upload_via_relay)
-                    rewind(fds)
-                    uploadViaHttp(fds, names, mimes, sizes, ttl)
+                    done("Files over 30 MB transfer directly device-to-device. Ensure receiving device is open on same Wi-Fi.", ok = false, isText = false, names = names)
                 }
             }
             return
         }
+
+        // For all files <= 30 MB: upload immediately via HTTP relay without delay
         uploadViaHttp(fds, names, mimes, sizes, ttl)
     }
 
@@ -335,6 +345,7 @@ class TransferService : Service() {
                     "Failed to share: $message"
                 }
             }
+            Log.i("TeilenShare", "TransferService done: ok=$ok, message=$message, toastText=$toastText")
             Toast.makeText(applicationContext, toastText, Toast.LENGTH_SHORT).show()
         }
 
@@ -392,6 +403,7 @@ class TransferService : Service() {
         const val ACTION_ITEM_SHARED_HEADLESS = "com.teilen.app.action.ITEM_SHARED_HEADLESS"
         const val EXTRA_TEXT = "text"
         const val EXTRA_URIS = "uris"
+        const val EXTRA_TRANSFER_ID = "transfer_id"
         const val EXTRA_FDS = "fds"
         const val EXTRA_NAMES = "names"
         const val EXTRA_MIMES = "mimes"
@@ -413,6 +425,20 @@ class TransferService : Service() {
             ttlSeconds: Long,
             uris: ArrayList<Uri>? = null
         ) {
+            val transferId = if (fds != null && fds.isNotEmpty()) {
+                val id = java.util.UUID.randomUUID().toString()
+                PendingTransferHolder.put(
+                    id,
+                    PendingTransferHolder.Entry(
+                        fds = fds,
+                        names = names ?: emptyList(),
+                        mimes = mimes ?: emptyList(),
+                        sizes = sizes?.map { if (it >= 0) it else null } ?: emptyList()
+                    )
+                )
+                id
+            } else null
+
             val intent = Intent(context, TransferService::class.java).apply {
                 action = ACTION_TRANSFER
                 if (!text.isNullOrBlank()) {
@@ -421,11 +447,17 @@ class TransferService : Service() {
                 if (uris != null && uris.isNotEmpty()) {
                     putParcelableArrayListExtra(EXTRA_URIS, uris)
                 }
-                if (fds != null && fds.isNotEmpty()) {
-                    putParcelableArrayListExtra(EXTRA_FDS, fds)
+                if (!transferId.isNullOrBlank()) {
+                    putExtra(EXTRA_TRANSFER_ID, transferId)
+                }
+                if (names != null) {
                     putStringArrayListExtra(EXTRA_NAMES, names)
+                }
+                if (mimes != null) {
                     putStringArrayListExtra(EXTRA_MIMES, mimes)
-                    putExtra(EXTRA_SIZES, sizes ?: LongArray(fds.size) { -1L })
+                }
+                if (sizes != null) {
+                    putExtra(EXTRA_SIZES, sizes)
                 }
                 putExtra(EXTRA_TTL, ttlSeconds)
             }
